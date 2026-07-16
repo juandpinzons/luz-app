@@ -49,6 +49,7 @@ export class DrizzlePersistStage implements PersistStage {
         if (insight.evidence.length > 0) {
           await tx.insert(evidence).values(
             insight.evidence.map((source) => ({
+              userId: context.userId,
               insightId: inserted.id,
               sourceType: source.type,
               sourceId: source.id,

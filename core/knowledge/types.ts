@@ -1,8 +1,12 @@
 import type { EntityType, InsightType } from "../db/schema";
+import type { UserContext } from "../identity/user-context";
 
-/** Contexto compartido por todas las etapas del pipeline. */
-export interface PipelineContext {
-  userId: string;
+/**
+ * Contexto compartido por todas las etapas del pipeline. Extiende
+ * `UserContext` en vez de duplicar `userId` — el Knowledge Engine sigue
+ * el mismo contrato de identidad que el resto del dominio.
+ */
+export interface PipelineContext extends UserContext {
   sourceType: EntityType;
   sourceId: string;
 }

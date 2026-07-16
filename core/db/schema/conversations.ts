@@ -33,6 +33,12 @@ export const conversationMessages = pgTable(
     conversationId: uuid("conversation_id")
       .notNull()
       .references(() => conversations.id, { onDelete: "cascade" }),
+    // Ownership directo (Sprint 7): permite autorizar sin tener que unir
+    // contra `conversations` en cada acceso, y deja cada entidad
+    // consistente con el resto del dominio (todo pertenece a un usuario).
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     role: messageRoleEnum("role").notNull(),
     content: text("content").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -43,6 +49,7 @@ export const conversationMessages = pgTable(
     index("conversation_messages_conversation_id_idx").on(
       table.conversationId,
     ),
+    index("conversation_messages_user_id_idx").on(table.userId),
   ],
 );
 

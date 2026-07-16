@@ -42,6 +42,10 @@ export const evidence = pgTable(
   "evidence",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Ownership directo (Sprint 7), igual que en conversation_messages.
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     insightId: uuid("insight_id")
       .notNull()
       .references(() => insights.id, { onDelete: "cascade" }),
@@ -51,7 +55,10 @@ export const evidence = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("evidence_insight_id_idx").on(table.insightId)],
+  (table) => [
+    index("evidence_insight_id_idx").on(table.insightId),
+    index("evidence_user_id_idx").on(table.userId),
+  ],
 );
 
 export type EntityRelation = typeof entityRelations.$inferSelect;

@@ -1,4 +1,5 @@
 import type { EntityType } from "../../db/schema";
+import type { UserContext } from "../../identity/user-context";
 
 export interface SemanticMemoryMatch {
   content: string;
@@ -14,7 +15,7 @@ export interface SemanticMemoryMatch {
  */
 export interface SemanticMemoryRepository {
   search(
-    userId: string,
+    context: UserContext,
     query: string,
     limit?: number,
   ): Promise<SemanticMemoryMatch[]>;

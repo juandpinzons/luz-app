@@ -1,4 +1,5 @@
 import type { Database } from "../db/client";
+import type { UserContext } from "../identity/user-context";
 import {
   type SemanticMemoryMatch,
   type SemanticMemoryRepository,
@@ -32,14 +33,17 @@ export class MemoryEngine {
    * tipadas). La búsqueda semántica solo se ejecuta si se pasa `query`,
    * y hoy lanza error controlado hasta que existan embeddings.
    */
-  async recall(userId: string, query?: string): Promise<MemoryRecallResult> {
-    const structured = await this.structured.getSnapshot(userId);
+  async recall(
+    context: UserContext,
+    query?: string,
+  ): Promise<MemoryRecallResult> {
+    const structured = await this.structured.getSnapshot(context);
 
     if (!query) {
       return { structured, semantic: [] };
     }
 
-    const semantic = await this.semantic.search(userId, query);
+    const semantic = await this.semantic.search(context, query);
 
     return { structured, semantic };
   }

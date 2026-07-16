@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import type { UserContext } from "../../identity/user-context";
 import type { Database } from "../../db/client";
 import {
   type Goal,
@@ -26,7 +27,7 @@ export interface StructuredMemorySnapshot {
 }
 
 export interface StructuredMemoryRepository {
-  getSnapshot(userId: string): Promise<StructuredMemorySnapshot>;
+  getSnapshot(context: UserContext): Promise<StructuredMemorySnapshot>;
 }
 
 export class DrizzleStructuredMemoryRepository
@@ -34,7 +35,9 @@ export class DrizzleStructuredMemoryRepository
 {
   constructor(private readonly db: Database) {}
 
-  async getSnapshot(userId: string): Promise<StructuredMemorySnapshot> {
+  async getSnapshot(context: UserContext): Promise<StructuredMemorySnapshot> {
+    const { userId } = context;
+
     const [user, userProjects, userGoals, userHabits, userPeople] =
       await Promise.all([
         this.db

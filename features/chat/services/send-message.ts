@@ -3,10 +3,11 @@ import { getAIProvider } from "../../../ai";
 import type { AIMessage } from "../../../ai/provider";
 import { db } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
+import type { UserContext } from "../../../core/identity/user-context";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 
 export interface SendMessageInput {
-  userId: string;
+  context: UserContext;
   conversationId?: string;
   message: string;
 }
@@ -17,9 +18,11 @@ export interface SendMessageResult {
 }
 
 async function getOrCreateConversation(
-  userId: string,
+  context: UserContext,
   conversationId?: string,
 ): Promise<string> {
+  const { userId } = context;
+
   if (conversationId) {
     const [existing] = await db
       .select({ id: conversations.id })
@@ -54,12 +57,18 @@ async function getOrCreateConversation(
  * proveedor de IA activo y encola el análisis del Knowledge Engine.
  * `app/api/chat/route.ts` es un controlador delgado que solo llama a
  * esta función — toda la lógica de negocio vive aquí, en `features/`.
+ *
+ * Recibe un `UserContext`, nunca un id hardcodeado (Sprint 7): quién es
+ * el usuario lo resuelve la Identity Layer (`auth/`) antes de llegar
+ * aquí.
  */
 export async function sendMessage(
   input: SendMessageInput,
 ): Promise<SendMessageResult> {
+  const { context } = input;
+
   const conversationId = await getOrCreateConversation(
-    input.userId,
+    context,
     input.conversationId,
   );
 
@@ -67,6 +76,7 @@ export async function sendMessage(
     .insert(conversationMessages)
     .values({
       conversationId,
+      userId: context.userId,
       role: "user",
       content: input.message,
     })
@@ -91,6 +101,7 @@ export async function sendMessage(
 
   await db.insert(conversationMessages).values({
     conversationId,
+    userId: context.userId,
     role: "assistant",
     content: reply,
   });
@@ -98,7 +109,7 @@ export async function sendMessage(
   // El Knowledge Engine analiza el mensaje en segundo plano; esta llamada
   // no espera su procesamiento (decisión CTO #6: worker independiente).
   await enqueueKnowledgeJob(db, {
-    userId: input.userId,
+    userId: context.userId,
     sourceType: "conversation_message",
     sourceId: userMessage.id,
   });
