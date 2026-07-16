@@ -1,18 +1,11 @@
 # OBSERVABILITY STRATEGY
 
-Signals
+Every engine exposes:
 
-- Logs
-- Metrics
-- Traces
+Health
+Latency
+Errors
+Events
+Metrics
 
-Monitor
-
-- Worker health
-- Queue length
-- API latency
-- AI latency
-- Database performance
-- Failed jobs
-
-Observability is designed before incidents occur.
+Observability is mandatory before scale.

@@ -1,53 +1,35 @@
-# SYSTEM_ARCHITECTURE
+# SYSTEM ARCHITECTURE
 
-Version: 1.0
+## Purpose
+Describe the long-term architecture of LUZ.
 
-## Vision
+## Core Layers
 
-LUZ is composed of independent engines communicating through clear interfaces.
-
-## Layers
-
-UI
+Reality
 ↓
-Features
+Life Graph
 ↓
-Core (Domain)
+Relationship Graph
 ↓
-Infrastructure
+Context
+↓
+Decision
+↓
+Action
 
-## Engines
+## Core Engines
 
-### Conversation Engine
-Handles conversations and messaging.
-
-### Memory Engine
-Decides between structured memory and semantic memory.
-
-### Knowledge Engine
-Runs asynchronously:
-Extract → Classify → Relate → Generate → Validate → Persist
-
-### Planner Engine
-Transforms goals into plans and follow-up actions.
-
-### Tool Engine
-Connects external capabilities (calendar, email, documents, etc.).
-
-## Infrastructure
-
-- Next.js
-- React
-- TypeScript
-- PostgreSQL
-- pgvector
-- Drizzle ORM
-- AI Provider abstraction
-- Worker + Job Queue
+- Presence Engine
+- Context Engine
+- Identity Engine
+- Memory Engine
+- Knowledge Engine
+- Life Orchestrator
+- Tool Engine
 
 ## Rules
 
-- Business logic never depends on Next.js.
-- UI never accesses the database directly.
-- LLMs never write directly to memory.
-- Workers execute heavy processing asynchronously.
+- Domain never depends on Next.js.
+- Infrastructure is replaceable.
+- Engines communicate through contracts/events.
+- AI providers are adapters, never business logic.

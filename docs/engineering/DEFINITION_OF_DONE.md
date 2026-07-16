@@ -1,12 +1,8 @@
 # DEFINITION OF DONE
 
-A feature is Done only if:
-
-- Acceptance criteria met
+A task is done only if:
+- Code merged
 - Tests pass
-- Build passes
-- Lint passes
 - Documentation updated
-- No architecture violations
-- Code reviewed
-- Approved by CTO
+- ADR referenced if architectural
+- Reviewed

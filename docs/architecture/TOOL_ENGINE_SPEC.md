@@ -1,19 +1,10 @@
 # TOOL ENGINE SPEC
 
-Purpose
+Adapters to external systems.
 
-Provide safe access to external capabilities.
+Calendar
+Email
+Documents
+Search
 
-Examples
-
-- Email
-- Calendar
-- Documents
-- Search
-- Future MCP Servers
-
-Rule
-
-Tools are adapters.
-
-Business logic never lives inside tool integrations.
+Business logic never lives inside tool adapters.

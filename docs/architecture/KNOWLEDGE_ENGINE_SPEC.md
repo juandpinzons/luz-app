@@ -1,15 +1,5 @@
 # KNOWLEDGE ENGINE SPEC
 
-Pipeline
+Transforms memories into connected knowledge.
 
-Extract
-→ Classify
-→ Relate
-→ Validate
-→ Persist
-
-LLMs propose.
-
-Knowledge Engine validates.
-
-Only validated knowledge becomes part of the Personal Knowledge Graph.
+Produces semantic relationships rather than raw facts.

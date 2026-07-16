@@ -1,17 +1,13 @@
 # MEMORY ENGINE SPEC
 
-Responsibilities
+Stores evidence.
 
-- Store long-term facts
-- Retrieve semantic context
-- Retrieve structured context
-- Expose a unified API
+Lifecycle:
+Capture
+Rank
+Connect
+Retrieve
+Archive
+Forget
 
-Internal Modules
-
-- Structured Memory
-- Semantic Memory
-- Memory Ranking
-- Context Assembly
-
-The Memory Engine never calls UI code.
+Memory does not reason.

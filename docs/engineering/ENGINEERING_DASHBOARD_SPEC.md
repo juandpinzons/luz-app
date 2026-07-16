@@ -1,15 +1,9 @@
 # ENGINEERING DASHBOARD SPEC
 
-## Metrics
-
-- Current Sprint
-- Current Release
-- Architecture Health
-- Technical Debt
-- Open Risks
-- ADRs Pending
-- Test Coverage
-- Build Status
-- Documentation Coverage
-- Worker Health
-- Database Status
+KPIs:
+Sprint health
+PR lead time
+Test pass rate
+Architecture debt
+Open ADRs
+Release readiness
