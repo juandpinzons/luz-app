@@ -1,0 +1,16 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: luz
+      POSTGRES_PASSWORD: luz
+      POSTGRES_DB: luz
+    ports:
+      - "5432:5432"
+    volumes:
+      - luz_db_data:/var/lib/postgresql/data
+      - ./core/db/init:/docker-entrypoint-initdb.d
+
+volumes:
+  luz_db_data:

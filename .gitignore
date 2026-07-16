@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# artefacto de verificación de build (no debe commitearse)
+/tmp/
+
 # production
 /build
 
