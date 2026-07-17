@@ -1,0 +1,33 @@
+import type { LifeGraphContext } from "../../life/life-graph-context";
+import type { EntityId } from "../../life/value-objects/entity-id";
+import type { Evidence } from "../entities/evidence";
+import type { Insight } from "../entities/insight";
+import type { InsightRelationship } from "../entities/insight-relationship";
+
+/**
+ * Solo persiste y recupera — misma disciplina que `MemoryRepository`
+ * y `LifeGraphRepository`. Orquestar el pipeline (Extract→Persist) es
+ * responsabilidad de `engine/knowledge-engine.ts`, no de este archivo.
+ */
+export interface InsightRepository {
+  getById(context: LifeGraphContext, id: EntityId): Promise<Insight | null>;
+  list(context: LifeGraphContext): Promise<Insight[]>;
+  save(context: LifeGraphContext, insight: Insight): Promise<Insight>;
+  delete(context: LifeGraphContext, id: EntityId): Promise<void>;
+  getEvidence(
+    context: LifeGraphContext,
+    insightId: EntityId,
+  ): Promise<Evidence[]>;
+  saveEvidence(
+    context: LifeGraphContext,
+    evidence: Evidence,
+  ): Promise<Evidence>;
+  getRelationships(
+    context: LifeGraphContext,
+    insightId: EntityId,
+  ): Promise<InsightRelationship[]>;
+  saveRelationship(
+    context: LifeGraphContext,
+    relationship: InsightRelationship,
+  ): Promise<InsightRelationship>;
+}

@@ -30,6 +30,9 @@ Goal, Project, Habit, Routine, Relationship, LifeEvent, LifeDomain
 Memory, Knowledge and Context are not on this chain. They are
 independent engines (ENGINE_MANIFESTO.md) that read `lifeGraphId` as a
 tenant key — they are never contained by the `LifeGraph` aggregate.
+Context never reads the LifeGraph or Memory directly: it consumes a
+`RealitySnapshot` (`core/reality`, ADR-0013), the canonical input
+contract for Context Engine (Engineering Package 05).
 
 ## Aggregate roots
 

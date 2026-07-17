@@ -14,3 +14,5 @@ ADR-0009 Person not User
 ADR-0010 Life Orchestrator
 ADR-0011 Identity Architecture
 ADR-0012 Memory Engine Consolidation
+ADR-0013 Reality Snapshot Contract
+ADR-0014 Knowledge Engine Consolidation (Proposed)

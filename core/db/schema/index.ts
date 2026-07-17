@@ -7,3 +7,4 @@ export * from "./knowledge";
 export * from "./relations";
 export * from "./memory";
 export * from "./jobs";
+export * from "./life-graph";

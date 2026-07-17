@@ -35,10 +35,12 @@ Related: ADR-0011, DOMAIN_MODEL_V1.md
    +---------+   +-----------+   +---------+
         ^                             ^
         |                             |
-        +----- Life Graph state ------+
-              (goals/projects in flight
-               read directly, not only
-               via Knowledge)
+        +---- RealitySnapshot --------+
+           (core/reality, ADR-0013 —
+            life state + memory context
+            + external signals, assembled
+            by a future orchestrator,
+            never read directly by Context)
 ```
 
 ## Legend
@@ -48,6 +50,10 @@ Related: ADR-0011, DOMAIN_MODEL_V1.md
 - `lifeGraphId` fan-out: tenant scoping, not ownership — Memory,
   Knowledge and Context are independent engines that key their data by
   `lifeGraphId`, they are never members of the `LifeGraph` aggregate
+- `RealitySnapshot` (`core/reality`) is the only way Context reads
+  Life Graph or Memory state — never a direct read of either. Its
+  fields use their own neutral vocabulary, not `core/life`'s or
+  `core/memory-engine`'s entity types (ADR-0013)
 - The only line crossing the Infrastructure/Domain boundary is
   Account → LifeGraph resolution; no other box ever holds an
   `AccountId`
@@ -60,8 +66,10 @@ Related: ADR-0011, DOMAIN_MODEL_V1.md
    entities — this is the tenant boundary the rest of the domain reads
    from.
 3. Memory and Knowledge process evidence from that `LifeGraph` into
-   connected meaning; Context assembles a unified view from both
-   Knowledge and the LifeGraph's current state directly.
+   connected meaning. Context never reads either directly — it
+   consumes a `RealitySnapshot`, assembled by a future orchestrator
+   from Life Graph and Memory state, and produces a `Context` object:
+   what is most relevant right now.
 
 A rendered version of this diagram was shown inline in the review
 conversation that produced this document.

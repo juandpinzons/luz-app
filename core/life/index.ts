@@ -22,8 +22,10 @@ export * from "./entities/life-domain";
 
 // Repositories
 export * from "./repositories/life-graph.repository";
+export * from "./repositories/drizzle-life-graph.repository";
 export * from "./repositories/life-repository";
 export * from "./repositories/person.repository";
+export * from "./repositories/drizzle-person.repository";
 export * from "./repositories/goal.repository";
 export * from "./repositories/project.repository";
 export * from "./repositories/habit.repository";
@@ -49,3 +51,4 @@ export * from "./graph/life-graph-index";
 
 // Services
 export * from "./services/life-graph-bootstrap";
+export * from "./services/drizzle-life-graph-bootstrap";

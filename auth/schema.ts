@@ -7,6 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { lifeGraphs, persons } from "../core/db/schema/life-graph";
 import { users } from "../core/db/schema/users";
 
 /**
@@ -73,6 +74,33 @@ export const verificationTokens = pgTable(
   },
   (table) => [primaryKey({ columns: [table.identifier, table.token] })],
 );
+
+/**
+ * Vínculo entre una Account y el LifeGraphContext que le pertenece
+ * (ADR-0011). Vive en `auth/`, no en `core/db/schema/life-graph.ts`:
+ * el dominio nunca debe conocer `AccountId` (ver auth/account-id.ts),
+ * así que esta tabla —la única que sabe de los dos lados— vive junto a
+ * `accounts`/`sessions`, no dentro del schema del dominio. Una Account
+ * se resuelve a exactamente un LifeGraph, creado una sola vez en el
+ * primer login (auth/drizzle-identity-resolver.ts).
+ */
+export const accountIdentities = pgTable("account_identities", {
+  accountId: uuid("account_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  lifeGraphId: uuid("life_graph_id")
+    .notNull()
+    .references(() => lifeGraphs.id, { onDelete: "cascade" }),
+  personId: uuid("person_id")
+    .notNull()
+    .references(() => persons.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type AccountIdentity = typeof accountIdentities.$inferSelect;
+export type NewAccountIdentity = typeof accountIdentities.$inferInsert;
 
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;

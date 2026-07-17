@@ -3,14 +3,11 @@
 Responsibility:
 Represent current reality.
 
-Inputs:
-Memory
-Time
-Identity
-Goals
-Projects
-Life
-Environment
+Input:
+RealitySnapshot (core/reality, ADR-0013) — life state, memory context
+and external signals, already assembled. Context Engine never reads
+Memory, the Life Graph, or any other engine directly.
 
 Output:
-Unified Context Object.
+Context — what is most relevant right now (core/context-engine,
+Engineering Package 05).

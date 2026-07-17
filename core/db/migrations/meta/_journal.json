@@ -22,6 +22,34 @@
       "when": 1784225651774,
       "tag": "0002_green_invaders",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1784242307968,
+      "tag": "0003_add_life_graphs_and_persons",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784243147027,
+      "tag": "0004_add_account_identities",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784243805258,
+      "tag": "0005_add_memories_and_memory_connections",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1784244000000,
+      "tag": "0006_repoint_memory_embeddings_to_life_graph",
+      "breakpoints": true
     }
   ]
 }

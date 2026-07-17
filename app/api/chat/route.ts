@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserContext } from "@/auth/user-context";
+import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { sendMessage } from "@/features/chat/services/send-message";
 import { sendMessageRequestSchema } from "@/features/chat/types";
 
@@ -17,6 +17,19 @@ export async function POST(request: Request): Promise<Response> {
 
   if (!context) {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  // Resuelve (y bootstrapea si hace falta) el LifeGraphContext de esta
+  // Account. Nada más abajo lo usa todavía —Milestone 1 termina en
+  // identidad resuelta, consumirla es un milestone aparte— así que un
+  // fallo aquí nunca debe romper el chat existente.
+  try {
+    await getLifeGraphContext();
+  } catch (error) {
+    console.error(
+      "[api/chat] no se pudo resolver LifeGraphContext:",
+      error,
+    );
   }
 
   const body: unknown = await request.json();
