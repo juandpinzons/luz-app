@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import type { SendMessageResponse } from "@/features/chat/types";
+import { useEffect, useState } from "react";
+import type {
+  GetLatestConversationResponse,
+  SendMessageResponse,
+} from "@/features/chat/types";
 
 type Message = {
   role: "user" | "assistant";
@@ -13,6 +16,41 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLatestConversation() {
+      try {
+        const response = await fetch("/api/chat");
+
+        if (!response.ok) {
+          throw new Error("No se pudo recuperar la conversación.");
+        }
+
+        const data: GetLatestConversationResponse | null =
+          await response.json();
+
+        if (!cancelled && data) {
+          setConversationId(data.conversationId);
+          setMessages(data.messages);
+        }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingHistory(false);
+        }
+      }
+    }
+
+    loadLatestConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;
@@ -84,7 +122,7 @@ export default function ChatPage() {
       {/* Conversación */}
       <section className="flex flex-1 px-6 py-8">
         <div className="mx-auto w-full max-w-3xl">
-          {messages.length === 0 ? (
+          {isLoadingHistory ? null : messages.length === 0 ? (
             <div className="mt-32 text-center">
               <h2 className="text-4xl font-light">
                 ¿Cómo te sientes hoy?

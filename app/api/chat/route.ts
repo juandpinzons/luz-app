@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
+import { getLatestConversation } from "@/features/chat/services/get-latest-conversation";
 import { sendMessage } from "@/features/chat/services/send-message";
 import { sendMessageRequestSchema } from "@/features/chat/types";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
@@ -65,6 +66,32 @@ export async function POST(request: Request): Promise<Response> {
 
     return NextResponse.json(
       { error: "No se pudo procesar el mensaje." },
+      { status: 500 },
+    );
+  }
+}
+
+/**
+ * Recupera la conversación más reciente del usuario — para que /chat
+ * pueda mostrar el hilo al volver a abrirse en vez de empezar vacío
+ * (el historial ya vivía en Postgres, esto solo lo expone). `null` si
+ * el usuario nunca ha conversado con LUZ.
+ */
+export async function GET(): Promise<Response> {
+  const context = await getUserContext();
+
+  if (!context) {
+    return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  try {
+    const latest = await getLatestConversation(context);
+    return NextResponse.json(latest);
+  } catch (error) {
+    console.error("[api/chat] no se pudo recuperar la conversación:", error);
+
+    return NextResponse.json(
+      { error: "No se pudo recuperar la conversación." },
       { status: 500 },
     );
   }
