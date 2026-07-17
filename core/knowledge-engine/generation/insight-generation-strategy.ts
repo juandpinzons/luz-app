@@ -8,6 +8,15 @@ export interface GeneratedInsight {
   type: InsightType;
   description: string;
   proposedConfidence: number;
+  /**
+   * `RealityMemoryItem[]` porque Memory es hoy la única fuente de
+   * evidencia con un engine real — no una restricción permanente.
+   * `core/reality/external-signal-snapshot.ts` (ADR-0013) ya reserva un
+   * lugar neutral para Gmail/Calendar/Drive/Notion/Health/Slack y
+   * similares cuando esos engines existan; ampliar este campo (unión de
+   * tipos, o un tipo de evidencia neutral compartido) es el cambio que
+   * corresponde entonces, deliberadamente no antes.
+   */
   evidence: RealityMemoryItem[];
 }
 

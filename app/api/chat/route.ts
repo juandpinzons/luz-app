@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { sendMessage } from "@/features/chat/services/send-message";
 import { sendMessageRequestSchema } from "@/features/chat/types";
+import type { LifeGraphContext } from "@/core/life/life-graph-context";
 
 /**
  * Controlador delgado (decisión CTO #1 y #11): solo resuelve la
  * identidad, parsea/valida la petición y delega en `features/chat`.
  * Ninguna lógica de negocio vive aquí.
  *
- * El middleware (`middleware.ts`) ya bloquea esta ruta sin sesión, pero
- * se vuelve a comprobar aquí: una ruta nunca debe asumir que el
- * middleware es la única línea de defensa.
+ * El proxy (`proxy.ts`, antes `middleware.ts` — renombrado en Next.js
+ * 16) ya bloquea esta ruta sin sesión, pero se vuelve a comprobar aquí:
+ * una ruta nunca debe asumir que el proxy es la única línea de defensa.
  */
 export async function POST(request: Request): Promise<Response> {
   const context = await getUserContext();
@@ -20,11 +21,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   // Resuelve (y bootstrapea si hace falta) el LifeGraphContext de esta
-  // Account. Nada más abajo lo usa todavía —Milestone 1 termina en
-  // identidad resuelta, consumirla es un milestone aparte— así que un
-  // fallo aquí nunca debe romper el chat existente.
+  // Account. Desde Beta 1 Sprint B1, `sendMessage` lo usa para capturar
+  // Memory real — pero sigue siendo tolerante a fallos: si esto no se
+  // resuelve, el chat continúa igual, solo sin captura de Memory.
+  let lifeGraphContext: LifeGraphContext | null = null;
   try {
-    await getLifeGraphContext();
+    lifeGraphContext = await getLifeGraphContext();
   } catch (error) {
     console.error(
       "[api/chat] no se pudo resolver LifeGraphContext:",
@@ -45,6 +47,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const result = await sendMessage({
       context,
+      lifeGraphContext,
       conversationId: parsed.data.conversationId,
       message: parsed.data.message,
     });

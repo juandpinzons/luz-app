@@ -16,3 +16,4 @@ ADR-0011 Identity Architecture
 ADR-0012 Memory Engine Consolidation
 ADR-0013 Reality Snapshot Contract
 ADR-0014 Knowledge Engine Consolidation (Proposed)
+ADR-0015 Connector Architecture (Proposed)

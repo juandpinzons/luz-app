@@ -1,8 +1,10 @@
 import { auth } from "@/auth";
 
 /**
- * Protege /chat (UI) y /api/chat (API) exigiendo sesión. La landing
- * (`/`) y `/login` quedan públicas a propósito.
+ * Protege /chat, /dashboard (UI) y /api/chat (API) exigiendo sesión. La
+ * landing (`/`) y `/login` quedan públicas a propósito. Desde Sprint
+ * Alpha-1a, /dashboard es la puerta de entrada post-login (ver
+ * app/login/page.tsx) — necesita la misma protección que /chat.
  *
  * Las rutas de API devuelven 401 JSON; las rutas de UI redirigen a
  * /login — cada una con la respuesta que su cliente espera.
@@ -29,5 +31,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/chat/:path*", "/api/chat/:path*"],
+  matcher: ["/chat/:path*", "/dashboard/:path*", "/api/chat/:path*"],
 };

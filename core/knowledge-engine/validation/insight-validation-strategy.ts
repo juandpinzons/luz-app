@@ -7,6 +7,13 @@ import type { PipelineContext } from "../pipeline-context";
  * Lo que el Knowledge Engine decide después de validar. El LLM
  * propone; LUZ decide — `confidence` y `status` los asigna esta etapa,
  * nunca el LLM directamente.
+ *
+ * `evidence` (heredado de `GeneratedInsight`) es hoy `RealityMemoryItem[]`
+ * porque Memory es la única fuente de evidencia con un engine real. Esta
+ * interfaz y toda implementación de `InsightValidationStrategy` deben
+ * tratarlo como opaco — nunca asumir ni depender de esa forma concreta.
+ * Ver `GeneratedInsight.evidence` para dónde vive la decisión de qué
+ * tipos de evidencia son válidos.
  */
 export interface ValidatedInsight extends GeneratedInsight {
   confidence: Confidence;

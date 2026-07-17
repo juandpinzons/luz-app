@@ -11,7 +11,7 @@ export default function LoginPage() {
         className="mt-10"
         action={async () => {
           "use server";
-          await signIn("google", { redirectTo: "/chat" });
+          await signIn("google", { redirectTo: "/dashboard" });
         }}
       >
         <button

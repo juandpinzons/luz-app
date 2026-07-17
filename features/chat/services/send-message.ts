@@ -4,10 +4,25 @@ import type { AIMessage } from "../../../ai/provider";
 import { db } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
+import type { LifeGraphContext } from "../../../core/life/life-graph-context";
+import { createMemoryEngine } from "../../../core/memory-engine";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
+import {
+  buildContext,
+  renderContextToMessages,
+} from "../context-builder";
+import type { ConversationTurn } from "../context-builder";
 
 export interface SendMessageInput {
   context: UserContext;
+  /**
+   * Null cuando `getLifeGraphContext()` no pudo resolverse (Sprint 07,
+   * fallo no crítico ya tolerado en `app/api/chat/route.ts`). Sin esto,
+   * la captura en Memory Engine simplemente se omite — el chat nunca
+   * depende de que exista (Beta 1 Roadmap, Sprint B1: integración
+   * aditiva, nunca un requisito nuevo para que el chat funcione).
+   */
+  lifeGraphContext: LifeGraphContext | null;
   conversationId?: string;
   message: string;
 }
@@ -53,10 +68,15 @@ async function getOrCreateConversation(
 }
 
 /**
- * Servicio de dominio del chat: persiste la conversación, llama al
- * proveedor de IA activo y encola el análisis del Knowledge Engine.
- * `app/api/chat/route.ts` es un controlador delgado que solo llama a
- * esta función — toda la lógica de negocio vive aquí, en `features/`.
+ * Servicio de dominio del chat: persiste la conversación, construye el
+ * Context explícito (Beta 1 Roadmap, Sprint B3 — Conversation + Memory
+ * + RealitySnapshot + Conversation Manual, nunca una concatenación de
+ * texto suelta), captura el mensaje en Memory Engine, llama al
+ * proveedor de IA activo y encola el análisis del Knowledge Engine
+ * (legado, todavía el pipeline vivo — Sprint B2 no lo reemplazó, ese
+ * alcance sigue fuera a propósito). `app/api/chat/route.ts` es un
+ * controlador delgado que solo llama a esta función — toda la lógica
+ * de negocio vive aquí, en `features/`.
  *
  * Recibe un `UserContext`, nunca un id hardcodeado (Sprint 7): quién es
  * el usuario lo resuelve la Identity Layer (`auth/`) antes de llegar
@@ -65,7 +85,7 @@ async function getOrCreateConversation(
 export async function sendMessage(
   input: SendMessageInput,
 ): Promise<SendMessageResult> {
-  const { context } = input;
+  const { context, lifeGraphContext } = input;
 
   const conversationId = await getOrCreateConversation(
     context,
@@ -92,10 +112,66 @@ export async function sendMessage(
     .where(eq(conversationMessages.conversationId, conversationId))
     .orderBy(asc(conversationMessages.createdAt));
 
-  const aiMessages: AIMessage[] = history.map((entry) => ({
-    role: entry.role,
-    content: entry.content,
-  }));
+  // `conversation_messages.role` admite "system" en el schema (headroom
+  // sin uso hoy — nada lo inserta) pero `ConversationTurn` solo modela
+  // turnos reales de la conversación; una fila "system", si alguna vez
+  // existe, no es un turno, es una instrucción — se filtra aquí, nunca
+  // se cuela al Context Builder con la forma equivocada.
+  const conversation: ConversationTurn[] = history
+    .filter(
+      (entry): entry is typeof entry & { role: "user" | "assistant" } =>
+        entry.role === "user" || entry.role === "assistant",
+    )
+    .map((entry) => ({
+      role: entry.role,
+      content: entry.content,
+    }));
+
+  // Context Builder (Beta 1 Roadmap, Sprint B3): construido ANTES de
+  // capturar este mensaje en Memory — mismo criterio ya establecido en
+  // Sprint B2, ahora aplicado al Context completo: el mensaje que se
+  // está respondiendo nunca debe aparecer en sus propias "memorias
+  // relevantes" (tabla distinta a `conversation_messages`, así que el
+  // historial ya puede incluir este mensaje sin ese riesgo). Un fallo
+  // aquí no debe romper el chat — se degrada al historial simple, sin
+  // reglas ni memoria, exactamente el comportamiento anterior a este
+  // sprint.
+  let aiMessages: AIMessage[] = conversation;
+  if (lifeGraphContext) {
+    try {
+      const context = await buildContext(db, lifeGraphContext, conversation);
+      aiMessages = renderContextToMessages(context);
+    } catch (error) {
+      console.error(
+        "[send-message] no se pudo construir el Context:",
+        error,
+      );
+    }
+  }
+
+  // Memory Engine (Beta 1 Roadmap, Sprint B1): captura el mensaje como
+  // evidencia real — ranqueada y conectada por Memory Engine, no solo
+  // guardada como texto de historial. Aditivo: `conversationMessages`
+  // sigue siendo el historial que renderiza el chat; esto es la
+  // primera vez que ese contenido también se vuelve Memory real.
+  // Deliberadamente después de construir el Context, no antes (ver
+  // arriba), y antes de llamar al proveedor de IA: el mensaje del
+  // usuario se captura sin importar si la IA responde con éxito. Un
+  // fallo aquí nunca debe romper el chat — mismo criterio que ya usa
+  // la resolución de `LifeGraphContext`.
+  if (lifeGraphContext) {
+    try {
+      await createMemoryEngine(db).capture(lifeGraphContext, {
+        content: input.message,
+        source: "conversation",
+        sourceId: userMessage.id,
+        personId: lifeGraphContext.personId,
+        occurredAt: userMessage.createdAt,
+      });
+    } catch (error) {
+      console.error("[send-message] no se pudo capturar Memory:", error);
+    }
+  }
 
   const reply = await getAIProvider().generateReply(aiMessages);
 

@@ -4,6 +4,7 @@ export * from "./conversations";
 export * from "./journal";
 export * from "./documents";
 export * from "./knowledge";
+export * from "./knowledge-engine";
 export * from "./relations";
 export * from "./memory";
 export * from "./jobs";
