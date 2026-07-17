@@ -5,6 +5,13 @@ import { sendMessageRequestSchema } from "@/features/chat/types";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
 
 /**
+ * Respuestas reales medidas en producción llegan hasta ~22s (mensajes
+ * largos/complejos) — el límite por defecto de Vercel (10s) las corta a
+ * mitad de camino. 60s es el máximo permitido en el plan Hobby.
+ */
+export const maxDuration = 60;
+
+/**
  * Controlador delgado (decisión CTO #1 y #11): solo resuelve la
  * identidad, parsea/valida la petición y delega en `features/chat`.
  * Ninguna lógica de negocio vive aquí.

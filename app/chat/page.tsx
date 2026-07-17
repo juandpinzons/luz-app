@@ -12,9 +12,10 @@ export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
+  const [isSending, setIsSending] = useState(false);
 
   async function sendMessage() {
-    if (message.trim() === "") return;
+    if (message.trim() === "" || isSending) return;
 
     const userMessage = message;
 
@@ -27,6 +28,7 @@ export default function ChatPage() {
     ]);
 
     setMessage("");
+    setIsSending(true);
 
     try {
       const response = await fetch("/api/chat", {
@@ -65,6 +67,8 @@ export default function ChatPage() {
           content: "❌ Ocurrió un error al conectar con el servidor.",
         },
       ]);
+    } finally {
+      setIsSending(false);
     }
   }
 
@@ -104,6 +108,12 @@ export default function ChatPage() {
                   {msg.content}
                 </div>
               ))}
+
+              {isSending && (
+                <div className="mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
+                  LUZ está escribiendo…
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -116,20 +126,22 @@ export default function ChatPage() {
             type="text"
             placeholder="Escribe un mensaje..."
             value={message}
+            disabled={isSending}
             onChange={(e) => setMessage(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 sendMessage();
               }
             }}
-            className="flex-1 rounded-xl bg-zinc-900 px-5 py-4 outline-none ring-1 ring-zinc-800 focus:ring-white"
+            className="flex-1 rounded-xl bg-zinc-900 px-5 py-4 outline-none ring-1 ring-zinc-800 focus:ring-white disabled:opacity-50"
           />
 
           <button
             onClick={sendMessage}
-            className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200"
+            disabled={isSending}
+            className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200 disabled:opacity-50 disabled:hover:bg-white"
           >
-            Enviar
+            {isSending ? "..." : "Enviar"}
           </button>
         </div>
       </footer>
