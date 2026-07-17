@@ -33,8 +33,14 @@ export default function ChatPage() {
           await response.json();
 
         if (!cancelled && data) {
-          setConversationId(data.conversationId);
-          setMessages(data.messages);
+          // Si el usuario ya empezó a escribir (mensaje optimista ya en
+          // pantalla) antes de que esta petición terminara, esta
+          // respuesta ya está desactualizada — nunca debe sobreescribir
+          // una conversación en curso, o el mensaje que se acaba de
+          // mandar "desaparece" y el estado local queda desincronizado
+          // del conversationId real que el servidor usó para guardarlo.
+          setConversationId((prev) => prev ?? data.conversationId);
+          setMessages((prev) => (prev.length === 0 ? data.messages : prev));
         }
       } catch (error) {
         console.error(error);
