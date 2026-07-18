@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   GetLatestConversationResponse,
   SendMessageResponse,
@@ -17,6 +17,11 @@ export default function ChatPage() {
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [messages, isSending]);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,7 +131,7 @@ export default function ChatPage() {
       </header>
 
       {/* Conversación */}
-      <section className="flex flex-1 px-6 py-8">
+      <section className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
         <div className="mx-auto w-full max-w-3xl">
           {isLoadingHistory ? null : messages.length === 0 ? (
             <div className="mt-32 text-center">
@@ -158,6 +163,8 @@ export default function ChatPage() {
                   LUZ está escribiendo…
                 </div>
               )}
+
+              <div ref={bottomRef} />
             </div>
           )}
         </div>
