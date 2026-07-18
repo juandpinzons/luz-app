@@ -4,6 +4,9 @@ import { getLatestConversation } from "@/features/chat/services/get-latest-conve
 import { sendMessage } from "@/features/chat/services/send-message";
 import { sendMessageRequestSchema } from "@/features/chat/types";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
+import { createRequestId, logger } from "@/core/observability/logger";
+import { recordEvent } from "@/core/observability/record-event";
+import { db } from "@/core/db/client";
 
 /**
  * Respuestas reales medidas en producción llegan hasta ~22s (mensajes
@@ -22,9 +25,14 @@ export const maxDuration = 60;
  * una ruta nunca debe asumir que el proxy es la única línea de defensa.
  */
 export async function POST(request: Request): Promise<Response> {
+  const requestId = createRequestId();
+  const startedAt = Date.now();
+  const route = "POST /api/chat";
+
   const context = await getUserContext();
 
   if (!context) {
+    logger.log({ event: "auth.rejected", severity: "warn", requestId, route });
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
@@ -36,10 +44,14 @@ export async function POST(request: Request): Promise<Response> {
   try {
     lifeGraphContext = await getLifeGraphContext();
   } catch (error) {
-    console.error(
-      "[api/chat] no se pudo resolver LifeGraphContext:",
-      error,
-    );
+    logger.log({
+      event: "lifegraph.resolve_failed",
+      severity: "warn",
+      requestId,
+      route,
+      userId: context.userId,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   const body: unknown = await request.json();
@@ -58,14 +70,41 @@ export async function POST(request: Request): Promise<Response> {
       lifeGraphContext,
       conversationId: parsed.data.conversationId,
       message: parsed.data.message,
+      requestId,
+    });
+
+    logger.log({
+      event: "api.request_completed",
+      requestId,
+      route,
+      userId: context.userId,
+      conversationId: result.conversationId,
+      status: 200,
+      durationMs: Date.now() - startedAt,
     });
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[api/chat] error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    logger.log({
+      event: "api.request_failed",
+      severity: "error",
+      requestId,
+      route,
+      userId: context.userId,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      error: message,
+    });
+    await recordEvent(db, {
+      type: "error",
+      userId: context.userId,
+      route,
+      message,
+    });
 
     return NextResponse.json(
-      { error: "No se pudo procesar el mensaje." },
+      { error: "No se pudo procesar el mensaje. Intenta de nuevo en unos segundos." },
       { status: 500 },
     );
   }
@@ -78,6 +117,10 @@ export async function POST(request: Request): Promise<Response> {
  * el usuario nunca ha conversado con LUZ.
  */
 export async function GET(): Promise<Response> {
+  const requestId = createRequestId();
+  const startedAt = Date.now();
+  const route = "GET /api/chat";
+
   const context = await getUserContext();
 
   if (!context) {
@@ -86,9 +129,28 @@ export async function GET(): Promise<Response> {
 
   try {
     const latest = await getLatestConversation(context);
+    logger.log({
+      event: "api.request_completed",
+      requestId,
+      route,
+      userId: context.userId,
+      status: 200,
+      durationMs: Date.now() - startedAt,
+    });
     return NextResponse.json(latest);
   } catch (error) {
-    console.error("[api/chat] no se pudo recuperar la conversación:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    logger.log({
+      event: "api.request_failed",
+      severity: "error",
+      requestId,
+      route,
+      userId: context.userId,
+      status: 500,
+      durationMs: Date.now() - startedAt,
+      error: message,
+    });
+    await recordEvent(db, { type: "error", userId: context.userId, route, message });
 
     return NextResponse.json(
       { error: "No se pudo recuperar la conversación." },

@@ -1,6 +1,7 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import type { NextAuthConfig } from "next-auth";
 import { db } from "../core/db/client";
+import { recordEvent } from "../core/observability/record-event";
 import { users } from "../core/db/schema/users";
 import { providers } from "./providers";
 import { accounts, sessions, verificationTokens } from "./schema";
@@ -35,6 +36,19 @@ export const authConfig: NextAuthConfig = {
       }
 
       return session;
+    },
+  },
+  events: {
+    async signIn({ user, isNewUser }) {
+      if (!user.id) {
+        return;
+      }
+
+      await recordEvent(db, {
+        type: "auth_sign_in",
+        userId: user.id,
+        metadata: { isNewUser: Boolean(isNewUser) },
+      });
     },
   },
 };

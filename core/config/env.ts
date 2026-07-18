@@ -20,6 +20,13 @@ const envSchema = z.object({
   OPENAI_MODEL: z.string().min(1, "OPENAI_MODEL es obligatorio."),
 
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
+
+  /**
+   * Lista separada por comas de emails con acceso a /admin (Sprint de
+   * Observabilidad, Alpha). Vacío por defecto — sin esto configurado,
+   * /admin queda cerrado para todos, nunca abierto por accidente.
+   */
+  ADMIN_EMAILS: z.string().default(""),
 });
 
 export type Env = z.infer<typeof envSchema>;

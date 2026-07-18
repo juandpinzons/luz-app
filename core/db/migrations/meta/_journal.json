@@ -57,6 +57,20 @@
       "when": 1784264822703,
       "tag": "0007_add_knowledge_engine_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1784415360148,
+      "tag": "0008_worthless_thor",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1784415460971,
+      "tag": "0009_volatile_tyger_tiger",
+      "breakpoints": true
     }
   ]
 }

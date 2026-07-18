@@ -7,6 +7,8 @@ import type { UserContext } from "../../../core/identity/user-context";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
+import { logger } from "../../../core/observability/logger";
+import { recordEvent } from "../../../core/observability/record-event";
 import {
   buildContext,
   renderContextToMessages,
@@ -25,6 +27,8 @@ export interface SendMessageInput {
   lifeGraphContext: LifeGraphContext | null;
   conversationId?: string;
   message: string;
+  /** Para correlacionar logs de un mismo request (Sprint de Observabilidad). */
+  requestId?: string;
 }
 
 export interface SendMessageResult {
@@ -85,13 +89,22 @@ async function getOrCreateConversation(
 export async function sendMessage(
   input: SendMessageInput,
 ): Promise<SendMessageResult> {
-  const { context, lifeGraphContext } = input;
+  const { context, lifeGraphContext, requestId } = input;
+  const startedAt = Date.now();
 
   const conversationId = await getOrCreateConversation(
     context,
     input.conversationId,
   );
 
+  logger.log({
+    event: "message.received",
+    requestId,
+    userId: context.userId,
+    conversationId,
+  });
+
+  const dbWriteStart = Date.now();
   const [userMessage] = await db
     .insert(conversationMessages)
     .values({
@@ -111,6 +124,13 @@ export async function sendMessage(
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, conversationId))
     .orderBy(asc(conversationMessages.createdAt));
+  logger.log({
+    event: "db.query",
+    requestId,
+    conversationId,
+    query: "insert_user_message_and_fetch_history",
+    durationMs: Date.now() - dbWriteStart,
+  });
 
   // `conversation_messages.role` admite "system" en el schema (headroom
   // sin uso hoy — nada lo inserta) pero `ConversationTurn` solo modela
@@ -138,14 +158,27 @@ export async function sendMessage(
   // sprint.
   let aiMessages: AIMessage[] = conversation;
   if (lifeGraphContext) {
+    const contextBuilderStart = Date.now();
     try {
       const context = await buildContext(db, lifeGraphContext, conversation);
       aiMessages = renderContextToMessages(context);
+      logger.log({
+        event: "context_builder.completed",
+        requestId,
+        conversationId,
+        memoriesCount: context.memories.length,
+        rulesApplied: context.conversationRules.length,
+        durationMs: Date.now() - contextBuilderStart,
+      });
     } catch (error) {
-      console.error(
-        "[send-message] no se pudo construir el Context:",
-        error,
-      );
+      logger.log({
+        event: "context_builder.failed",
+        severity: "error",
+        requestId,
+        conversationId,
+        durationMs: Date.now() - contextBuilderStart,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -173,7 +206,31 @@ export async function sendMessage(
     }
   }
 
-  const reply = await getAIProvider().generateReply(aiMessages);
+  const aiProvider = getAIProvider();
+  const openaiStart = Date.now();
+  let reply: string;
+  try {
+    reply = await aiProvider.generateReply(aiMessages);
+  } catch (error) {
+    logger.log({
+      event: "openai.request_failed",
+      severity: "error",
+      requestId,
+      conversationId,
+      provider: aiProvider.name,
+      durationMs: Date.now() - openaiStart,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  logger.log({
+    event: "openai.response",
+    requestId,
+    conversationId,
+    provider: aiProvider.name,
+    replyLength: reply.length,
+    durationMs: Date.now() - openaiStart,
+  });
 
   await db.insert(conversationMessages).values({
     conversationId,
@@ -188,6 +245,20 @@ export async function sendMessage(
     userId: context.userId,
     sourceType: "conversation_message",
     sourceId: userMessage.id,
+  });
+
+  const totalDurationMs = Date.now() - startedAt;
+  logger.log({
+    event: "message.sent",
+    requestId,
+    userId: context.userId,
+    conversationId,
+    durationMs: totalDurationMs,
+  });
+  await recordEvent(db, {
+    type: "message_sent",
+    userId: context.userId,
+    metadata: { conversationId, durationMs: totalDurationMs },
   });
 
   return { conversationId, reply };
