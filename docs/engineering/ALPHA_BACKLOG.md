@@ -96,18 +96,21 @@ reconfirmado aquí). Cookies de sesión de Auth.js usan `httpOnly`,
 `secure`, `sameSite: lax` por defecto — configuración correcta, no
 tocada por nosotros.
 
-### SEC-1. Sin headers de seguridad explícitos (CSP, X-Frame-Options)
-**Descripción**: `next.config.ts` no define ningún header de seguridad
-— sin Content-Security-Policy, sin X-Frame-Options, sin
-Strict-Transport-Security explícito (Vercel agrega algunos por
-defecto, pero no CSP).
-**Impacto**: riesgo real pero no inmediato — expone a clickjacking
-(embeber `/chat` en un iframe ajeno) y reduce la defensa en profundidad
-contra XSS si alguna vez se introduce uno.
-**Prioridad**: P2.
-**Solución sugerida**: agregar headers en `next.config.ts` (`headers()`)
-— cambio pequeño y seguro.
-**Complejidad estimada**: Baja.
+### SEC-1. Sin headers de seguridad explícitos — ✅ Resuelto parcialmente (2026-07-19)
+**Descripción**: `next.config.ts` no definía ningún header de
+seguridad.
+**Hecho**: agregados `X-Frame-Options: DENY`, `X-Content-Type-Options:
+nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` —
+verificados en local (headers reales presentes, sin errores en el
+servidor).
+**Pendiente, a propósito**: una Content-Security-Policy estricta queda
+fuera de este cambio — necesita probarse con cuidado contra el flujo
+real de login de Google antes de desplegarse (un CSP mal configurado
+puede romper el redirect de OAuth), no se improvisa en el mismo
+commit que lo demás.
+**Prioridad restante**: P2.
+**Complejidad estimada (CSP)**: Media — requiere verificación real
+contra el login antes de aplicar.
 
 ### SEC-2. Sin rate limiting a nivel de autenticación
 **Descripción**: `/api/auth/*` (manejado por Auth.js) no tiene límite
