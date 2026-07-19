@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
+import { checkRateLimit } from "@/features/chat/services/check-rate-limit";
 import { getLatestConversation } from "@/features/chat/services/get-latest-conversation";
 import { sendMessage } from "@/features/chat/services/send-message";
 import { sendMessageRequestSchema } from "@/features/chat/types";
@@ -34,6 +35,27 @@ export async function POST(request: Request): Promise<Response> {
   if (!context) {
     logger.log({ event: "auth.rejected", severity: "warn", requestId, route });
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
+  }
+
+  // P1-2/P1-5 (ALPHA_BACKLOG.md): antes de cualquier trabajo real (DB,
+  // LifeGraphContext, OpenAI), para que una cuenta que excede el límite
+  // no siga generando costo ni carga.
+  const rateLimit = await checkRateLimit(context.userId);
+  if (!rateLimit.allowed) {
+    logger.log({
+      event: "rate_limit.rejected",
+      severity: "warn",
+      requestId,
+      route,
+      userId: context.userId,
+    });
+    return NextResponse.json(
+      { error: "Demasiados mensajes en poco tiempo. Espera un momento e intenta de nuevo." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
+      },
+    );
   }
 
   // Resuelve (y bootstrapea si hace falta) el LifeGraphContext de esta

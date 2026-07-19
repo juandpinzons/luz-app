@@ -6,6 +6,14 @@ Relationship Model, Human Model, and Reality Snapshot\
 Scope: engineering only — this is not a company roadmap, it does not
 cover positioning, pricing, or go-to-market
 
+**Status update (2026-07-19, addendum — original text below unchanged):**
+the AIProvider structured-output decision this roadmap names as a
+blocking gate throughout Section 4, Section 5 (Sprint B2), and Section
+8 is now resolved — see ADR-0016. `AIProvider.generateStructured<T>()`
+is implemented, verified against the real OpenAI API. `ExtractStage`
+and `InsightGenerationStrategy` (Sprint B2 PR-8/PR-9) can now be built
+against it.
+
 Before writing this, I checked for a contradiction between what's
 built and the four foundational documents serious enough to require
 stopping. I didn't find one. What I found instead is a gap, not a

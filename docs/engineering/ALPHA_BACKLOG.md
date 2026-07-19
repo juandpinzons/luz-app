@@ -23,7 +23,7 @@ arreglados el mismo día que se detectaron — ver "Resueltos" abajo.
 
 ## P1 — Alto
 
-### P1-1. Knowledge Engine desconectado
+### P1-1. Knowledge Engine desconectado — 🟡 Gate resuelto, wiring pendiente (2026-07-19)
 **Descripción**: `core/knowledge/` (conectado al worker y a la cola
 `knowledge_jobs`) son etapas stub que fallan a propósito.
 `core/knowledge-engine/` (M3, real) tiene 4/6 etapas construidas pero
@@ -32,23 +32,38 @@ a nada. La cola crece sin procesar con cada mensaje.
 **Impacto**: LUZ no "sigue pensando" en segundo plano como se pidió —
 ninguna funcionalidad visible rota hoy, pero es una promesa de producto
 sin cumplir, y la tabla `knowledge_jobs` crece indefinidamente.
-**Prioridad**: P1.
-**Solución sugerida**: construir Extract + Generate con `AIProvider`,
-ensamblar el `KnowledgeEngine` real de M3, conectarlo vía un cron de
-Vercel (no un worker persistente — la plataforma no lo soporta).
-**Complejidad estimada**: Media-Alta (un sprint completo).
+**Hecho**: la decisión bloqueante que `BETA_ROADMAP_V1.md` marcaba
+como prerrequisito — cómo `ExtractStage`/`InsightGenerationStrategy`
+obtienen salida estructurada de `AIProvider` — está resuelta (ver
+ADR-0016, `generateStructured<T>()`, verificado contra la API real de
+OpenAI). Alcance de esta sesión, aprobado explícitamente por el
+Founder: solo la extensión del contrato, no construir las etapas.
+**Pendiente, sin construir todavía**: `ExtractStage`, `InsightGenerationStrategy`,
+el ensamblaje de `DefaultKnowledgeEngine`, y conectarlo vía un cron de
+Vercel — cada uno su propio PR (B2's PR-8/9/10 en
+`BETA_ROADMAP_V1.md`), el último de ellos flaggeado ahí mismo como
+un cutover que necesita su propia confirmación, no una continuación
+automática de esta.
+**Complejidad restante**: Media (ya no Media-Alta — el gate más grande
+del sprint completo original ya no bloquea).
 
-### P1-2. Sin rate limiting en `/api/chat`
+### P1-2. Sin rate limiting en `/api/chat` — ✅ Resuelto (2026-07-19)
 **Descripción**: cualquier usuario autenticado (o cuenta comprometida)
-puede enviar mensajes sin límite, cada uno con costo real de OpenAI.
+podía enviar mensajes sin límite, cada uno con costo real de OpenAI.
 **Impacto**: riesgo financiero directo si el tráfico crece o alguien
 abusa — sin ningún control de costo por usuario.
-**Prioridad**: P1.
-**Solución sugerida**: límite simple por usuario (ej. N mensajes por
-minuto) en `/api/chat`, sin librería externa — un chequeo contra
-`conversation_messages` o `events` recientes es suficiente al tamaño
-actual.
-**Complejidad estimada**: Baja.
+**Hecho**: `features/chat/services/check-rate-limit.ts` — 20
+mensajes/5 min por usuario, contra la tabla `events` (`message_sent`)
+ya existente, sin librería ni tabla nueva. Llamado en
+`app/api/chat/route.ts` justo después de resolver la identidad, antes
+de cualquier trabajo real (DB, LifeGraphContext, OpenAI) — responde
+`429` con `Retry-After` si se excede. Verificado con datos reales en
+la base de datos local (no solo lectura de código): 19 mensajes
+permite, el 20º bloquea, `retryAfterSeconds` correcto, y el estado
+vuelve a `allowed: true` tras limpiar la ventana.
+**Límite ajustable**: vive como constante en el archivo, sin
+migración — 20/5min es un punto de partida conservador para el
+tamaño actual del pilotaje, no un valor final.
 
 ### P1-3. Plan Hobby de Vercel
 **Descripción**: el proyecto vive en un plan que técnicamente no
@@ -61,7 +76,7 @@ antes que por un bug.
 gente o compartir el link más ampliamente.
 **Complejidad estimada**: Baja (decisión + pago, no código).
 
-### P1-4. Ranking de memoria con frases-gatillo muy angostas
+### P1-4. Ranking de memoria con frases-gatillo muy angostas — ✅ Resuelto, alcance mínimo (2026-07-19)
 **Descripción**: `DeterministicMemoryRankingStrategy` no reconoció "me
 fue infiel" como señal de comprensión en una conversación real
 (majo1502) — la lista de frases-gatillo es más angosta que el lenguaje
@@ -69,11 +84,15 @@ real de la gente.
 **Impacto**: memorias genuinamente importantes pueden rankear igual que
 un simple "hola", perdiendo prioridad en Context Builder / Morning
 Brief.
-**Prioridad**: P1.
-**Solución sugerida**: ampliar la lista de frases-gatillo con casos
-reales encontrados en el pilotaje — requiere aprobación del Founder
-por tocar una pieza ya aprobada de M2.
-**Complejidad estimada**: Baja (una vez aprobado el alcance).
+**Hecho**: agregadas "me fue infiel"/"me engañó"/"me traicionó" (y sus
+equivalentes en inglés) a la categoría `relationship_change` de
+`UNDERSTANDING_SIGNALS` — mismo mecanismo determinista de keyword
+matching que ya existía, sin lógica nueva. Alcance deliberadamente
+mínimo por decisión explícita del Founder: solo el caso real
+documentado, sin inventar una lista más amplia sin un segundo caso real
+— ninguna capacidad de detección semántica agregada, ningún cambio de
+comportamiento fuera de esta lista.
+**Complejidad real**: Baja, como se estimó.
 
 ### P1-5. Sin rate limiting en `/api/chat` (duplicado de P1-2, reconfirmado)
 Ver P1-2. Revisión de seguridad inicial (2026-07-19) lo reconfirma como
