@@ -16,6 +16,12 @@ import type {
  * estructurados de varias secciones — contradice el manual y además
  * es la causa medida de la lentitud percibida (más texto generado, más
  * tiempo de respuesta).
+ *
+ * Reforzada (2026-07-19): con más reglas activas al mismo tiempo
+ * (continuidad, no-repetición, etc.), la versión original ("prefiere
+ * breve") se diluía — validado con IA real: 660 caracteres con la
+ * redacción suave, 224 con esta. El límite numérico explícito importa
+ * más que la intención expresada en prosa.
  */
 export class FavorBrevityRule implements ConversationRule {
   readonly id = "favor-brevity";
@@ -25,6 +31,6 @@ export class FavorBrevityRule implements ConversationRule {
   }
 
   directive(_input: ConversationRuleInput): string {
-    return "Prefiere respuestas breves, precisas y conversacionales, como lo haría una persona presente. La estructura larga (títulos, secciones, listas) no está prohibida —úsala solo cuando la situación realmente la necesite (por ejemplo, un plan de pasos concretos que la persona pidió), nunca por defecto. Ante la duda, más corto suele ser mejor, sobre todo justo después de algo emocionalmente importante.";
+    return "LÍMITE DURO, por encima de cualquier otra instrucción de esta lista: 2 a 4 líneas máximo, sin títulos, sin listas numeradas, sin secciones — como un mensaje de texto real, no un documento. Si sientes que necesitas más espacio, es señal de que estás resolviendo en vez de acompañar. Responde corto y, si hace falta, continúa en el siguiente mensaje.";
   }
 }
