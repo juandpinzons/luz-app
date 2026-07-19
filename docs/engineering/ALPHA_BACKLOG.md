@@ -75,6 +75,50 @@ reales encontrados en el pilotaje — requiere aprobación del Founder
 por tocar una pieza ya aprobada de M2.
 **Complejidad estimada**: Baja (una vez aprobado el alcance).
 
+### P1-5. Sin rate limiting en `/api/chat` (duplicado de P1-2, reconfirmado)
+Ver P1-2. Revisión de seguridad inicial (2026-07-19) lo reconfirma como
+el hallazgo de mayor impacto: sin límite por usuario, un abuso o una
+cuenta comprometida genera gasto ilimitado de OpenAI sin ninguna
+alarma — no hay una segunda entrada aquí, se consolida en P1-2.
+
+---
+
+## Seguridad y privacidad (línea secundaria, iniciada 2026-07-19)
+
+Primer pase real, no una auditoría exhaustiva — evidencia concreta,
+sin inventar riesgos hipotéticos.
+
+**Verificado, sin hallazgo**: ningún secreto (`sk-`, `GOCSPX-`, cadenas
+de conexión) ha sido commiteado al historial de git nunca.
+`conversation_messages`/`memories` ya filtran correctamente por
+`userId` en cada consulta — sin fuga entre usuarios (confirmado antes,
+reconfirmado aquí). Cookies de sesión de Auth.js usan `httpOnly`,
+`secure`, `sameSite: lax` por defecto — configuración correcta, no
+tocada por nosotros.
+
+### SEC-1. Sin headers de seguridad explícitos (CSP, X-Frame-Options)
+**Descripción**: `next.config.ts` no define ningún header de seguridad
+— sin Content-Security-Policy, sin X-Frame-Options, sin
+Strict-Transport-Security explícito (Vercel agrega algunos por
+defecto, pero no CSP).
+**Impacto**: riesgo real pero no inmediato — expone a clickjacking
+(embeber `/chat` en un iframe ajeno) y reduce la defensa en profundidad
+contra XSS si alguna vez se introduce uno.
+**Prioridad**: P2.
+**Solución sugerida**: agregar headers en `next.config.ts` (`headers()`)
+— cambio pequeño y seguro.
+**Complejidad estimada**: Baja.
+
+### SEC-2. Sin rate limiting a nivel de autenticación
+**Descripción**: `/api/auth/*` (manejado por Auth.js) no tiene límite
+de intentos propio nuestro.
+**Impacto**: bajo hoy (OAuth con Google, no hay contraseña que fuerza
+bruta pueda romper), pero vale la pena revisar si se agregan más
+proveedores de login en el futuro.
+**Prioridad**: P3 — no urgente mientras el único proveedor sea Google.
+**Solución sugerida**: ninguna todavía, solo observación.
+**Complejidad estimada**: N/A.
+
 ---
 
 ## P2 — Mejoras
