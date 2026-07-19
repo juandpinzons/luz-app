@@ -1,7 +1,7 @@
 # Reality Snapshot v1
 
 Version: 1.0 — architecture reference\
-Status: Proposed — awaiting CTO confirmation\
+Status: Proposed — awaiting Founder confirmation\
 Related: ADR-0008 (Reality Model), ADR-0013 (Reality Snapshot
 Contract), ADR-0015 (Connector Architecture), `REALITY_MODEL.md`,
 `CONTEXT_ENGINE_SPEC.md`, `docs/architecture/HUMAN_MODEL_V1.md`,

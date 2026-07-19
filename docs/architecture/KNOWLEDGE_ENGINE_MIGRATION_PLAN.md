@@ -114,7 +114,7 @@ zero.
 - Deciding how `ExtractStage`/`InsightGenerationStrategy` get
   structured output from `AIProvider` (currently
   `generateReply(): Promise<string>` only) — a public-interface
-  question requiring its own CTO decision, sequenced last in M3's PR
+  question requiring its own Founder decision, sequenced last in M3's PR
   order precisely because it's unresolved
 - The fate of `entity_relations` (zero consumers, not touched by this
   plan)
@@ -130,5 +130,5 @@ zero.
   none
 - Retiring `projects`/`goals`/`habits`/`people` is safe (zero
   consumers) but does not close `core/life`'s pre-existing gap for
-  those entities' persistence — flagged for Founder/CTO awareness, not
+  those entities' persistence — flagged for Founder awareness, not
   this plan's problem to solve

@@ -45,7 +45,7 @@ complete, PR-2 not yet started. No code has been written.
 
 ## Pending PRs
 
-**PR-1** — ADR-0014 + migration plan: drafted, **awaiting CTO
+**PR-1** — ADR-0014 + migration plan: drafted, **awaiting Founder
 confirmation** (currently `Status: Proposed`, not `Accepted`).
 
 In order, not yet started:
@@ -77,7 +77,7 @@ Discoveries made during planning, intentionally deferred, documented
   Time) — distinct concepts, no schema change made to represent this.
 - **Knowledge is probabilistic** — `InsightStatus` is a one-way gate
   today; strengthening/weakening/replacement/expiration/invalidation is
-  a future domain-model change requiring CTO escalation, not decided
+  a future domain-model change requiring Founder escalation, not decided
   here.
 - **`RealitySnapshot` stays current-state-only** — no history
   persistence; reconstruction, if ever needed, derives from persisted

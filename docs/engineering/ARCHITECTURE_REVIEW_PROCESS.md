@@ -1,5 +1,5 @@
 # ARCHITECTURE REVIEW PROCESS
 
-CTO approves architectural changes.
+Founder approves architectural changes.
 Codex audits major PRs.
 ADRs updated.

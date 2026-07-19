@@ -1,8 +1,8 @@
 # ADR-0015 Connector Architecture
 
-Status: Proposed — awaiting CTO confirmation\
+Status: Proposed — awaiting Founder confirmation\
 Date: July 2026\
-Owner: CTO
+Owner: Founder
 
 ## Context
 

@@ -1,8 +1,8 @@
 # ADR-0014 Knowledge Engine Consolidation
 
-Status: Proposed — awaiting CTO confirmation\
+Status: Proposed — awaiting Founder confirmation\
 Date: July 2026\
-Owner: CTO
+Owner: Founder
 
 ## Context
 
@@ -43,7 +43,7 @@ The migration is not a straight rename:
 
 | Old | New home | Notes |
 |---|---|---|
-| `projects`, `goals`, `habits`, `people` (`knowledge.ts`) | Retired, no replacement in this module | Life Graph state under Architecture V1; belongs to `core/life`, which — as of this writing — has no Drizzle-backed repository yet for these four entities either (only `LifeGraph` and `Person` do). That gap pre-exists this ADR and isn't created by it; retiring these tables removes no working capability (zero consumers), but it also leaves no interim replacement. Flagging for Founder/CTO awareness, not solving here. |
+| `projects`, `goals`, `habits`, `people` (`knowledge.ts`) | Retired, no replacement in this module | Life Graph state under Architecture V1; belongs to `core/life`, which — as of this writing — has no Drizzle-backed repository yet for these four entities either (only `LifeGraph` and `Person` do). That gap pre-exists this ADR and isn't created by it; retiring these tables removes no working capability (zero consumers), but it also leaves no interim replacement. Flagging for Founder awareness, not solving here. |
 | `insights` (`knowledge.ts`, `userId`-scoped) | New `insights` table, `life_graph_id`-scoped, matching `core/knowledge-engine/entities/insight.ts` | Same treatment `memory_embeddings.user_id` got in ADR-0012 |
 | `evidence` (`relations.ts`, polymorphic `sourceType`/`sourceId`, `userId`-scoped) | New `evidence` table, `memoryId`-only, `life_graph_id`-scoped, matching `core/knowledge-engine/entities/evidence.ts` | Narrower by design — ADR-0013 already restricted `Evidence.memoryId` to a single `EntityId`; the polymorphic shape isn't needed |
 | — (no prior equivalent) | New `insight_relationships` table, matching `core/knowledge-engine/entities/insight-relationship.ts` | Insight-to-insight only |

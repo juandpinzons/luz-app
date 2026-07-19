@@ -2,7 +2,7 @@
 
 Version: 2.0 — final conceptual architecture (consolidates v1.0 and
 v1.1)\
-Status: Proposed — awaiting CTO confirmation\
+Status: Proposed — awaiting Founder confirmation\
 Related: ADR-0008 (Reality Model), ADR-0009 (Person not User), ADR-0011
 (Identity Architecture), ADR-0013 (Reality Snapshot Contract), ADR-0015
 (Connector Architecture), `DOMAIN_MODEL_V1.md`, `MEMORY_MODEL.md`,
@@ -16,7 +16,7 @@ This is intended as the canonical architecture reference for the Human
 Model going forward. It does not modify any existing ADR, does not
 authorize any implementation, and does not change `RealitySnapshot`,
 `core/knowledge-engine`, `core/memory-engine`, or any frozen contract.
-It remains **Proposed** until the Founder and CTO confirm it — nothing
+It remains **Proposed** until the Founder confirms it — nothing
 in this document self-authorizes its own status.
 
 Every section should be read against one standing question:
@@ -444,7 +444,7 @@ chosen.
 an organization), should a Human Model exist only for the owner — the
 person who authenticated — or for any `Person` member LUZ has a
 genuine, direct relationship with? This is not resolved in this
-document. It is analyzed as a trade-off for the Founder and CTO to
+document. It is analyzed as a trade-off for the Founder to
 decide.
 
 **Owner-only** is the simplest possible scoping, and matches how the

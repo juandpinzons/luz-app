@@ -5,4 +5,4 @@ features/
 app/
 docs/
 
-Never invent new top-level folders without CTO approval.
+Never invent new top-level folders without Founder approval.

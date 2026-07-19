@@ -32,6 +32,7 @@ Documentation defines the code.
     product/
     reviews/
     sprints/
+    legal/
 
 ------------------------------------------------------------------------
 
@@ -44,9 +45,10 @@ A new engineer should read the documentation in this order:
 3.  architecture/
 4.  adr/
 5.  engineering/
-6.  sprints/
-7.  product/
-8.  reviews/
+6.  legal/
+7.  sprints/
+8.  product/
+9.  reviews/
 
 This sequence explains:
 
@@ -163,6 +165,17 @@ Technical audits.
 
 ------------------------------------------------------------------------
 
+## legal/
+
+Governance and compliance policy.
+
+Not architecture. Not implementation guidance.
+
+Defines how the project itself is governed — including AI-assisted
+development.
+
+------------------------------------------------------------------------
+
 # Governance
 
 Documentation follows this hierarchy:
@@ -235,17 +248,27 @@ The implementation must be updated.
 
 # Ownership
 
-CEO
+Current organizational model — see [`docs/legal/AI_DEVELOPMENT_POLICY.md`](legal/AI_DEVELOPMENT_POLICY.md).
+"CTO" is legacy terminology and no longer describes a role in this
+project.
 
-Defines product direction.
+Founder
 
-CTO
+Defines product direction. Owns architecture and documentation. Final
+approval authority.
 
-Owns architecture and documentation.
-
-Lead Engineer
+Lead Engineer (Claude)
 
 Implements Engineering Packages.
+
+AI Engineering Advisor(s)
+
+Support technical analysis and review. Hold no independent approval
+authority.
+
+Future Human Engineering Team
+
+Not yet staffed.
 
 Staff Engineer
 
