@@ -26,6 +26,7 @@ Documentation defines the code.
 
     vision/
     concepts/
+    governance/
     architecture/
     adr/
     engineering/
@@ -42,13 +43,14 @@ A new engineer should read the documentation in this order:
 
 1.  vision/
 2.  concepts/
-3.  architecture/
-4.  adr/
-5.  engineering/
-6.  legal/
-7.  sprints/
-8.  product/
-9.  reviews/
+3.  governance/
+4.  architecture/
+5.  adr/
+6.  engineering/
+7.  legal/
+8.  sprints/
+9.  product/
+10. reviews/
 
 This sequence explains:
 
@@ -70,7 +72,12 @@ What is currently being built.
 
 ## vision/
 
-Permanent product vision.
+Permanent product vision — why LUZ exists, and how it should behave
+and feel regardless of implementation (`BEHAVIORAL_PRINCIPLES.md` and
+the documents that operationalize it). Not architecture, not
+governance, not engineering — see
+[`docs/governance/DOCUMENT_CLASSIFICATION.md`](governance/DOCUMENT_CLASSIFICATION.md)
+for how these layers stay independent.
 
 Changes are extremely rare.
 
@@ -83,6 +90,16 @@ Canonical language of LUZ.
 Defines Person, Relationship, Life, Context, Intelligence and Trust.
 
 No implementation details belong here.
+
+------------------------------------------------------------------------
+
+## governance/
+
+Rules: who the organization is, how documents are classified, how
+changes to documentation are approved.
+
+Not architecture. Not process. The rules that the rest of the
+documentation system — including this file — is built on.
 
 ------------------------------------------------------------------------
 
@@ -248,31 +265,15 @@ The implementation must be updated.
 
 # Ownership
 
-Current organizational model — see [`docs/legal/AI_DEVELOPMENT_POLICY.md`](legal/AI_DEVELOPMENT_POLICY.md).
+Canonical roster and role definitions: [`docs/governance/ORGANIZATION_MODEL.md`](governance/ORGANIZATION_MODEL.md).
+Decision authority (who approves what): [`docs/engineering/claude/12_DECISION_BOUNDARIES.md`](engineering/claude/12_DECISION_BOUNDARIES.md).
+AI governance: [`docs/legal/AI_DEVELOPMENT_POLICY.md`](legal/AI_DEVELOPMENT_POLICY.md).
+
 "CTO" is legacy terminology and no longer describes a role in this
-project.
+project (see `ORGANIZATION_MODEL.md`'s Legacy Terminology note).
 
-Founder
-
-Defines product direction. Owns architecture and documentation. Final
-approval authority.
-
-Lead Engineer (Claude)
-
-Implements Engineering Packages.
-
-AI Engineering Advisor(s)
-
-Support technical analysis and review. Hold no independent approval
-authority.
-
-Future Human Engineering Team
-
-Not yet staffed.
-
-Staff Engineer
-
-Performs architectural reviews.
+Staff Engineer — performs architectural reviews — remains a defined
+role pending inclusion in the current organizational model.
 
 ------------------------------------------------------------------------
 

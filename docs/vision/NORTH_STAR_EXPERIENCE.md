@@ -2,6 +2,15 @@
 
 Defines the desired experience after 1 day, 1 week, 1 month and 1 year. LUZ should feel like a trusted presence rather than software.
 
+------------------------------------------------------------------------
+
+This is the most concrete layer of `BEHAVIORAL_PRINCIPLES.md` →
+`PRESENCE_MODEL.md` → `LIVING_SYSTEM_SPEC.md` → `DESIGN_PHILOSOPHY.md`
+→ this document. Everything above it is principle or design intent;
+this document is what a person should actually feel. Nothing below
+this layer — the Founder's words that follow are not reinterpreted by
+that chain, they are its source.
+
 ---
 
 ## Founder Notes (Raw)
