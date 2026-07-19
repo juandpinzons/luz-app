@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { DashboardSummary } from "../services/build-dashboard-summary";
 
 const WEEKDAY_DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
@@ -82,9 +83,17 @@ export function DashboardActivitySummary({
 
       {summary && summary.recentConversations.length > 0 && (
         <section>
-          <h2 className="text-sm font-medium text-zinc-400">
-            Conversaciones recientes
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-400">
+              Conversaciones recientes
+            </h2>
+            <Link
+              href="/conversations"
+              className="text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+            >
+              Ver historial
+            </Link>
+          </div>
           <div className="mt-3 space-y-2">
             {summary.recentConversations.map((conversation) => (
               <div
