@@ -113,7 +113,7 @@ export default function ChatPage() {
         ...prev,
         {
           role: "assistant",
-          content: "❌ Ocurrió un error al conectar con el servidor.",
+          content: "Algo no salió bien de mi lado. ¿Lo intentamos de nuevo?",
         },
       ]);
     } finally {
