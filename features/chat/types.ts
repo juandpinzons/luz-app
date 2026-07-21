@@ -16,3 +16,8 @@ export interface GetLatestConversationResponse {
   conversationId: string;
   messages: { role: "user" | "assistant"; content: string }[];
 }
+
+/** Forma de todo error que `/api/chat` devuelve (400/401/429/500) — ver app/api/chat/route.ts. */
+export interface SendMessageErrorResponse {
+  error: string;
+}

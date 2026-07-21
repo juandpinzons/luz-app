@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   GetLatestConversationResponse,
+  SendMessageErrorResponse,
   SendMessageResponse,
 } from "@/features/chat/types";
 
@@ -10,6 +11,15 @@ type Message = {
   role: "user" | "assistant";
   content: string;
 };
+
+/**
+ * Distingue "el servidor respondió y explicó qué pasó" (mensaje seguro
+ * para mostrar tal cual — límite de mensajes, sesión expirada, etc.,
+ * ya escritos con cuidado en app/api/chat/route.ts) de una falla real
+ * de red (fetch nunca llegó a responder), cuyo mensaje de navegador
+ * nunca debería llegar a la persona tal cual.
+ */
+class ChatRequestError extends Error {}
 
 export default function ChatPage() {
   const [message, setMessage] = useState("");
@@ -92,7 +102,15 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Error en la respuesta del servidor");
+        const errorMessage = await response
+          .json()
+          .then((data: SendMessageErrorResponse) => data.error)
+          .catch(() => undefined);
+
+        throw new ChatRequestError(
+          errorMessage ??
+            "No se pudo procesar el mensaje. Intenta de nuevo en unos segundos.",
+        );
       }
 
       const data: SendMessageResponse = await response.json();
@@ -109,11 +127,16 @@ export default function ChatPage() {
     } catch (error) {
       console.error(error);
 
+      const content =
+        error instanceof ChatRequestError
+          ? error.message
+          : "Algo no salió bien de mi lado. ¿Lo intentamos de nuevo?";
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: "Algo no salió bien de mi lado. ¿Lo intentamos de nuevo?",
+          content,
         },
       ]);
     } finally {
