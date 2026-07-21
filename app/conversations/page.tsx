@@ -32,19 +32,37 @@ function formatRelativeTime(date: Date): string {
 }
 
 /**
- * Historial de conversaciones (Sprint Alpha-1b) — solo lectura, solo
- * lo del usuario autenticado. `listConversations` ya filtra por
- * `userId`; esta página no vuelve a decidir qué mostrar, solo lo
- * presenta.
+ * Historial de conversaciones (Sprint Alpha-1b, búsqueda en Alpha-1c)
+ * — solo lectura, solo lo del usuario autenticado. `listConversations`
+ * ya filtra por `userId`; esta página no vuelve a decidir qué mostrar,
+ * solo lo presenta.
+ *
+ * La búsqueda vive en `?q=` (Server Component, sin JS ni estado en el
+ * cliente): un `<form method="GET">` nativo navega a
+ * `/conversations?q=...` al enviar, el servidor vuelve a renderizar
+ * con la lista ya filtrada. Con `q` vacío o ausente, `searchTerm` es
+ * `undefined` y `listConversations` ni construye el filtro de
+ * búsqueda — la misma consulta de siempre.
  */
-export default async function ConversationsPage() {
+export default async function ConversationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const context = await getUserContext();
 
   if (!context) {
     redirect("/login");
   }
 
-  const conversations = await listConversations(db, context);
+  const { q } = await searchParams;
+  const searchTerm = q?.trim() || undefined;
+
+  const conversations = await listConversations(
+    db,
+    context,
+    searchTerm ? { searchTerm } : {},
+  );
 
   return (
     <main className="min-h-screen bg-black px-6 py-10 text-white">
@@ -59,9 +77,31 @@ export default async function ConversationsPage() {
           </Link>
         </div>
 
+        <form
+          action="/conversations"
+          method="GET"
+          className="mt-6 flex gap-2"
+        >
+          <input
+            type="text"
+            name="q"
+            defaultValue={searchTerm ?? ""}
+            placeholder="Buscar en tus conversaciones..."
+            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white"
+          />
+          <button
+            type="submit"
+            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200"
+          >
+            Buscar
+          </button>
+        </form>
+
         {conversations.length === 0 ? (
           <p className="mt-16 text-center text-zinc-500">
-            Todavía no tienes conversaciones.
+            {searchTerm
+              ? "No encontramos conversaciones con ese término."
+              : "Todavía no tienes conversaciones."}
           </p>
         ) : (
           <div className="mt-8 space-y-3">
