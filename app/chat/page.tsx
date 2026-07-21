@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type {
   GetLatestConversationResponse,
   SendMessageErrorResponse,
@@ -51,7 +52,31 @@ function parseSSEMessage(raw: string): ParsedSSEEvent | null {
   }
 }
 
+/**
+ * `useSearchParams` exige un boundary `<Suspense>` para no romper el
+ * build de producción (verificado en la documentación de Next.js de
+ * este proyecto) — de ahí la separación entre este wrapper y
+ * `ChatPageContent`, que tiene toda la lógica real.
+ */
 export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={<main className="flex h-screen flex-col bg-black text-white" />}
+    >
+      <ChatPageContent />
+    </Suspense>
+  );
+}
+
+function ChatPageContent() {
+  const searchParams = useSearchParams();
+  // Sprint de conversaciones persistentes: presente cuando se llega
+  // desde "Continuar esta conversación" (/conversations/[id]) o desde
+  // una tarjeta de conversación reciente del Dashboard — ausente en el
+  // uso normal, que sigue cargando la más reciente exactamente igual
+  // que antes.
+  const conversationIdParam = searchParams.get("conversationId");
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
@@ -76,7 +101,19 @@ export default function ChatPage() {
 
     async function loadLatestConversation() {
       try {
-        const response = await fetch("/api/chat");
+        // Con conversationId en la URL, pide esa conversación específica
+        // (GET /api/conversations/[id], Sprint de conversaciones
+        // persistentes) — sin él, el comportamiento de siempre: la más
+        // reciente. Un id inválido o de otra persona cae en 404, que el
+        // catch de abajo trata igual que "nada que precargar" — nunca
+        // revela si esa conversación existe, y si luego el usuario
+        // escribe, empieza una conversación nueva (conversationId sigue
+        // undefined).
+        const response = await fetch(
+          conversationIdParam
+            ? `/api/conversations/${conversationIdParam}`
+            : "/api/chat",
+        );
 
         if (!response.ok) {
           throw new Error("No se pudo recuperar la conversación.");
@@ -109,7 +146,7 @@ export default function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [conversationIdParam]);
 
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;

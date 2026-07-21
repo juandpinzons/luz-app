@@ -96,9 +96,10 @@ export function DashboardActivitySummary({
           </div>
           <div className="mt-3 space-y-2">
             {summary.recentConversations.map((conversation) => (
-              <div
+              <Link
                 key={conversation.id}
-                className="rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                href={`/conversations/${conversation.id}`}
+                className="block rounded-lg border border-zinc-800 px-4 py-3 text-sm transition hover:border-zinc-600"
               >
                 <p className="text-zinc-300">
                   {formatDate(conversation.startedAt)}
@@ -109,7 +110,7 @@ export function DashboardActivitySummary({
                   {conversation.lastMessageAt &&
                     ` · última actividad ${formatRelativeTime(conversation.lastMessageAt)}`}
                 </p>
-              </div>
+              </Link>
             ))}
           </div>
         </section>

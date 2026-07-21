@@ -8,9 +8,16 @@ import { getConversationDetail } from "@/features/conversations/services/get-con
 const conversationIdSchema = z.string().uuid();
 
 /**
- * Detalle de una conversación (Sprint Alpha-1b) — solo lectura, mismo
- * formato visual que `/chat` (mismas clases de burbuja) a propósito,
- * para que se sienta como el mismo hilo y no una vista distinta.
+ * Detalle de una conversación (Sprint Alpha-1b) — mismo formato visual
+ * que `/chat` (mismas clases de burbuja) a propósito, para que se
+ * sienta como el mismo hilo y no una vista distinta.
+ *
+ * Alpha-1b la definió "solo lectura" — sin editar, borrar ni renombrar
+ * el historial ya existente, y eso sigue igual. El sprint de
+ * conversaciones persistentes agrega "Continuar esta conversación":
+ * ya no es un callejón sin salida, se puede retomar donde quedó, vía
+ * /chat?conversationId=. Evolución explícita de esa decisión, no una
+ * reversión silenciosa.
  *
  * Autorización: `getConversationDetail` devuelve `null` tanto si el id
  * no existe como si existe pero es de otro usuario — en ambos casos
@@ -74,6 +81,15 @@ export default async function ConversationDetailPage({
               {message.content}
             </div>
           ))}
+
+          <div className="pt-6 text-center">
+            <Link
+              href={`/chat?conversationId=${conversation.id}`}
+              className="inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
+            >
+              Continuar esta conversación
+            </Link>
+          </div>
         </div>
       </section>
     </main>

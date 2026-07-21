@@ -1,8 +1,8 @@
 import { desc, eq } from "drizzle-orm";
-import { asc } from "drizzle-orm";
 import { db } from "../../../core/db/client";
-import { conversationMessages, conversations } from "../../../core/db/schema";
+import { conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
+import { getConversationDetail } from "../../conversations/services/get-conversation-detail";
 
 export interface LatestConversationMessage {
   role: "user" | "assistant";
@@ -20,6 +20,14 @@ export interface LatestConversation {
  * empezar vacío cada vez (el mensaje ya vivía en Postgres desde
  * Sprint 7; solo nadie lo volvía a pedir). `null` si el usuario nunca
  * ha conversado con LUZ.
+ *
+ * Encuentra el id más reciente y delega en `getConversationDetail`
+ * (Sprint Alpha-1b) para traer y filtrar los mensajes — antes esta
+ * función tenía su propia copia casi idéntica de esa lógica; ahora hay
+ * un solo lugar que sabe cómo traer el detalle de una conversación.
+ * "Más reciente" sigue significando `conversations.createdAt` más alto
+ * (comportamiento sin cambios) — no la última con actividad, que es
+ * una decisión aparte, fuera de este sprint.
  */
 export async function getLatestConversation(
   context: UserContext,
@@ -35,18 +43,11 @@ export async function getLatestConversation(
     return null;
   }
 
-  const history = await db
-    .select()
-    .from(conversationMessages)
-    .where(eq(conversationMessages.conversationId, latest.id))
-    .orderBy(asc(conversationMessages.createdAt));
+  const detail = await getConversationDetail(db, context, latest.id);
 
-  const messages: LatestConversationMessage[] = history
-    .filter(
-      (entry): entry is typeof entry & { role: "user" | "assistant" } =>
-        entry.role === "user" || entry.role === "assistant",
-    )
-    .map((entry) => ({ role: entry.role, content: entry.content }));
+  if (!detail) {
+    return null;
+  }
 
-  return { conversationId: latest.id, messages };
+  return { conversationId: detail.id, messages: detail.messages };
 }
