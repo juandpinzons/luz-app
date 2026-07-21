@@ -54,4 +54,16 @@ export interface AIProvider {
     messages: AIMessage[],
     request: StructuredOutputRequest<T>,
   ): Promise<T>;
+
+  /**
+   * Como `generateReply`, pero entrega el texto en fragmentos a medida
+   * que el modelo los genera, en vez de esperar la respuesta completa.
+   * ADR-0017: aditivo — `generateReply`/`generateStructured` intactos,
+   * ningún llamador existente se ve afectado. El contrato solo exige
+   * que los fragmentos, concatenados en orden, formen el mismo texto
+   * que `generateReply` habría devuelto — cada implementación decide
+   * cómo lo logra (streaming nativo del SDK, o simular un solo
+   * fragmento si su proveedor no soporta streaming).
+   */
+  generateReplyStream(messages: AIMessage[]): AsyncIterable<string>;
 }

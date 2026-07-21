@@ -76,4 +76,31 @@ export class OpenAIProvider implements AIProvider {
 
     return message.parsed;
   }
+
+  /**
+   * Implementa `AIProvider.generateReplyStream` (ADR-0017) con el modo
+   * de streaming nativo de OpenAI (`stream: true`) — el SDK devuelve un
+   * `Stream<ChatCompletionChunk>` iterable de forma asíncrona. Cada
+   * fragmento no vacío de `delta.content` se entrega tal cual, en
+   * orden; concatenados forman el mismo texto que `generateReply`
+   * habría devuelto. Sigue siendo el único método de esta clase que
+   * conoce la forma exacta de los chunks del SDK `openai`.
+   */
+  async *generateReplyStream(messages: AIMessage[]): AsyncIterable<string> {
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages: messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        yield delta;
+      }
+    }
+  }
 }

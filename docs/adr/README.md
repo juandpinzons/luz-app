@@ -18,3 +18,4 @@ ADR-0013 Reality Snapshot Contract
 ADR-0014 Knowledge Engine Consolidation (Proposed)
 ADR-0015 Connector Architecture (Proposed)
 ADR-0016 AIProvider Structured Output
+ADR-0017 AIProvider Streaming

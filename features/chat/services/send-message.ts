@@ -36,6 +36,12 @@ export interface SendMessageResult {
   reply: string;
 }
 
+/** `sendMessageStream` devuelve el `conversationId` antes de tocar la IA (ver `prepareMessage`), para que el llamador pueda comprometerse a una respuesta 200 antes de que empiece el streaming. */
+export interface SendMessageStreamResult {
+  conversationId: string;
+  textStream: AsyncGenerator<string, void, void>;
+}
+
 async function getOrCreateConversation(
   context: UserContext,
   conversationId?: string,
@@ -71,26 +77,23 @@ async function getOrCreateConversation(
   return created.id;
 }
 
+interface PreparedMessage {
+  conversationId: string;
+  userMessageId: string;
+  aiMessages: AIMessage[];
+}
+
 /**
- * Servicio de dominio del chat: persiste la conversación, construye el
- * Context explícito (Beta 1 Roadmap, Sprint B3 — Conversation + Memory
- * + RealitySnapshot + Conversation Manual, nunca una concatenación de
- * texto suelta), captura el mensaje en Memory Engine, llama al
- * proveedor de IA activo y encola el análisis del Knowledge Engine
- * (legado, todavía el pipeline vivo — Sprint B2 no lo reemplazó, ese
- * alcance sigue fuera a propósito). `app/api/chat/route.ts` es un
- * controlador delgado que solo llama a esta función — toda la lógica
- * de negocio vive aquí, en `features/`.
- *
- * Recibe un `UserContext`, nunca un id hardcodeado (Sprint 7): quién es
- * el usuario lo resuelve la Identity Layer (`auth/`) antes de llegar
- * aquí.
+ * Todo lo que `sendMessage` ya hacía antes de llamar al proveedor de
+ * IA (ADR-0017): persistir el mensaje del usuario, construir el
+ * Context explícito (Beta 1 Roadmap, Sprint B3), capturar en Memory
+ * Engine. Compartido por `sendMessage` y `sendMessageStream` — ninguna
+ * de las dos reimplementa esta parte, ambas la llaman igual.
  */
-export async function sendMessage(
+async function prepareMessage(
   input: SendMessageInput,
-): Promise<SendMessageResult> {
+): Promise<PreparedMessage> {
   const { context, lifeGraphContext, requestId } = input;
-  const startedAt = Date.now();
 
   const conversationId = await getOrCreateConversation(
     context,
@@ -160,14 +163,14 @@ export async function sendMessage(
   if (lifeGraphContext) {
     const contextBuilderStart = Date.now();
     try {
-      const context = await buildContext(db, lifeGraphContext, conversation);
-      aiMessages = renderContextToMessages(context);
+      const builtContext = await buildContext(db, lifeGraphContext, conversation);
+      aiMessages = renderContextToMessages(builtContext);
       logger.log({
         event: "context_builder.completed",
         requestId,
         conversationId,
-        memoriesCount: context.memories.length,
-        rulesApplied: context.conversationRules.length,
+        memoriesCount: builtContext.memories.length,
+        rulesApplied: builtContext.conversationRules.length,
         durationMs: Date.now() - contextBuilderStart,
       });
     } catch (error) {
@@ -206,31 +209,29 @@ export async function sendMessage(
     }
   }
 
-  const aiProvider = getAIProvider();
-  const openaiStart = Date.now();
-  let reply: string;
-  try {
-    reply = await aiProvider.generateReply(aiMessages);
-  } catch (error) {
-    logger.log({
-      event: "openai.request_failed",
-      severity: "error",
-      requestId,
-      conversationId,
-      provider: aiProvider.name,
-      durationMs: Date.now() - openaiStart,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-  logger.log({
-    event: "openai.response",
-    requestId,
-    conversationId,
-    provider: aiProvider.name,
-    replyLength: reply.length,
-    durationMs: Date.now() - openaiStart,
-  });
+  return { conversationId, userMessageId: userMessage.id, aiMessages };
+}
+
+interface FinalizeReplyInput {
+  context: UserContext;
+  conversationId: string;
+  userMessageId: string;
+  requestId?: string;
+  startedAt: number;
+  reply: string;
+}
+
+/**
+ * Todo lo que `sendMessage` ya hacía después de obtener la respuesta
+ * completa (ADR-0017): persistirla, encolar el Knowledge Engine,
+ * registrar el evento. Compartido por `sendMessage` (con la respuesta
+ * ya completa) y `sendMessageStream` (con el texto acumulado tras
+ * iterar todo el stream) — se llama una sola vez, con el texto final,
+ * nunca con fragmentos parciales.
+ */
+async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
+  const { context, conversationId, userMessageId, requestId, startedAt, reply } =
+    input;
 
   await db.insert(conversationMessages).values({
     conversationId,
@@ -244,7 +245,7 @@ export async function sendMessage(
   await enqueueKnowledgeJob(db, {
     userId: context.userId,
     sourceType: "conversation_message",
-    sourceId: userMessage.id,
+    sourceId: userMessageId,
   });
 
   const totalDurationMs = Date.now() - startedAt;
@@ -260,6 +261,140 @@ export async function sendMessage(
     userId: context.userId,
     metadata: { conversationId, durationMs: totalDurationMs },
   });
+}
 
-  return { conversationId, reply };
+/**
+ * Servicio de dominio del chat: persiste la conversación, construye el
+ * Context explícito (Beta 1 Roadmap, Sprint B3 — Conversation + Memory
+ * + RealitySnapshot + Conversation Manual, nunca una concatenación de
+ * texto suelta), captura el mensaje en Memory Engine, llama al
+ * proveedor de IA activo y encola el análisis del Knowledge Engine
+ * (legado, todavía el pipeline vivo — Sprint B2 no lo reemplazó, ese
+ * alcance sigue fuera a propósito). `app/api/chat/route.ts` es un
+ * controlador delgado que solo llama a esta función — toda la lógica
+ * de negocio vive aquí, en `features/`.
+ *
+ * Recibe un `UserContext`, nunca un id hardcodeado (Sprint 7): quién es
+ * el usuario lo resuelve la Identity Layer (`auth/`) antes de llegar
+ * aquí.
+ *
+ * No es el camino que usa `/api/chat` desde ADR-0017 (esa ruta usa
+ * `sendMessageStream`) — se mantiene como el primitivo sin streaming
+ * para cualquier futuro llamador que lo necesite (una CLI, un webhook,
+ * un test). No cuesta nada mantenerla: comparte el 100% de su lógica
+ * real con `sendMessageStream` a través de `prepareMessage`/
+ * `finalizeReply`, así que nunca puede desincronizarse de ella.
+ */
+export async function sendMessage(
+  input: SendMessageInput,
+): Promise<SendMessageResult> {
+  const startedAt = Date.now();
+  const prepared = await prepareMessage(input);
+
+  const aiProvider = getAIProvider();
+  const openaiStart = Date.now();
+  let reply: string;
+  try {
+    reply = await aiProvider.generateReply(prepared.aiMessages);
+  } catch (error) {
+    logger.log({
+      event: "openai.request_failed",
+      severity: "error",
+      requestId: input.requestId,
+      conversationId: prepared.conversationId,
+      provider: aiProvider.name,
+      durationMs: Date.now() - openaiStart,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  logger.log({
+    event: "openai.response",
+    requestId: input.requestId,
+    conversationId: prepared.conversationId,
+    provider: aiProvider.name,
+    replyLength: reply.length,
+    durationMs: Date.now() - openaiStart,
+  });
+
+  await finalizeReply({
+    context: input.context,
+    conversationId: prepared.conversationId,
+    userMessageId: prepared.userMessageId,
+    requestId: input.requestId,
+    startedAt,
+    reply,
+  });
+
+  return { conversationId: prepared.conversationId, reply };
+}
+
+/**
+ * Como `sendMessage`, pero entrega el texto en fragmentos a medida que
+ * el modelo los genera (ADR-0017). `conversationId` se resuelve y
+ * devuelve de inmediato — antes de tocar la IA — para que el llamador
+ * (la ruta) pueda comprometerse a una respuesta 200 con ese id en un
+ * header antes de que empiece el cuerpo de la respuesta.
+ *
+ * `textStream` es perezoso: no llama al proveedor de IA hasta que el
+ * llamador empieza a iterarlo. Al terminar de iterarlo con éxito, ya
+ * corrió `finalizeReply` con el texto completo acumulado — igual que
+ * `sendMessage`, nunca se persiste una respuesta parcial. Si el
+ * proveedor falla a mitad de la generación, el error se relanza desde
+ * el generador (el llamador lo ve como una excepción al iterar) y
+ * `finalizeReply` nunca se ejecuta — ninguna respuesta parcial queda
+ * guardada, mismo criterio de todo-o-nada que ya regía el camino sin
+ * streaming.
+ */
+export async function sendMessageStream(
+  input: SendMessageInput,
+): Promise<SendMessageStreamResult> {
+  const startedAt = Date.now();
+  const prepared = await prepareMessage(input);
+  const aiProvider = getAIProvider();
+
+  async function* generate(): AsyncGenerator<string, void, void> {
+    const openaiStart = Date.now();
+    let fullReply = "";
+
+    try {
+      for await (const chunk of aiProvider.generateReplyStream(
+        prepared.aiMessages,
+      )) {
+        fullReply += chunk;
+        yield chunk;
+      }
+    } catch (error) {
+      logger.log({
+        event: "openai.request_failed",
+        severity: "error",
+        requestId: input.requestId,
+        conversationId: prepared.conversationId,
+        provider: aiProvider.name,
+        durationMs: Date.now() - openaiStart,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+
+    logger.log({
+      event: "openai.response",
+      requestId: input.requestId,
+      conversationId: prepared.conversationId,
+      provider: aiProvider.name,
+      replyLength: fullReply.length,
+      durationMs: Date.now() - openaiStart,
+    });
+
+    await finalizeReply({
+      context: input.context,
+      conversationId: prepared.conversationId,
+      userMessageId: prepared.userMessageId,
+      requestId: input.requestId,
+      startedAt,
+      reply: fullReply,
+    });
+  }
+
+  return { conversationId: prepared.conversationId, textStream: generate() };
 }

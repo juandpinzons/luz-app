@@ -7,11 +7,6 @@ export const sendMessageRequestSchema = z.object({
 
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
-export interface SendMessageResponse {
-  conversationId: string;
-  reply: string;
-}
-
 export interface GetLatestConversationResponse {
   conversationId: string;
   messages: { role: "user" | "assistant"; content: string }[];

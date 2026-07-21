@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import type {
   GetLatestConversationResponse,
   SendMessageErrorResponse,
-  SendMessageResponse,
 } from "@/features/chat/types";
 
 type Message = {
@@ -21,17 +20,56 @@ type Message = {
  */
 class ChatRequestError extends Error {}
 
+/**
+ * Un evento Server-Sent Events ya separado en `event:`/`data:` (ver
+ * `sseMessage` en app/api/chat/route.ts) — `data` siempre viaja como
+ * JSON, así que se parsea aquí, no se deja como string crudo.
+ */
+interface ParsedSSEEvent {
+  event: string;
+  data: unknown;
+}
+
+function parseSSEMessage(raw: string): ParsedSSEEvent | null {
+  let event = "message";
+  let dataLine: string | undefined;
+
+  for (const line of raw.split("\n")) {
+    if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+    } else if (line.startsWith("data:")) {
+      dataLine = line.slice("data:".length).trim();
+    }
+  }
+
+  if (dataLine === undefined) return null;
+
+  try {
+    return { event, data: JSON.parse(dataLine) };
+  } catch {
+    return null;
+  }
+}
+
 export default function ChatPage() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [isSending, setIsSending] = useState(false);
+  /**
+   * Distinto de `isSending`: solo cubre la espera ANTES de que llegue
+   * el primer fragmento real de la respuesta (ADR-0017) — controla
+   * únicamente el indicador "LUZ está escribiendo…", que debe
+   * desaparecer en cuanto el texto empieza a crecer, no cuando termina
+   * de generarse por completo.
+   */
+  const [isThinking, setIsThinking] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, isSending]);
+  }, [messages, isSending, isThinking]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,12 +126,22 @@ export default function ChatPage() {
 
     setMessage("");
     setIsSending(true);
+    setIsThinking(true);
+
+    // Visible también en el catch: si el stream ya entregó texto real
+    // antes de fallar, el mensaje de error se agrega a lo que ya llegó
+    // en vez de reemplazarlo — nunca se descarta una respuesta parcial
+    // real por un fallo posterior (ADR-0017).
+    let receivedAnyChunk = false;
 
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // ADR-0017: pide explícitamente la capacidad de streaming —
+          // sin este header, /api/chat responde JSON como siempre.
+          Accept: "text/event-stream",
         },
         body: JSON.stringify({
           message: userMessage,
@@ -113,34 +161,91 @@ export default function ChatPage() {
         );
       }
 
-      const data: SendMessageResponse = await response.json();
+      if (!response.body) {
+        throw new ChatRequestError(
+          "No se pudo procesar el mensaje. Intenta de nuevo en unos segundos.",
+        );
+      }
 
-      setConversationId(data.conversationId);
+      const reader = response.body.getReader();
+      // `stream: true` evita partir un carácter UTF-8 multibyte (á, ñ,
+      // é...) a la mitad si el límite de un chunk cae justo en medio.
+      const decoder = new TextDecoder();
+      // Los eventos SSE no siempre llegan alineados con los límites de
+      // cada `read()` — se acumulan aquí hasta tener al menos un "\n\n"
+      // completo antes de parsear.
+      let buffer = "";
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: data.reply,
-        },
-      ]);
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const raw = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+
+          const parsed = parseSSEMessage(raw);
+          if (parsed?.event === "meta") {
+            const meta = parsed.data as { conversationId?: string };
+            if (meta.conversationId) {
+              setConversationId(meta.conversationId);
+            }
+          } else if (parsed?.event === "chunk") {
+            const chunkText = parsed.data as string;
+
+            if (!receivedAnyChunk) {
+              receivedAnyChunk = true;
+              setIsThinking(false);
+              setMessages((prev) => [
+                ...prev,
+                { role: "assistant", content: chunkText },
+              ]);
+            } else {
+              setMessages((prev) => {
+                const next = [...prev];
+                const last = next[next.length - 1];
+                next[next.length - 1] = {
+                  ...last,
+                  content: last.content + chunkText,
+                };
+                return next;
+              });
+            }
+          }
+
+          boundary = buffer.indexOf("\n\n");
+        }
+      }
     } catch (error) {
       console.error(error);
 
-      const content =
+      const fallback =
         error instanceof ChatRequestError
           ? error.message
           : "Algo no salió bien de mi lado. ¿Lo intentamos de nuevo?";
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content,
-        },
-      ]);
+      if (receivedAnyChunk) {
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          next[next.length - 1] = {
+            ...last,
+            content: `${last.content}\n\n${fallback}`,
+          };
+          return next;
+        });
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: fallback },
+        ]);
+      }
     } finally {
       setIsSending(false);
+      setIsThinking(false);
     }
   }
 
@@ -181,7 +286,7 @@ export default function ChatPage() {
                 </div>
               ))}
 
-              {isSending && (
+              {isThinking && (
                 <div className="mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
                   LUZ está escribiendo…
                 </div>
