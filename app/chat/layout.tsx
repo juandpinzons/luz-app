@@ -19,9 +19,9 @@ export default async function ChatLayout({
   const session = await auth();
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {session?.user && (
-        <div className="flex items-center justify-between border-b border-zinc-800 bg-black px-6 py-3 text-sm text-zinc-400">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-zinc-800 bg-black px-6 py-3 text-sm text-zinc-400">
           <span>{session.user.email ?? session.user.name ?? "Sesión activa"}</span>
 
           <form

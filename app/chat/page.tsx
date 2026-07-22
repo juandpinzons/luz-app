@@ -106,7 +106,7 @@ function formatHistoricalLabel(date: Date): string {
 export default function ChatPage() {
   return (
     <Suspense
-      fallback={<main className="flex h-screen flex-col bg-black text-white" />}
+      fallback={<main className="flex h-full flex-col bg-black text-white" />}
     >
       <ChatPageContent />
     </Suspense>
@@ -158,13 +158,29 @@ function ChatPageContent() {
    * abajo y se escribe desde el handler de scroll y desde `sendMessage`.
    */
   const isNearBottomRef = useRef(true);
+  /**
+   * Espejo en `state` de `!isNearBottomRef`, solo para pintar el botón
+   * "volver al final" — a diferencia del ref, esto sí debe disparar un
+   * re-render, pero solo cuando cruza el umbral (nunca en cada pixel de
+   * scroll: la actualización funcional de abajo evita el re-render si
+   * el valor no cambió).
+   */
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   function handleScroll() {
     const el = scrollContainerRef.current;
     if (!el) return;
 
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    isNearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+    const isNear = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+    isNearBottomRef.current = isNear;
+    setShowScrollToBottom((prev) => (prev === !isNear ? prev : !isNear));
+  }
+
+  function scrollToBottom() {
+    isNearBottomRef.current = true;
+    setShowScrollToBottom(false);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }
 
   useEffect(() => {
@@ -324,6 +340,8 @@ function ChatPageContent() {
     suppressNextLoadRef.current = true;
     setMessages([]);
     setMessage("");
+    isNearBottomRef.current = true;
+    setShowScrollToBottom(false);
     // Se re-arma para que el efecto de hidratación vuelva a correr con
     // la llave "new" — si había un borrador sin enviar de una sesión
     // "nueva" anterior, se recupera; si no, no hace nada.
@@ -344,6 +362,7 @@ function ChatPageContent() {
     // misma convención que cualquier app de mensajería: la persona debe
     // ver su propio mensaje aterrizar.
     isNearBottomRef.current = true;
+    setShowScrollToBottom(false);
 
     setMessages((prev) => [
       ...prev,
@@ -479,9 +498,9 @@ function ChatPageContent() {
   }
 
   return (
-    <main className="flex h-screen flex-col bg-black text-white">
+    <main className="flex h-full flex-col bg-black text-white">
       {/* Header */}
-      <header className="border-b border-zinc-800 px-8 py-5">
+      <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-light tracking-[0.25em]">LUZ</h1>
 
@@ -501,65 +520,81 @@ function ChatPageContent() {
       </header>
 
       {/* Conversación */}
-      <section
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
-      >
-        <div className="mx-auto w-full max-w-3xl">
-          {isLoadingHistory ? (
-            // Misma geometría que las burbujas reales (rounded-2xl,
-            // max-w-[80%]) para que no haya salto de layout al llegar
-            // el historial de verdad.
-            <div className="space-y-4">
-              <Skeleton className="ml-auto h-11 w-40" />
-              <Skeleton className="mr-auto h-16 w-64" />
-              <Skeleton className="ml-auto h-11 w-52" />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="mt-32 text-center">
-              <h2 className="text-4xl font-light">
-                ¿Cómo te sientes hoy?
-              </h2>
+      <div className="relative min-h-0 flex-1">
+        <section
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-label="Conversación con LUZ"
+          tabIndex={0}
+          className="h-full overflow-y-auto px-6 py-8 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-zinc-700"
+        >
+          <div className="mx-auto w-full max-w-3xl">
+            {isLoadingHistory ? (
+              // Misma geometría que las burbujas reales (rounded-2xl,
+              // max-w-[80%]) para que no haya salto de layout al llegar
+              // el historial de verdad.
+              <div className="space-y-4">
+                <Skeleton className="ml-auto h-11 w-40" />
+                <Skeleton className="mr-auto h-16 w-64" />
+                <Skeleton className="ml-auto h-11 w-52" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="mt-32 text-center">
+                <h2 className="text-4xl font-light">¿Cómo te sientes hoy?</h2>
 
-              <p className="mt-5 text-lg text-zinc-400">
-                Estoy aquí para escucharte.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((msg, index) => (
-                <div
-                  key={index}
-                  className={
-                    msg.role === "user"
-                      ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
-                      : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
-                  }
-                >
-                  {msg.content}
-                </div>
-              ))}
+                <p className="mt-5 text-lg text-zinc-400">
+                  Estoy aquí para escucharte.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {messages.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={
+                      msg.role === "user"
+                        ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
+                        : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
+                    }
+                  >
+                    {msg.content}
+                  </div>
+                ))}
 
-              {isThinking && (
-                <div className="mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
-                  LUZ está escribiendo…
-                </div>
-              )}
+                {isThinking && (
+                  <div className="mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
+                    LUZ está escribiendo…
+                  </div>
+                )}
 
-              <div ref={bottomRef} />
-            </div>
-          )}
-        </div>
-      </section>
+                <div ref={bottomRef} />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {showScrollToBottom && (
+          <button
+            onClick={scrollToBottom}
+            aria-label="Ir al final de la conversación"
+            className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 shadow-lg transition hover:border-zinc-500 hover:text-white"
+          >
+            ↓ Ir al final
+          </button>
+        )}
+      </div>
 
       {/* Input */}
-      <footer className="border-t border-zinc-800 p-6">
+      <footer className="flex-shrink-0 border-t border-zinc-800 p-6">
         <div className="mx-auto flex max-w-4xl gap-3">
           <input
             ref={inputRef}
             type="text"
             placeholder="Escribe un mensaje..."
+            aria-label="Escribe un mensaje para LUZ"
             value={message}
             disabled={isSending}
             onChange={(e) => setMessage(e.target.value)}
@@ -574,6 +609,8 @@ function ChatPageContent() {
           <button
             onClick={sendMessage}
             disabled={isSending}
+            aria-label="Enviar mensaje"
+            aria-busy={isSending}
             className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200 disabled:opacity-50 disabled:hover:bg-white"
           >
             {isSending ? "..." : "Enviar"}
