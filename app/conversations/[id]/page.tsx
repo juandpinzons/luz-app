@@ -19,6 +19,13 @@ const conversationIdSchema = z.string().uuid();
  * /chat?conversationId=. Evolución explícita de esa decisión, no una
  * reversión silenciosa.
  *
+ * `startedAt` viaja en el mismo enlace (fecha real de esta
+ * conversación, ya disponible aquí) porque ni `GET /api/chat` ni
+ * `GET /api/conversations/[id]` la exponen — este sprint de UX
+ * deliberadamente no toca esas rutas. `/chat` la usa solo para el
+ * indicador "Retomando una conversación de..."; si llega a faltar o
+ * viene inválida, cae a un texto genérico en vez de romperse.
+ *
  * Autorización: `getConversationDetail` devuelve `null` tanto si el id
  * no existe como si existe pero es de otro usuario — en ambos casos
  * esta página responde 404 (`notFound()`), sin distinguir el motivo,
@@ -84,7 +91,7 @@ export default async function ConversationDetailPage({
 
           <div className="pt-6 text-center">
             <Link
-              href={`/chat?conversationId=${conversation.id}`}
+              href={`/chat?conversationId=${conversation.id}&startedAt=${encodeURIComponent(conversation.createdAt.toISOString())}`}
               className="inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
             >
               Continuar esta conversación

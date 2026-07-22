@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type {
   GetLatestConversationResponse,
   SendMessageErrorResponse,
@@ -53,6 +53,46 @@ function parseSSEMessage(raw: string): ParsedSSEEvent | null {
 }
 
 /**
+ * `startedAt` llega como ISO string en la URL (ver `?startedAt=` en el
+ * enlace "Continuar esta conversación" de `/conversations/[id]`) — la
+ * única fuente de esa fecha, ya que ni `GET /api/chat` ni
+ * `GET /api/conversations/[id]` la exponen (este sprint no toca la
+ * API). Si falta o no se puede parsear, `null` — el indicador cae al
+ * texto genérico en vez de romperse.
+ */
+function parseStartedAtParam(value: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * Fecha en formato humano, nunca timestamp — "hoy"/"ayer"/"hace N
+ * días" hasta una semana, después la fecha absoluta ("15 de julio",
+ * con año solo si es distinto del actual).
+ */
+function formatHistoricalLabel(date: Date): string {
+  const now = new Date();
+  const diffDays = Math.floor(
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays <= 0) return "Retomando una conversación de hoy";
+  if (diffDays === 1) return "Retomando una conversación de ayer";
+  if (diffDays < 7) {
+    return `Retomando una conversación de hace ${diffDays} días`;
+  }
+
+  const formatted = new Intl.DateTimeFormat("es-CO", {
+    day: "numeric",
+    month: "long",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  }).format(date);
+
+  return `Retomando una conversación del ${formatted}`;
+}
+
+/**
  * `useSearchParams` exige un boundary `<Suspense>` para no romper el
  * build de producción (verificado en la documentación de Next.js de
  * este proyecto) — de ahí la separación entre este wrapper y
@@ -69,6 +109,7 @@ export default function ChatPage() {
 }
 
 function ChatPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   // Sprint de conversaciones persistentes: presente cuando se llega
   // desde "Continuar esta conversación" (/conversations/[id]) o desde
@@ -76,6 +117,7 @@ function ChatPageContent() {
   // uso normal, que sigue cargando la más reciente exactamente igual
   // que antes.
   const conversationIdParam = searchParams.get("conversationId");
+  const startedAtParam = searchParams.get("startedAt");
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -89,6 +131,18 @@ function ChatPageContent() {
    * de generarse por completo.
    */
   const [isThinking, setIsThinking] = useState(false);
+  /**
+   * Nunca se decide solo por si `conversationIdParam` existe (ver el
+   * efecto de abajo): un enlace puede apuntar a la conversación que
+   * de todas formas ya es la más reciente, y en ese caso el encabezado
+   * debe quedar limpio igual que en el uso normal.
+   */
+  const [isHistoricalConversation, setIsHistoricalConversation] =
+    useState(false);
+  const [historicalLabel, setHistoricalLabel] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
+  const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -99,38 +153,85 @@ function ChatPageContent() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadLatestConversation() {
+    async function loadConversation() {
+      // "Nueva conversación" ya dejó el estado exactamente como debe
+      // quedar — este disparo del efecto es solo el eco de haber
+      // limpiado la URL, no debe volver a traer nada.
+      if (suppressNextLoadRef.current) {
+        suppressNextLoadRef.current = false;
+        setIsLoadingHistory(false);
+        return;
+      }
+
       try {
-        // Con conversationId en la URL, pide esa conversación específica
-        // (GET /api/conversations/[id], Sprint de conversaciones
-        // persistentes) — sin él, el comportamiento de siempre: la más
-        // reciente. Un id inválido o de otra persona cae en 404, que el
-        // catch de abajo trata igual que "nada que precargar" — nunca
-        // revela si esa conversación existe, y si luego el usuario
-        // escribe, empieza una conversación nueva (conversationId sigue
-        // undefined).
-        const response = await fetch(
-          conversationIdParam
-            ? `/api/conversations/${conversationIdParam}`
-            : "/api/chat",
-        );
+        if (conversationIdParam) {
+          // Se piden en paralelo la conversación solicitada Y la
+          // realmente más reciente (GET /api/chat, sin parámetros, sin
+          // tocar nada del backend) — comparar sus ids es el único
+          // criterio para decidir "isHistoricalConversation". Nunca se
+          // decide solo por la presencia de `conversationIdParam`: un
+          // enlace puede apuntar a la conversación que de todas formas
+          // ya es la más reciente (ej. desde una tarjeta del Dashboard),
+          // y en ese caso no es histórica.
+          const [detailResponse, latestResponse] = await Promise.all([
+            fetch(`/api/conversations/${conversationIdParam}`),
+            fetch("/api/chat"),
+          ]);
 
-        if (!response.ok) {
-          throw new Error("No se pudo recuperar la conversación.");
-        }
+          if (!detailResponse.ok) {
+            throw new Error("No se pudo recuperar la conversación.");
+          }
 
-        const data: GetLatestConversationResponse | null =
-          await response.json();
+          const detailData: GetLatestConversationResponse | null =
+            await detailResponse.json();
+          const latestData: GetLatestConversationResponse | null =
+            latestResponse.ok ? await latestResponse.json() : null;
 
-        if (!cancelled && data) {
-          // Si el usuario ya empezó a escribir (mensaje optimista ya en
-          // pantalla) antes de que esta petición terminara, esta
-          // respuesta ya está desactualizada — nunca debe sobreescribir
-          // una conversación en curso, o el mensaje que se acaba de
-          // mandar "desaparece" y el estado local queda desincronizado
-          // del conversationId real que el servidor usó para guardarlo.
-          setConversationId((prev) => prev ?? data.conversationId);
-          setMessages((prev) => (prev.length === 0 ? data.messages : prev));
+          if (!cancelled && detailData) {
+            const historical =
+              !latestData ||
+              latestData.conversationId !== detailData.conversationId;
+
+            setConversationId((prev) => prev ?? detailData.conversationId);
+            setMessages((prev) =>
+              prev.length === 0 ? detailData.messages : prev,
+            );
+            setIsHistoricalConversation(historical);
+
+            const startedAt = parseStartedAtParam(startedAtParam);
+            setHistoricalLabel(
+              historical
+                ? formatHistoricalLabel(startedAt ?? new Date())
+                : null,
+            );
+          }
+        } else {
+          const response = await fetch("/api/chat");
+
+          if (!response.ok) {
+            throw new Error("No se pudo recuperar la conversación.");
+          }
+
+          const data: GetLatestConversationResponse | null =
+            await response.json();
+
+          if (!cancelled) {
+            if (data) {
+              // Si el usuario ya empezó a escribir (mensaje optimista ya
+              // en pantalla) antes de que esta petición terminara, esta
+              // respuesta ya está desactualizada — nunca debe
+              // sobreescribir una conversación en curso, o el mensaje
+              // que se acaba de mandar "desaparece" y el estado local
+              // queda desincronizado del conversationId real que el
+              // servidor usó para guardarlo.
+              setConversationId((prev) => prev ?? data.conversationId);
+              setMessages((prev) =>
+                prev.length === 0 ? data.messages : prev,
+              );
+            }
+            setIsHistoricalConversation(false);
+            setHistoricalLabel(null);
+          }
         }
       } catch (error) {
         console.error(error);
@@ -141,12 +242,22 @@ function ChatPageContent() {
       }
     }
 
-    loadLatestConversation();
+    loadConversation();
 
     return () => {
       cancelled = true;
     };
-  }, [conversationIdParam]);
+  }, [conversationIdParam, startedAtParam]);
+
+  function startNewConversation() {
+    suppressNextLoadRef.current = true;
+    setMessages([]);
+    setConversationId(undefined);
+    setIsHistoricalConversation(false);
+    setHistoricalLabel(null);
+    router.replace("/chat");
+    inputRef.current?.focus();
+  }
 
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;
@@ -290,9 +401,22 @@ function ChatPageContent() {
     <main className="flex h-screen flex-col bg-black text-white">
       {/* Header */}
       <header className="border-b border-zinc-800 px-8 py-5">
-        <h1 className="text-xl font-light tracking-[0.25em]">
-          LUZ
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-light tracking-[0.25em]">LUZ</h1>
+
+          {!isLoadingHistory && isHistoricalConversation && (
+            <button
+              onClick={startNewConversation}
+              className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+            >
+              Nueva conversación
+            </button>
+          )}
+        </div>
+
+        {!isLoadingHistory && isHistoricalConversation && historicalLabel && (
+          <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
+        )}
       </header>
 
       {/* Conversación */}
@@ -339,6 +463,7 @@ function ChatPageContent() {
       <footer className="border-t border-zinc-800 p-6">
         <div className="mx-auto flex max-w-4xl gap-3">
           <input
+            ref={inputRef}
             type="text"
             placeholder="Escribe un mensaje..."
             value={message}
