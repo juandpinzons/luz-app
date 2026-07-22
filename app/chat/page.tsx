@@ -2,6 +2,8 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Skeleton } from "@/components/ui/skeleton";
+import { readDraft, writeDraft } from "@/features/chat/draft-storage";
 import type {
   GetLatestConversationResponse,
   SendMessageErrorResponse,
@@ -60,6 +62,9 @@ function parseSSEMessage(raw: string): ParsedSSEEvent | null {
  * API). Si falta o no se puede parsear, `null` — el indicador cae al
  * texto genérico en vez de romperse.
  */
+/** Qué tan cerca del fondo (en px) cuenta como "ya estaba abajo" para el autoscroll inteligente. */
+const NEAR_BOTTOM_THRESHOLD_PX = 120;
+
 function parseStartedAtParam(value: string | null): Date | null {
   if (!value) return null;
   const date = new Date(value);
@@ -145,10 +150,65 @@ function ChatPageContent() {
   const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLElement>(null);
+  /**
+   * Arranca en `true`: abrir el chat siempre ancla abajo, igual que
+   * antes de este cambio. Un `ref` y no un `state` porque no debe
+   * disparar un re-render — solo se lee dentro del efecto de scroll de
+   * abajo y se escribe desde el handler de scroll y desde `sendMessage`.
+   */
+  const isNearBottomRef = useRef(true);
+
+  function handleScroll() {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isNearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+  }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
+    // Solo sigue el streaming si la persona ya estaba abajo — si scrolleó
+    // arriba para releer algo, un chunk nuevo no debe secuestrar su
+    // posición (autoscroll inteligente).
+    if (isNearBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
   }, [messages, isSending, isThinking]);
+
+  /** Evita hidratar el borrador dos veces, y evita escribir en localStorage antes de que la hidratación haya corrido una vez (ver `hydrateDraft` y el efecto de más abajo). */
+  const hasHydratedDraftRef = useRef(false);
+
+  /**
+   * Se llama desde dentro de `loadConversation` (abajo), nunca desde un
+   * efecto síncrono: recién ahí se conoce el `conversationId` real que
+   * resolvió esta carga (puede diferir del state si ya había una
+   * conversación en curso, ver los comentarios de cada rama). Usa la
+   * forma funcional de `setMessage` para nunca pisar texto que la
+   * persona ya haya escrito mientras el historial cargaba.
+   */
+  function hydrateDraft(resolvedConversationId: string | undefined) {
+    if (hasHydratedDraftRef.current) return;
+    hasHydratedDraftRef.current = true;
+
+    setMessage((current) => {
+      if (current.trim() !== "") return current;
+      return readDraft(resolvedConversationId) || current;
+    });
+  }
+
+  useEffect(() => {
+    // `conversationId` no está en las dependencias a propósito: este
+    // efecto solo debe reaccionar a texto nuevo, nunca a que
+    // `conversationId` se resuelva de forma asíncrona (vía el evento
+    // `meta` del stream) — para cuando eso pasa, `sendMessage` ya dejó
+    // `message` en "", así que no habría nada real que escribir, y
+    // escribir en ese momento arriesgaría pisar un borrador recién
+    // hidratado con un valor todavía desactualizado de este render.
+    if (!hasHydratedDraftRef.current) return;
+    writeDraft(conversationId, message);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,8 +220,16 @@ function ChatPageContent() {
       if (suppressNextLoadRef.current) {
         suppressNextLoadRef.current = false;
         setIsLoadingHistory(false);
+        hydrateDraft(undefined);
         return;
       }
+
+      // Guarda el id que esta carga efectivamente resolvió, para
+      // hidratar el borrador con la misma llave — nunca se lee de vuelta
+      // el `conversationId` del state porque puede haber quedado
+      // desactualizado por una carrera con un envío ya en curso (ver
+      // los comentarios de cada rama de abajo).
+      let resolvedConversationId: string | undefined;
 
       try {
         if (conversationIdParam) {
@@ -197,6 +265,7 @@ function ChatPageContent() {
               prev.length === 0 ? detailData.messages : prev,
             );
             setIsHistoricalConversation(historical);
+            resolvedConversationId = detailData.conversationId;
 
             const startedAt = parseStartedAtParam(startedAtParam);
             setHistoricalLabel(
@@ -228,6 +297,7 @@ function ChatPageContent() {
               setMessages((prev) =>
                 prev.length === 0 ? data.messages : prev,
               );
+              resolvedConversationId = data.conversationId;
             }
             setIsHistoricalConversation(false);
             setHistoricalLabel(null);
@@ -238,6 +308,7 @@ function ChatPageContent() {
       } finally {
         if (!cancelled) {
           setIsLoadingHistory(false);
+          hydrateDraft(resolvedConversationId);
         }
       }
     }
@@ -252,6 +323,11 @@ function ChatPageContent() {
   function startNewConversation() {
     suppressNextLoadRef.current = true;
     setMessages([]);
+    setMessage("");
+    // Se re-arma para que el efecto de hidratación vuelva a correr con
+    // la llave "new" — si había un borrador sin enviar de una sesión
+    // "nueva" anterior, se recupera; si no, no hace nada.
+    hasHydratedDraftRef.current = false;
     setConversationId(undefined);
     setIsHistoricalConversation(false);
     setHistoricalLabel(null);
@@ -263,6 +339,11 @@ function ChatPageContent() {
     if (message.trim() === "" || isSending) return;
 
     const userMessage = message;
+
+    // Enviar siempre ancla abajo, sin importar dónde estaba el scroll —
+    // misma convención que cualquier app de mensajería: la persona debe
+    // ver su propio mensaje aterrizar.
+    isNearBottomRef.current = true;
 
     setMessages((prev) => [
       ...prev,
@@ -420,9 +501,22 @@ function ChatPageContent() {
       </header>
 
       {/* Conversación */}
-      <section className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+      <section
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
+      >
         <div className="mx-auto w-full max-w-3xl">
-          {isLoadingHistory ? null : messages.length === 0 ? (
+          {isLoadingHistory ? (
+            // Misma geometría que las burbujas reales (rounded-2xl,
+            // max-w-[80%]) para que no haya salto de layout al llegar
+            // el historial de verdad.
+            <div className="space-y-4">
+              <Skeleton className="ml-auto h-11 w-40" />
+              <Skeleton className="mr-auto h-16 w-64" />
+              <Skeleton className="ml-auto h-11 w-52" />
+            </div>
+          ) : messages.length === 0 ? (
             <div className="mt-32 text-center">
               <h2 className="text-4xl font-light">
                 ¿Cómo te sientes hoy?
@@ -439,8 +533,8 @@ function ChatPageContent() {
                   key={index}
                   className={
                     msg.role === "user"
-                      ? "ml-auto w-fit max-w-[80%] rounded-2xl bg-white px-5 py-3 text-black"
-                      : "mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-white"
+                      ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
+                      : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
                   }
                 >
                   {msg.content}
@@ -448,7 +542,7 @@ function ChatPageContent() {
               ))}
 
               {isThinking && (
-                <div className="mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
+                <div className="mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
                   LUZ está escribiendo…
                 </div>
               )}

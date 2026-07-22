@@ -98,11 +98,18 @@ export default async function ConversationsPage({
         </form>
 
         {conversations.length === 0 ? (
-          <p className="mt-16 text-center text-zinc-500">
-            {searchTerm
-              ? "No encontramos conversaciones con ese término."
-              : "Todavía no tienes conversaciones."}
-          </p>
+          <div className="mt-32 text-center">
+            <h2 className="text-2xl font-light">
+              {searchTerm
+                ? "No encontramos nada con eso."
+                : "Todavía no hay nada aquí."}
+            </h2>
+            <p className="mt-3 text-zinc-400">
+              {searchTerm
+                ? "Prueba con otras palabras."
+                : "Tus conversaciones con LUZ van a aparecer en este espacio."}
+            </p>
+          </div>
         ) : (
           <div className="mt-8 space-y-3">
             {conversations.map((conversation) => (
@@ -112,8 +119,13 @@ export default async function ConversationsPage({
                 className="block rounded-lg border border-zinc-800 px-5 py-4 transition hover:border-zinc-600"
               >
                 <p className="text-sm text-zinc-300">
-                  {conversation.previewText}
+                  {conversation.title ?? conversation.previewText}
                 </p>
+                {conversation.title && (
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {conversation.previewText}
+                  </p>
+                )}
                 <p className="mt-2 text-xs text-zinc-500">
                   {formatDate(conversation.createdAt)} ·{" "}
                   {conversation.messageCount}{" "}

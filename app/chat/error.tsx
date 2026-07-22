@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ErrorState } from "@/components/ui/error-state";
 
 /**
  * Error boundary de /chat (Sprint de Observabilidad, Alpha). Antes de
@@ -30,17 +31,10 @@ export default function ChatError({
   }, [error]);
 
   return (
-    <main className="flex h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
-      <h2 className="text-2xl font-light">Algo se rompió del lado de LUZ.</h2>
-      <p className="mt-3 text-zinc-400">
-        Tu conversación sigue guardada — no se perdió nada.
-      </p>
-      <button
-        onClick={() => unstable_retry()}
-        className="mt-8 rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
-      >
-        Intentar de nuevo
-      </button>
-    </main>
+    <ErrorState
+      title="Algo se rompió del lado de LUZ."
+      description="Tu conversación sigue guardada — no se perdió nada."
+      onRetry={() => unstable_retry()}
+    />
   );
 }

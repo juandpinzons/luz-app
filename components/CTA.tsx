@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function CTA() {
   return (
     <section className="bg-black text-white py-24">
@@ -10,9 +12,12 @@ export default function CTA() {
           Tu espacio para pensar con calma ya está aquí.
         </p>
 
-        <button className="mt-8 rounded-full bg-white text-black px-8 py-3 hover:bg-zinc-200 transition">
+        <Link
+          href="/chat"
+          className="mt-8 inline-block rounded-full bg-white text-black px-8 py-3 hover:bg-zinc-200 transition"
+        >
           Abrir LUZ
-        </button>
+        </Link>
       </div>
     </section>
   );

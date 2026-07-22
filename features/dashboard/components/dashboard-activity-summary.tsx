@@ -135,16 +135,18 @@ export function DashboardActivitySummary({
         </section>
       )}
 
-      <section>
-        <h2 className="text-sm font-medium text-zinc-400">
-          Estado del sistema
-        </h2>
-        <p className="mt-3 text-sm text-zinc-500">
-          {summary
-            ? "● Operativo"
-            : "● No se pudo cargar tu actividad ahora mismo"}
+      {/*
+       * Cuando todo carga bien no hay nada que anunciar — el silencio
+       * es la respuesta correcta (Principio de Silencio Intencional).
+       * Solo se muestra algo si de verdad no se pudo cargar la
+       * actividad, y en la voz de LUZ, no como un status de servidor.
+       */}
+      {!summary && (
+        <p className="text-sm text-zinc-500">
+          No pude traer tu actividad reciente. Intenta de nuevo en un
+          momento.
         </p>
-      </section>
+      )}
     </div>
   );
 }

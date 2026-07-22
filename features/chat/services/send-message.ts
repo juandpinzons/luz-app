@@ -1,4 +1,5 @@
 import { and, asc, eq } from "drizzle-orm";
+import { after } from "next/server";
 import { getAIProvider } from "../../../ai";
 import type { AIMessage } from "../../../ai/provider";
 import { db } from "../../../core/db/client";
@@ -9,6 +10,7 @@ import { createMemoryEngine } from "../../../core/memory-engine";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
+import { generateConversationTitle } from "../../conversations/services/generate-title";
 import {
   buildContext,
   renderContextToMessages,
@@ -42,10 +44,16 @@ export interface SendMessageStreamResult {
   textStream: AsyncGenerator<string, void, void>;
 }
 
+interface ConversationRef {
+  id: string;
+  /** Sprint de títulos automáticos: solo se genera un título en el primer intercambio real de una conversación, nunca en los siguientes. */
+  isNew: boolean;
+}
+
 async function getOrCreateConversation(
   context: UserContext,
   conversationId?: string,
-): Promise<string> {
+): Promise<ConversationRef> {
   const { userId } = context;
 
   if (conversationId) {
@@ -61,7 +69,7 @@ async function getOrCreateConversation(
       .limit(1);
 
     if (existing) {
-      return existing.id;
+      return { id: existing.id, isNew: false };
     }
   }
 
@@ -74,11 +82,12 @@ async function getOrCreateConversation(
     throw new Error("No se pudo crear la conversación.");
   }
 
-  return created.id;
+  return { id: created.id, isNew: true };
 }
 
 interface PreparedMessage {
   conversationId: string;
+  isNewConversation: boolean;
   userMessageId: string;
   aiMessages: AIMessage[];
 }
@@ -95,10 +104,11 @@ async function prepareMessage(
 ): Promise<PreparedMessage> {
   const { context, lifeGraphContext, requestId } = input;
 
-  const conversationId = await getOrCreateConversation(
+  const conversationRef = await getOrCreateConversation(
     context,
     input.conversationId,
   );
+  const conversationId = conversationRef.id;
 
   logger.log({
     event: "message.received",
@@ -209,12 +219,19 @@ async function prepareMessage(
     }
   }
 
-  return { conversationId, userMessageId: userMessage.id, aiMessages };
+  return {
+    conversationId,
+    isNewConversation: conversationRef.isNew,
+    userMessageId: userMessage.id,
+    aiMessages,
+  };
 }
 
 interface FinalizeReplyInput {
   context: UserContext;
   conversationId: string;
+  isNewConversation: boolean;
+  userMessage: string;
   userMessageId: string;
   requestId?: string;
   startedAt: number;
@@ -230,8 +247,16 @@ interface FinalizeReplyInput {
  * nunca con fragmentos parciales.
  */
 async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
-  const { context, conversationId, userMessageId, requestId, startedAt, reply } =
-    input;
+  const {
+    context,
+    conversationId,
+    isNewConversation,
+    userMessage,
+    userMessageId,
+    requestId,
+    startedAt,
+    reply,
+  } = input;
 
   await db.insert(conversationMessages).values({
     conversationId,
@@ -239,6 +264,23 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     role: "assistant",
     content: reply,
   });
+
+  // Título automático (Sprint de pulido, Alpha): solo en el primer
+  // intercambio real de una conversación nueva — nunca en los
+  // siguientes mensajes, y siempre vía `after()` (ADR-0017: esta
+  // función corre dentro del `ReadableStream` de `/api/chat`, después
+  // de que la respuesta 200 ya empezó a viajar — no puede bloquear ni
+  // esperar acá). Si falla, `generateConversationTitle` ya se traga el
+  // error: la conversación nunca depende de que esto funcione.
+  if (isNewConversation) {
+    after(() =>
+      generateConversationTitle(db, {
+        conversationId,
+        userMessage,
+        assistantReply: reply,
+      }),
+    );
+  }
 
   // El Knowledge Engine analiza el mensaje en segundo plano; esta llamada
   // no espera su procesamiento (decisión CTO #6: worker independiente).
@@ -320,6 +362,8 @@ export async function sendMessage(
   await finalizeReply({
     context: input.context,
     conversationId: prepared.conversationId,
+    isNewConversation: prepared.isNewConversation,
+    userMessage: input.message,
     userMessageId: prepared.userMessageId,
     requestId: input.requestId,
     startedAt,
@@ -389,6 +433,8 @@ export async function sendMessageStream(
     await finalizeReply({
       context: input.context,
       conversationId: prepared.conversationId,
+      isNewConversation: prepared.isNewConversation,
+      userMessage: input.message,
       userMessageId: prepared.userMessageId,
       requestId: input.requestId,
       startedAt,

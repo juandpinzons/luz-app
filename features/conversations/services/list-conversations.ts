@@ -11,6 +11,8 @@ export interface ConversationListItem {
   lastMessageAt: Date;
   messageCount: number;
   previewText: string;
+  /** `null` hasta que el título automático corre (primer intercambio) o si falló — ver `generate-title.ts`. `previewText` sigue siendo el respaldo. */
+  title: string | null;
 }
 
 export interface ListConversationsOptions {
@@ -116,6 +118,7 @@ export async function listConversations(
     .select({
       id: conversations.id,
       createdAt: conversations.createdAt,
+      title: conversations.title,
       lastMessageAt: max(conversationMessages.createdAt),
       messageCount: count(conversationMessages.id),
     })
@@ -147,6 +150,7 @@ export async function listConversations(
   return stats.map((row) => ({
     id: row.id,
     createdAt: row.createdAt,
+    title: row.title,
     // `innerJoin` + `groupBy` garantiza al menos un mensaje por fila, así que
     // el máximo nunca es null aquí — el tipo de `max()` sigue siendo nullable.
     lastMessageAt: row.lastMessageAt ?? row.createdAt,
