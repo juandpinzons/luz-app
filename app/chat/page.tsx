@@ -588,7 +588,7 @@ function ChatPageContent() {
       </div>
 
       {/* Input */}
-      <footer className="flex-shrink-0 border-t border-zinc-800 p-6">
+      <footer className="flex-shrink-0 border-t border-zinc-800 px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto flex max-w-4xl gap-3">
           <input
             ref={inputRef}
