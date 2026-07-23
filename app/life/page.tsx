@@ -66,17 +66,51 @@ export default async function LifePage() {
   let relationships: RelationshipWithDisplayName[] = [];
   let timeline: Memory[] = [];
 
+  /**
+   * `allSettled`, no `all`: antes, si una sola franja fallaba (p. ej.
+   * Goals), las cinco desaparecían juntas — incluido el Timeline, que
+   * no depende de las mismas tablas y podía tener datos reales de
+   * memoria. Bug real, encontrado en producción — cada franja se
+   * degrada por separado ahora, igual que ya se oculta por separado
+   * cuando está vacía.
+   */
   if (lifeGraphContext) {
-    try {
-      [goals, projects, habits, relationships, timeline] = await Promise.all([
+    const [goalsResult, projectsResult, habitsResult, relationshipsResult, timelineResult] =
+      await Promise.allSettled([
         listAllGoals(db, lifeGraphContext),
         listAllProjects(db, lifeGraphContext),
         listAllHabits(db, lifeGraphContext),
         listAllRelationships(db, lifeGraphContext),
         getLifeTimeline(db, lifeGraphContext),
       ]);
-    } catch (error) {
-      console.error("[life] no se pudo cargar la vida de la persona:", error);
+
+    if (goalsResult.status === "fulfilled") {
+      goals = goalsResult.value;
+    } else {
+      console.error("[life] no se pudieron cargar Goals:", goalsResult.reason);
+    }
+    if (projectsResult.status === "fulfilled") {
+      projects = projectsResult.value;
+    } else {
+      console.error("[life] no se pudieron cargar Projects:", projectsResult.reason);
+    }
+    if (habitsResult.status === "fulfilled") {
+      habits = habitsResult.value;
+    } else {
+      console.error("[life] no se pudieron cargar Habits:", habitsResult.reason);
+    }
+    if (relationshipsResult.status === "fulfilled") {
+      relationships = relationshipsResult.value;
+    } else {
+      console.error(
+        "[life] no se pudieron cargar Relationships:",
+        relationshipsResult.reason,
+      );
+    }
+    if (timelineResult.status === "fulfilled") {
+      timeline = timelineResult.value;
+    } else {
+      console.error("[life] no se pudo cargar el Timeline:", timelineResult.reason);
     }
   }
 

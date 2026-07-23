@@ -45,9 +45,21 @@ export default async function DashboardPage() {
     console.error("[dashboard] no se pudo resolver LifeGraphContext:", error);
   }
 
-  const brief = lifeGraphContext
-    ? await buildMorningBrief(db, lifeGraphContext, session.user.name ?? "")
-    : null;
+  /**
+   * Antes sin try/catch: si `assembleRealitySnapshot` fallaba (p. ej.
+   * una consulta a `core/life` real), tumbaba toda la página en vez de
+   * degradarse — el mismo criterio de tolerancia a fallos que ya
+   * protege a `lifeGraphContext` y `summary` en este archivo le
+   * faltaba justo aquí. Corregido (bug real, encontrado en producción).
+   */
+  let brief = null;
+  if (lifeGraphContext) {
+    try {
+      brief = await buildMorningBrief(db, lifeGraphContext, session.user.name ?? "");
+    } catch (error) {
+      console.error("[dashboard] no se pudo construir el saludo:", error);
+    }
+  }
 
   /**
    * Goals/Projects reales, leídos directo de `core/life` — no vía
@@ -57,21 +69,39 @@ export default async function DashboardPage() {
    * (d) del §3.1 — ambas usan la misma ventana de 14 días sobre
    * targetDate/dueDate; mostrarlas por separado habría repetido los
    * mismos Goals/Projects dos veces.
+   *
+   * `allSettled`, no `all`: antes, si una de las tres fallaba, las tres
+   * desaparecían juntas (mismo bug de fondo que en app/life/page.tsx) —
+   * cada una se degrada por separado ahora.
    */
   let activeGoals: Goal[] = [];
   let activeProjects: Project[] = [];
   let upcomingDeadlines: UpcomingDeadline[] = [];
   if (lifeGraphContext) {
-    try {
-      [activeGoals, activeProjects, upcomingDeadlines] = await Promise.all([
-        listActiveGoals(db, lifeGraphContext),
-        listActiveProjects(db, lifeGraphContext),
-        getUpcomingDeadlines(db, lifeGraphContext, {
-          withinDays: UPCOMING_WINDOW_DAYS,
-        }),
-      ]);
-    } catch (error) {
-      console.error("[dashboard] no se pudo cargar Goals/Projects:", error);
+    const [goalsResult, projectsResult, deadlinesResult] = await Promise.allSettled([
+      listActiveGoals(db, lifeGraphContext),
+      listActiveProjects(db, lifeGraphContext),
+      getUpcomingDeadlines(db, lifeGraphContext, {
+        withinDays: UPCOMING_WINDOW_DAYS,
+      }),
+    ]);
+    if (goalsResult.status === "fulfilled") {
+      activeGoals = goalsResult.value;
+    } else {
+      console.error("[dashboard] no se pudieron cargar Goals:", goalsResult.reason);
+    }
+    if (projectsResult.status === "fulfilled") {
+      activeProjects = projectsResult.value;
+    } else {
+      console.error("[dashboard] no se pudieron cargar Projects:", projectsResult.reason);
+    }
+    if (deadlinesResult.status === "fulfilled") {
+      upcomingDeadlines = deadlinesResult.value;
+    } else {
+      console.error(
+        "[dashboard] no se pudieron cargar Próximos a vencer:",
+        deadlinesResult.reason,
+      );
     }
   }
   const activeLifeItems = [...activeGoals, ...activeProjects];
