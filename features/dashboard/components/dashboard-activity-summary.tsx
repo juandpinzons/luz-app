@@ -56,31 +56,14 @@ export function DashboardActivitySummary({
   summary,
 }: DashboardActivitySummaryProps) {
   return (
-    <div className="mt-12 space-y-10 border-t border-zinc-900 pt-10">
-      <section>
-        <h2 className="text-sm font-medium text-zinc-400">Tu cuenta</h2>
-        <div className="mt-3 space-y-1 text-sm">
-          {user.name && <p className="text-zinc-300">{user.name}</p>}
-          <p className="text-zinc-500">{user.email}</p>
-          {summary && (
-            <p className="text-zinc-500">
-              Miembro desde {formatDate(summary.memberSince)}
-            </p>
-          )}
-        </div>
-      </section>
-
-      {summary && summary.lastMessageAt && (
-        <section>
-          <h2 className="text-sm font-medium text-zinc-400">
-            Actividad reciente
-          </h2>
-          <p className="mt-3 text-sm text-zinc-500">
-            Última actividad: {formatRelativeTime(summary.lastMessageAt)}
-          </p>
-        </section>
-      )}
-
+    <div className="mt-10 space-y-10">
+      {/*
+       * Promovida fuera del bloque de actividad/cuenta (Sprint 2,
+       * docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §3.1(f)) — responde
+       * "¿qué conversaciones requieren continuidad?", no una estadística
+       * de uso, así que ya no vive detrás del mismo separador que
+       * "Estadísticas".
+       */}
       {summary && summary.recentConversations.length > 0 && (
         <section>
           <div className="flex items-center justify-between">
@@ -116,37 +99,71 @@ export function DashboardActivitySummary({
         </section>
       )}
 
-      {summary && (
+      {/*
+       * Cuenta / actividad / estadísticas de uso — de menor prioridad
+       * visual a propósito (§2 del diseño: "ningún número decorativo",
+       * el Dashboard muestra estado de la vida, no actividad del
+       * producto). Mismo separador que antes, ahora más abajo.
+       */}
+      <div className="space-y-10 border-t border-zinc-900 pt-10">
         <section>
-          <h2 className="text-sm font-medium text-zinc-400">Estadísticas</h2>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Stat
-              label="Conversaciones iniciadas"
-              value={summary.conversationsStarted}
-            />
-            <Stat label="Mensajes enviados" value={summary.messagesSent} />
-            {summary.memoriesStored > 0 && (
-              <Stat
-                label="Memorias almacenadas"
-                value={summary.memoriesStored}
-              />
+          <h2 className="text-sm font-medium text-zinc-400">Tu cuenta</h2>
+          <div className="mt-3 space-y-1 text-sm">
+            {user.name && <p className="text-zinc-300">{user.name}</p>}
+            <p className="text-zinc-500">{user.email}</p>
+            {summary && (
+              <p className="text-zinc-500">
+                Miembro desde {formatDate(summary.memberSince)}
+              </p>
             )}
           </div>
         </section>
-      )}
 
-      {/*
-       * Cuando todo carga bien no hay nada que anunciar — el silencio
-       * es la respuesta correcta (Principio de Silencio Intencional).
-       * Solo se muestra algo si de verdad no se pudo cargar la
-       * actividad, y en la voz de LUZ, no como un status de servidor.
-       */}
-      {!summary && (
-        <p className="text-sm text-zinc-500">
-          No pude traer tu actividad reciente. Intenta de nuevo en un
-          momento.
-        </p>
-      )}
+        {summary && summary.lastMessageAt && (
+          <section>
+            <h2 className="text-sm font-medium text-zinc-400">
+              Actividad reciente
+            </h2>
+            <p className="mt-3 text-sm text-zinc-500">
+              Última actividad: {formatRelativeTime(summary.lastMessageAt)}
+            </p>
+          </section>
+        )}
+
+        {summary && (
+          <section>
+            <h2 className="text-sm font-medium text-zinc-400">
+              Estadísticas
+            </h2>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat
+                label="Conversaciones iniciadas"
+                value={summary.conversationsStarted}
+              />
+              <Stat label="Mensajes enviados" value={summary.messagesSent} />
+              {summary.memoriesStored > 0 && (
+                <Stat
+                  label="Memorias almacenadas"
+                  value={summary.memoriesStored}
+                />
+              )}
+            </div>
+          </section>
+        )}
+
+        {/*
+         * Cuando todo carga bien no hay nada que anunciar — el silencio
+         * es la respuesta correcta (Principio de Silencio Intencional).
+         * Solo se muestra algo si de verdad no se pudo cargar la
+         * actividad, y en la voz de LUZ, no como un status de servidor.
+         */}
+        {!summary && (
+          <p className="text-sm text-zinc-500">
+            No pude traer tu actividad reciente. Intenta de nuevo en un
+            momento.
+          </p>
+        )}
+      </div>
     </div>
   );
 }
