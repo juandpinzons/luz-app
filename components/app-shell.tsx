@@ -1,30 +1,27 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 
-type ActiveSection = "dashboard" | "life" | "chat";
+type ActiveSection = "dashboard" | "life" | "memories" | "chat";
 
 /**
  * Las cuatro secciones (Alpha Experience V1, docs/product/
- * ALPHA_EXPERIENCE_V1_DESIGN.md §4.1/5.1). `href: null` en Memories es
- * deliberado: esa ruta no existe todavía (Sprint 4) y no se construye
- * aquí — se muestra como texto no interactivo en vez de un enlace que
- * hoy llevaría a un 404; se activa cambiando solo esta tabla cuando su
- * ruta exista. Life se activó en el Sprint 3.
+ * ALPHA_EXPERIENCE_V1_DESIGN.md §4.1/5.1) — las cuatro con `href` real
+ * desde el Sprint 4.
  */
 const SECTIONS: Array<{
-  id: ActiveSection | "memories";
+  id: ActiveSection;
   label: string;
-  href: string | null;
+  href: string;
 }> = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
   { id: "life", label: "Life", href: "/life" },
-  { id: "memories", label: "Memories", href: null },
+  { id: "memories", label: "Memories", href: "/memories" },
   { id: "chat", label: "Conversación", href: "/chat" },
 ];
 
 /**
- * Shell persistente compartido por Dashboard, Life, Conversación e
- * Historial de conversaciones (Sprint 1/3). Envuelve páginas ya existentes sin
+ * Shell persistente compartido por Dashboard, Life, Memories,
+ * Conversación e Historial de conversaciones (Sprint 1/3/4). Envuelve páginas ya existentes sin
  * cambiar su contenido — `contentOverflow="hidden"` reproduce
  * exactamente el contenedor que /chat ya tenía en su propio layout
  * (scroll interno gestionado por la propia página, ver "doble h-screen
@@ -64,20 +61,6 @@ export async function AppShell({
           <nav aria-label="Secciones de LUZ">
             <ul className="flex flex-shrink-0 items-center gap-1">
               {SECTIONS.map((section) => {
-                if (!section.href) {
-                  return (
-                    <li key={section.id}>
-                      <span
-                        aria-disabled="true"
-                        title="Disponible próximamente"
-                        className="block cursor-default whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-zinc-600 sm:px-3 sm:text-sm"
-                      >
-                        {section.label}
-                      </span>
-                    </li>
-                  );
-                }
-
                 const isActive = section.id === activeSection;
 
                 return (
