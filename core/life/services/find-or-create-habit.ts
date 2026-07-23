@@ -11,7 +11,7 @@ export interface FindOrCreateHabitInput {
 }
 
 /**
- * Usado por la extracción desde conversación (`extract-life-entities.ts`)
+ * Usado por `life-capture-service.ts` (disparado por Memory Engine)
  * — mismo criterio de deduplicación por título que `find-or-create-goal.ts`.
  * Un Habit creado por esta vía siempre nace `active: true`.
  */

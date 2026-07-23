@@ -11,7 +11,7 @@ export interface FindOrCreateGoalInput {
 }
 
 /**
- * Usado por la extracción desde conversación (`extract-life-entities.ts`)
+ * Usado por `life-capture-service.ts` (disparado por Memory Engine)
  * — nunca crea un Goal nuevo si ya existe uno con un título similar,
  * para que declarar el mismo objetivo en dos conversaciones distintas
  * no produzca dos filas. Un Goal creado por esta vía siempre nace en

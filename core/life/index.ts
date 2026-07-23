@@ -64,3 +64,5 @@ export * from "./services/list-active-habits";
 export * from "./services/find-or-create-goal";
 export * from "./services/find-or-create-project";
 export * from "./services/find-or-create-habit";
+export * from "./services/find-or-create-person";
+export * from "./services/find-or-create-relationship";

@@ -6,7 +6,7 @@ import { db } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
-import { createMemoryEngine } from "../../../core/memory-engine";
+import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
@@ -16,7 +16,7 @@ import {
   renderContextToMessages,
 } from "../context-builder";
 import type { ConversationTurn } from "../context-builder";
-import { extractLifeEntities } from "./extract-life-entities";
+import { captureLifeEntityFromMemory } from "../../life/services/life-capture-service";
 
 export interface SendMessageInput {
   context: UserContext;
@@ -91,6 +91,8 @@ interface PreparedMessage {
   isNewConversation: boolean;
   userMessageId: string;
   aiMessages: AIMessage[];
+  /** Null si la captura en Memory Engine falló o se omitió (sin LifeGraphContext) — en ese caso, Life Capture (`finalizeReply`) tampoco corre, mismo criterio de degradación que el resto del archivo. */
+  capturedMemory: Memory | null;
 }
 
 /**
@@ -206,9 +208,10 @@ async function prepareMessage(
   // usuario se captura sin importar si la IA responde con éxito. Un
   // fallo aquí nunca debe romper el chat — mismo criterio que ya usa
   // la resolución de `LifeGraphContext`.
+  let capturedMemory: Memory | null = null;
   if (lifeGraphContext) {
     try {
-      await createMemoryEngine(db).capture(lifeGraphContext, {
+      capturedMemory = await createMemoryEngine(db).capture(lifeGraphContext, {
         content: input.message,
         source: "conversation",
         sourceId: userMessage.id,
@@ -225,6 +228,7 @@ async function prepareMessage(
     isNewConversation: conversationRef.isNew,
     userMessageId: userMessage.id,
     aiMessages,
+    capturedMemory,
   };
 }
 
@@ -238,6 +242,8 @@ interface FinalizeReplyInput {
   requestId?: string;
   startedAt: number;
   reply: string;
+  /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture, ver `life-capture-service.ts`. */
+  capturedMemory: Memory | null;
 }
 
 /**
@@ -259,6 +265,7 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     requestId,
     startedAt,
     reply,
+    capturedMemory,
   } = input;
 
   await db.insert(conversationMessages).values({
@@ -285,20 +292,19 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     );
   }
 
-  // Persistencia real de Nivel 1 (Goal/Project/Habit): a diferencia del
-  // título, corre en CADA mensaje, no solo en el primero — un Objetivo
-  // puede declararse en cualquier punto de la conversación. Mismo
+  // Persistencia real de Nivel 1 (Goal/Project/Habit/Relationship): a
+  // diferencia del título, corre en CADA mensaje, no solo en el
+  // primero. Disparada únicamente por lo que Memory Engine ya
+  // clasificó y rankeó (`capturedMemory`, de `prepareMessage`) — nunca
+  // un análisis independiente de `userMessage`/`reply` (ver
+  // life-capture-service.ts: reemplaza a extract-life-entities.ts,
+  // que sí hacía eso — un pipeline paralelo, ya retirado). Mismo
   // criterio de contención vía `after()`: nunca bloquea la respuesta,
-  // nunca puede romper la conversación (ver extract-life-entities.ts).
-  // Se omite si `lifeGraphContext` no se resolvió, mismo criterio que
-  // ya usa la captura de Memory Engine arriba.
-  if (lifeGraphContext) {
+  // nunca puede romper la conversación. Se omite si la captura de
+  // Memory Engine falló o se omitió arriba.
+  if (lifeGraphContext && capturedMemory) {
     after(() =>
-      extractLifeEntities(db, {
-        context: lifeGraphContext,
-        userMessage,
-        assistantReply: reply,
-      }),
+      captureLifeEntityFromMemory(db, lifeGraphContext, capturedMemory),
     );
   }
 
@@ -389,6 +395,7 @@ export async function sendMessage(
     requestId: input.requestId,
     startedAt,
     reply,
+    capturedMemory: prepared.capturedMemory,
   });
 
   return { conversationId: prepared.conversationId, reply };
@@ -461,6 +468,7 @@ export async function sendMessageStream(
       requestId: input.requestId,
       startedAt,
       reply: fullReply,
+      capturedMemory: prepared.capturedMemory,
     });
   }
 

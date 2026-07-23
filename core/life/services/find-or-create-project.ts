@@ -11,7 +11,7 @@ export interface FindOrCreateProjectInput {
 }
 
 /**
- * Usado por la extracción desde conversación (`extract-life-entities.ts`)
+ * Usado por `life-capture-service.ts` (disparado por Memory Engine)
  * — mismo criterio de deduplicación por título que `find-or-create-goal.ts`.
  * Un Project creado por esta vía siempre nace en estado `"planning"`, sin
  * vincular a ningún Goal (esa vinculación es una decisión de producto
