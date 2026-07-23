@@ -1,30 +1,30 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 
-type ActiveSection = "dashboard" | "chat";
+type ActiveSection = "dashboard" | "life" | "chat";
 
 /**
- * Las cuatro secciones del Sprint 1 (Alpha Experience V1, docs/product/
- * ALPHA_EXPERIENCE_V1_DESIGN.md §4.1/5.1). `href: null` en Life/Memories
- * es deliberado: esas rutas no existen todavía (Sprint 3/4) y este
- * sprint no las construye — se muestran como texto no interactivo en
- * vez de enlaces que hoy llevarían a un 404, y se activan cambiando
- * solo esta tabla cuando sus rutas existan.
+ * Las cuatro secciones (Alpha Experience V1, docs/product/
+ * ALPHA_EXPERIENCE_V1_DESIGN.md §4.1/5.1). `href: null` en Memories es
+ * deliberado: esa ruta no existe todavía (Sprint 4) y no se construye
+ * aquí — se muestra como texto no interactivo en vez de un enlace que
+ * hoy llevaría a un 404; se activa cambiando solo esta tabla cuando su
+ * ruta exista. Life se activó en el Sprint 3.
  */
 const SECTIONS: Array<{
-  id: ActiveSection | "life" | "memories";
+  id: ActiveSection | "memories";
   label: string;
   href: string | null;
 }> = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { id: "life", label: "Life", href: null },
+  { id: "life", label: "Life", href: "/life" },
   { id: "memories", label: "Memories", href: null },
   { id: "chat", label: "Conversación", href: "/chat" },
 ];
 
 /**
- * Shell persistente compartido por Dashboard, Conversación e Historial
- * de conversaciones (Sprint 1). Envuelve páginas ya existentes sin
+ * Shell persistente compartido por Dashboard, Life, Conversación e
+ * Historial de conversaciones (Sprint 1/3). Envuelve páginas ya existentes sin
  * cambiar su contenido — `contentOverflow="hidden"` reproduce
  * exactamente el contenedor que /chat ya tenía en su propio layout
  * (scroll interno gestionado por la propia página, ver "doble h-screen
