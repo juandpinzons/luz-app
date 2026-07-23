@@ -63,9 +63,10 @@ export default async function ConversationDetailPage({
   }
 
   return (
-    <main className="flex h-screen flex-col bg-black text-white">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-8 py-5">
-        <h1 className="text-xl font-light tracking-[0.25em]">LUZ</h1>
+    <main className="flex h-full flex-col bg-black text-white">
+      {/* El wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
+          header solo aporta lo específico de esta vista: volver al historial. */}
+      <header className="flex items-center justify-end border-b border-zinc-800 px-8 py-5">
         <Link
           href="/conversations"
           className="text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"

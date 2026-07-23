@@ -500,25 +500,24 @@ function ChatPageContent() {
 
   return (
     <main className="flex h-full flex-col bg-black text-white">
-      {/* Header */}
-      <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-light tracking-[0.25em]">LUZ</h1>
-
-          {!isLoadingHistory && isHistoricalConversation && (
+      {/* Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
+          header solo aporta lo específico de /chat: retomar/empezar de nuevo. */}
+      {!isLoadingHistory && isHistoricalConversation && (
+        <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
+          <div className="flex items-center justify-end">
             <button
               onClick={startNewConversation}
               className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
             >
               Nueva conversación
             </button>
-          )}
-        </div>
+          </div>
 
-        {!isLoadingHistory && isHistoricalConversation && historicalLabel && (
-          <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
-        )}
-      </header>
+          {historicalLabel && (
+            <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
+          )}
+        </header>
+      )}
 
       {/* Conversación */}
       <div className="relative min-h-0 flex-1">

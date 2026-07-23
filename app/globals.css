@@ -12,6 +12,15 @@
   --font-mono: var(--font-geist-mono);
 
   /*
+   * Fundación de identidad visual (Sprint 1, Alpha Experience V1).
+   * Un solo acento cálido — "luz" — usado con moderación (el indicador
+   * de sección activa en el AppShell, por ahora) en vez de una paleta
+   * completa: la identidad se construye progresivamente, no de golpe
+   * (docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md, Sprint 1).
+   */
+  --color-luz: #e3b168;
+
+  /*
    * Vocabulario mínimo de animación (Sprint de pulido, Alpha). Ambas
    * afinadas para leerse como "asentarse", nunca como rebote o
    * llamada de atención — "presencia, sin presión" también aplica al
