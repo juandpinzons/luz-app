@@ -16,6 +16,7 @@ import {
   renderContextToMessages,
 } from "../context-builder";
 import type { ConversationTurn } from "../context-builder";
+import { extractLifeEntities } from "./extract-life-entities";
 
 export interface SendMessageInput {
   context: UserContext;
@@ -229,6 +230,7 @@ async function prepareMessage(
 
 interface FinalizeReplyInput {
   context: UserContext;
+  lifeGraphContext: LifeGraphContext | null;
   conversationId: string;
   isNewConversation: boolean;
   userMessage: string;
@@ -249,6 +251,7 @@ interface FinalizeReplyInput {
 async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
   const {
     context,
+    lifeGraphContext,
     conversationId,
     isNewConversation,
     userMessage,
@@ -276,6 +279,23 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     after(() =>
       generateConversationTitle(db, {
         conversationId,
+        userMessage,
+        assistantReply: reply,
+      }),
+    );
+  }
+
+  // Persistencia real de Nivel 1 (Goal/Project/Habit): a diferencia del
+  // título, corre en CADA mensaje, no solo en el primero — un Objetivo
+  // puede declararse en cualquier punto de la conversación. Mismo
+  // criterio de contención vía `after()`: nunca bloquea la respuesta,
+  // nunca puede romper la conversación (ver extract-life-entities.ts).
+  // Se omite si `lifeGraphContext` no se resolvió, mismo criterio que
+  // ya usa la captura de Memory Engine arriba.
+  if (lifeGraphContext) {
+    after(() =>
+      extractLifeEntities(db, {
+        context: lifeGraphContext,
         userMessage,
         assistantReply: reply,
       }),
@@ -361,6 +381,7 @@ export async function sendMessage(
 
   await finalizeReply({
     context: input.context,
+    lifeGraphContext: input.lifeGraphContext,
     conversationId: prepared.conversationId,
     isNewConversation: prepared.isNewConversation,
     userMessage: input.message,
@@ -432,6 +453,7 @@ export async function sendMessageStream(
 
     await finalizeReply({
       context: input.context,
+      lifeGraphContext: input.lifeGraphContext,
       conversationId: prepared.conversationId,
       isNewConversation: prepared.isNewConversation,
       userMessage: input.message,

@@ -71,6 +71,13 @@
       "when": 1784415460971,
       "tag": "0009_volatile_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1784750647311,
+      "tag": "0011_left_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

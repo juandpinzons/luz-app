@@ -1,8 +1,14 @@
 import type { Database } from "../../../core/db/client";
-import type { LifeGraphContext } from "../../../core/life/life-graph-context";
+import {
+  listActiveGoals,
+  listActiveHabits,
+  listActiveProjects,
+  type EntityId,
+  type LifeGraphContext,
+} from "../../../core/life";
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
-import type { RealitySnapshot } from "../../../core/reality";
+import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 
 /**
  * Ensamblador mínimo de `RealitySnapshot` (Beta 1 Roadmap, Sprint B2;
@@ -20,13 +26,32 @@ import type { RealitySnapshot } from "../../../core/reality";
 
 const RELEVANT_MEMORY_LIMIT = 5;
 
+/**
+ * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
+ * `Project`/`Habit` de `core/life`, así que esta traducción a la forma
+ * neutral `LifeStateItem` vive aquí — la frontera anti-corrupción que
+ * ADR-0013 exige, nunca dentro de `core/reality` ni de ningún engine.
+ */
+function toLifeStateItem(entity: {
+  id: EntityId;
+  title: string;
+}): LifeStateItem {
+  return { id: entity.id, title: entity.title };
+}
+
 export async function assembleRealitySnapshot(
   db: Database,
   context: LifeGraphContext,
 ): Promise<RealitySnapshot> {
-  const relevantMemories = await createMemoryEngine(db).retrieve(context, {
-    limit: RELEVANT_MEMORY_LIMIT,
-  });
+  const [relevantMemories, activeGoals, activeProjects, activeHabits] =
+    await Promise.all([
+      createMemoryEngine(db).retrieve(context, {
+        limit: RELEVANT_MEMORY_LIMIT,
+      }),
+      listActiveGoals(db, context),
+      listActiveProjects(db, context),
+      listActiveHabits(db, context),
+    ]);
 
   // Auditoría de comportamiento (Presence Principles): dar continuidad
   // a partir de un dato solo porque existe, sin que represente
@@ -47,12 +72,17 @@ export async function assembleRealitySnapshot(
   return {
     lifeGraphId: context.lifeGraphId,
     capturedAt: new Date(),
-    // `core/life` no tiene todavía repositorios Drizzle para
-    // Goal/Project/Habit (solo LifeGraph y Person) — vacío es la
-    // representación honesta de esa ausencia, no un placeholder a
-    // ocultar (REALITY_SNAPSHOT_V1.md: "absence must be represented
-    // as absence"). Beta 1 Roadmap ya señala este límite conocido.
-    life: { activeGoals: [], activeProjects: [], activeHabits: [] },
+    // Persistencia real de Nivel 1 (Goal/Project/Habit) — `core/life`
+    // ya tiene repositorios Drizzle para las tres. Si de verdad no hay
+    // ninguna activa, los arreglos siguen vacíos — la ausencia real
+    // sigue representándose como ausencia (REALITY_SNAPSHOT_V1.md:
+    // "absence must be represented as absence"), ya no por un límite
+    // de la implementación.
+    life: {
+      activeGoals: activeGoals.map(toLifeStateItem),
+      activeProjects: activeProjects.map(toLifeStateItem),
+      activeHabits: activeHabits.map(toLifeStateItem),
+    },
     // Retrieval estructurado (ADR-0004), ordenado por rank — la mitad
     // semántica (PR-020) no existe todavía. "Relevante" hoy significa
     // "lo más valioso ya capturado", no "lo más similar a este mensaje".

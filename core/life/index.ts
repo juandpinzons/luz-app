@@ -27,10 +27,15 @@ export * from "./repositories/life-repository";
 export * from "./repositories/person.repository";
 export * from "./repositories/drizzle-person.repository";
 export * from "./repositories/goal.repository";
+export * from "./repositories/drizzle-goal.repository";
 export * from "./repositories/project.repository";
+export * from "./repositories/drizzle-project.repository";
 export * from "./repositories/habit.repository";
+export * from "./repositories/drizzle-habit.repository";
 export * from "./repositories/routine.repository";
+export * from "./repositories/drizzle-routine.repository";
 export * from "./repositories/relationship.repository";
+export * from "./repositories/drizzle-relationship.repository";
 export * from "./repositories/life-event.repository";
 export * from "./repositories/life-domain.repository";
 
@@ -52,3 +57,10 @@ export * from "./graph/life-graph-index";
 // Services
 export * from "./services/life-graph-bootstrap";
 export * from "./services/drizzle-life-graph-bootstrap";
+export * from "./services/title-similarity";
+export * from "./services/list-active-goals";
+export * from "./services/list-active-projects";
+export * from "./services/list-active-habits";
+export * from "./services/find-or-create-goal";
+export * from "./services/find-or-create-project";
+export * from "./services/find-or-create-habit";
