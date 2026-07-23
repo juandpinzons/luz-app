@@ -18,6 +18,10 @@ import {
   RELATIONSHIP_TYPE_LABELS,
 } from "@/features/life/labels";
 import type { Memory } from "@/core/memory-engine";
+import { describeError } from "@/core/observability/describe-error";
+import { createRequestId, logger } from "@/core/observability/logger";
+
+const ROUTE = "/life";
 
 function formatRelativeTime(date: Date): string {
   const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
@@ -53,11 +57,20 @@ export default async function LifePage() {
     redirect("/login");
   }
 
+  const requestId = createRequestId();
+
   let lifeGraphContext = null;
   try {
     lifeGraphContext = await getLifeGraphContext();
   } catch (error) {
-    console.error("[life] no se pudo resolver LifeGraphContext:", error);
+    logger.log({
+      event: "life.life_graph_context_failed",
+      severity: "error",
+      requestId,
+      route: ROUTE,
+      userId: session.user.id,
+      ...describeError(error),
+    });
   }
 
   let goals: Goal[] = [];
@@ -87,30 +100,67 @@ export default async function LifePage() {
     if (goalsResult.status === "fulfilled") {
       goals = goalsResult.value;
     } else {
-      console.error("[life] no se pudieron cargar Goals:", goalsResult.reason);
+      logger.log({
+        event: "life.goals_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(goalsResult.reason),
+      });
     }
     if (projectsResult.status === "fulfilled") {
       projects = projectsResult.value;
     } else {
-      console.error("[life] no se pudieron cargar Projects:", projectsResult.reason);
+      logger.log({
+        event: "life.projects_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(projectsResult.reason),
+      });
     }
     if (habitsResult.status === "fulfilled") {
       habits = habitsResult.value;
     } else {
-      console.error("[life] no se pudieron cargar Habits:", habitsResult.reason);
+      logger.log({
+        event: "life.habits_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(habitsResult.reason),
+      });
     }
     if (relationshipsResult.status === "fulfilled") {
       relationships = relationshipsResult.value;
     } else {
-      console.error(
-        "[life] no se pudieron cargar Relationships:",
-        relationshipsResult.reason,
-      );
+      logger.log({
+        event: "life.relationships_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(relationshipsResult.reason),
+      });
     }
     if (timelineResult.status === "fulfilled") {
       timeline = timelineResult.value;
     } else {
-      console.error("[life] no se pudo cargar el Timeline:", timelineResult.reason);
+      logger.log({
+        event: "life.timeline_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(timelineResult.reason),
+      });
     }
   }
 

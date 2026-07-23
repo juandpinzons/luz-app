@@ -14,6 +14,10 @@ import {
   getUpcomingDeadlines,
   type UpcomingDeadline,
 } from "@/features/life/services/get-upcoming-deadlines";
+import { describeError } from "@/core/observability/describe-error";
+import { createRequestId, logger } from "@/core/observability/logger";
+
+const ROUTE = "/dashboard";
 
 const UPCOMING_WINDOW_DAYS = 14;
 
@@ -38,11 +42,23 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  // Un solo id por render, para poder correlacionar todas las líneas
+  // de log de esta carga del Dashboard entre sí (mismo patrón que
+  // app/api/chat/route.ts).
+  const requestId = createRequestId();
+
   let lifeGraphContext = null;
   try {
     lifeGraphContext = await getLifeGraphContext();
   } catch (error) {
-    console.error("[dashboard] no se pudo resolver LifeGraphContext:", error);
+    logger.log({
+      event: "dashboard.life_graph_context_failed",
+      severity: "error",
+      requestId,
+      route: ROUTE,
+      userId: session.user.id,
+      ...describeError(error),
+    });
   }
 
   /**
@@ -57,7 +73,15 @@ export default async function DashboardPage() {
     try {
       brief = await buildMorningBrief(db, lifeGraphContext, session.user.name ?? "");
     } catch (error) {
-      console.error("[dashboard] no se pudo construir el saludo:", error);
+      logger.log({
+        event: "dashboard.morning_brief_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
     }
   }
 
@@ -88,20 +112,41 @@ export default async function DashboardPage() {
     if (goalsResult.status === "fulfilled") {
       activeGoals = goalsResult.value;
     } else {
-      console.error("[dashboard] no se pudieron cargar Goals:", goalsResult.reason);
+      logger.log({
+        event: "dashboard.active_goals_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(goalsResult.reason),
+      });
     }
     if (projectsResult.status === "fulfilled") {
       activeProjects = projectsResult.value;
     } else {
-      console.error("[dashboard] no se pudieron cargar Projects:", projectsResult.reason);
+      logger.log({
+        event: "dashboard.active_projects_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(projectsResult.reason),
+      });
     }
     if (deadlinesResult.status === "fulfilled") {
       upcomingDeadlines = deadlinesResult.value;
     } else {
-      console.error(
-        "[dashboard] no se pudieron cargar Próximos a vencer:",
-        deadlinesResult.reason,
-      );
+      logger.log({
+        event: "dashboard.upcoming_deadlines_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(deadlinesResult.reason),
+      });
     }
   }
   const activeLifeItems = [...activeGoals, ...activeProjects];
@@ -119,7 +164,14 @@ export default async function DashboardPage() {
       summary = await buildDashboardSummary(db, userContext, lifeGraphContext);
     }
   } catch (error) {
-    console.error("[dashboard] no se pudo calcular el resumen:", error);
+    logger.log({
+      event: "dashboard.summary_failed",
+      severity: "error",
+      requestId,
+      route: ROUTE,
+      userId: session.user.id,
+      ...describeError(error),
+    });
   }
 
   return (
