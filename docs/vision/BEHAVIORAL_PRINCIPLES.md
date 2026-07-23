@@ -193,3 +193,10 @@ This is the root behavioral document. `PRESENCE_MODEL.md`,
 five principles — each one more concrete than the last, ending in the
 lived, felt experience described in `NORTH_STAR_EXPERIENCE.md`. None of
 them restate these principles; they build on them.
+
+`PRESENCE_PRINCIPLES.md` sits beside `PRESENCE_MODEL.md` at that same
+level of concreteness, with a different purpose: where
+`PRESENCE_MODEL.md` defines what presence *measures*,
+`PRESENCE_PRINCIPLES.md` defines nine specific behaviors these five
+principles require in practice, written to be used directly as
+evaluation criteria for any future feature.
