@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TypingIndicator } from "@/components/ui/typing-indicator";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
 import type {
   GetLatestConversationResponse,
@@ -564,11 +565,7 @@ function ChatPageContent() {
                   </div>
                 ))}
 
-                {isThinking && (
-                  <div className="mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-zinc-400">
-                    LUZ está escribiendo…
-                  </div>
-                )}
+                {isThinking && <TypingIndicator />}
 
                 <div ref={bottomRef} />
               </div>

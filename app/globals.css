@@ -19,6 +19,7 @@
    */
   --animate-fade-in: fade-in 400ms ease-out both;
   --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
+  --animate-typing-dot: typing-dot 1.3s ease-in-out infinite;
 }
 
 @keyframes fade-in {
@@ -42,10 +43,39 @@
   }
 }
 
+/*
+ * Indicador de "LUZ está pensando" (components/ui/typing-indicator.tsx).
+ * Solo opacidad + 2px de traslación — nunca un salto que sugiera rebote
+ * ni afecte el layout, mismo criterio de "asentarse" que el resto del
+ * vocabulario de animación de arriba.
+ */
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+  }
+}
+
+/* Sin animación fuera de un @layer: gana por cascada sobre la utilidad
+   generada por Tailwind sin depender del orden de las reglas. Los
+   puntos siguen visibles, solo dejan de moverse. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-typing-dot {
+    animation: none;
+    opacity: 0.7;
   }
 }
 
