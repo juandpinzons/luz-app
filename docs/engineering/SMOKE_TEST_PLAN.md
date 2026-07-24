@@ -54,16 +54,24 @@ explicitly, what would count as failure).
   Failure: blank page, hydration error, dead CTA.
 
 ### 2. Login
-- **Preconditions**: a dedicated test Google account (not the
+- **Preconditions (manual)**: a dedicated test Google account (not the
   Founder's own — avoids polluting real usage data). LUZ only supports
   Google OAuth today, there's no email/password signup to test
   separately.
-- **Steps**: `/login` → Google OAuth consent → redirect back.
+- **Steps (manual)**: `/login` → Google OAuth consent → redirect back.
 - **Success criteria**: lands on `/dashboard` (the post-login entry
   point), a row exists in `sessions` for the new session, and — for a
   first-ever login — a `users` row, an `account_identities` row, and a
   `life_graphs` row all get created (see `auth/drizzle-identity-resolver.ts`).
   Failure: redirect loop, 500 on callback, no session row.
+- **Automated version** (`smoke/login.test.ts`): deliberately narrower
+  — it injects a `sessions` row directly for a fixed fixture account
+  (`smoke-test@luz.internal`, see "Test data" below) instead of driving
+  real Google OAuth, since scripting a third party's consent screen
+  isn't LUZ's to test or maintain. It verifies the part that *is* LUZ's
+  responsibility: a valid database session actually authenticates
+  `/dashboard`. The OAuth handshake itself stays a manual/occasional
+  check.
 
 ### 3. First message (streaming)
 - **Preconditions**: logged in (flow 2), no existing conversation for
@@ -135,14 +143,50 @@ Flows 1, 4, 6, 7 stay manual for now (7 is already a documented
 `DEPLOY_RUNBOOK.md` checklist, not blocked on automation) and get
 automated incrementally without holding up Colombia Tech Week prep.
 
-**Intended shape of the automation** (to build next, not yet built):
-a small Node/`tsx` script in the same style already used to diagnose
-today's two P0s — no new test framework (Playwright, etc.) for a
-7-flow suite at this project's current size; that's more setup and
-more fragile than the problem calls for. The script creates a
-throwaway session against a dedicated test account (never the
-Founder's real one), hits the real deployed routes over HTTP, and
-asserts against real database state — the same mechanism already
-proven twice today. Runnable manually after a deploy until there's
-a reason (recurring manual toil, or the suite growing past ~10 flows)
-to wire it into something more automatic.
+## Implementation (built 2026-07-24)
+
+`smoke/` — a small `tsx` script, no new test framework (Playwright,
+etc.): more setup and more fragile than a 3–10 flow suite at this
+project's size calls for.
+
+```
+smoke/
+  runner.ts              -- CLI entry point, registers + runs flows
+  types.ts               -- SmokeFlow / SmokeContext / SmokeResult
+  login.test.ts
+  first-message.test.ts
+  dashboard.test.ts
+  utils/
+    test-account.ts      -- resets + returns the fixture account
+    http.ts               -- fetch wrapper carrying the session cookie
+```
+
+Run with `npm run smoke` (all flows) or `npm run smoke -- --flow
+<name>` (one flow — still self-contained, the runner resets the
+fixture account before any flow regardless of which one is selected).
+Needs `.env.smoke` (gitignored — copy `.env.smoke.example`) pointing
+`DATABASE_URL` at whichever environment you're testing, normally
+production. Each flow throws to fail; the runner catches it, prints
+PASS/FAIL with duration, and exits `1` if anything failed — ready to
+wire into CI later without changes.
+
+### Test data
+
+A single fixture account, `smoke-test@luz.internal`, reused (not
+recreated) every run — `resetTestAccount()` deletes its `life_graphs`
+row first (cascades to everything hanging off it: `persons`,
+`account_identities`, `life_goals/projects/habits/routines/
+relationships`, `memories`, `memory_connections`, `memory_embeddings`
+— all `ON DELETE CASCADE`), plus its `conversations` and
+`knowledge_jobs`, then re-bootstraps a fresh `LifeGraphContext` through
+the same `AccountIdentityResolver` production uses and opens a new
+session. Every run starts from the same known-empty state — no flow
+depends on what a previous run left behind.
+
+**This account is a real, permanent row in production's `users`
+table by design.** Exclude it from any user-count report or the
+`/admin` dashboard once it exists (`email <> 'smoke-test@luz.internal'`,
+or filter the `@luz.internal` domain generally) — it will otherwise
+inflate real user metrics. It was already excluded from the
+2026-07-24 user report by construction (that report predates this
+account).

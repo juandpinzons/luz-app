@@ -33,9 +33,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (.env.example SÍ se commitea, es la plantilla sin secretos)
+# env files (.env.example y .env.smoke.example SÍ se commitean, son plantillas sin secretos)
 .env*
 !.env.example
+!.env.smoke.example
 
 # vercel
 .vercel
@@ -43,3 +44,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.scratch/
