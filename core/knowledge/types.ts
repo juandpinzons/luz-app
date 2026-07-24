@@ -1,89 +1,18 @@
-import type { EntityType, InsightType } from "../db/schema";
+import type { EntityType } from "../db/schema";
 import type { UserContext } from "../identity/user-context";
 
 /**
- * Contexto compartido por todas las etapas del pipeline. Extiende
- * `UserContext` en vez de duplicar `userId` — el Knowledge Engine sigue
- * el mismo contrato de identidad que el resto del dominio.
+ * Forma de un trabajo en `knowledge_jobs` (`jobs.ts`) — no el contexto
+ * del pipeline en sí, ese es `core/knowledge-engine/pipeline-context.ts`
+ * (`LifeGraphContext & { memoryId }`). Este tipo sobrevive al retiro
+ * del pipeline legado (`core/knowledge/pipeline/*`, `knowledge-engine.ts`)
+ * porque `enqueueKnowledgeJob` (la cola) es infraestructura compartida,
+ * no lógica de pipeline — sigue extendiendo `UserContext` porque
+ * `knowledge_jobs.userId` es lo único que la fila necesita guardar; el
+ * worker resuelve el `LifeGraphContext` real a partir de ahí
+ * (`worker/index.ts`).
  */
 export interface PipelineContext extends UserContext {
   sourceType: EntityType;
   sourceId: string;
-}
-
-export interface ExtractedItem {
-  /** Fragmento de información relevante extraído de la fuente cruda. */
-  text: string;
-}
-
-export interface ClassifiedItem extends ExtractedItem {
-  type: InsightType;
-  /** Relevancia estimada, 0-100. */
-  importance: number;
-}
-
-export interface RelatedEntityRef {
-  type: EntityType;
-  id: string;
-}
-
-export interface RelatedItem extends ClassifiedItem {
-  relatedEntities: RelatedEntityRef[];
-}
-
-/** Lo que el LLM propone. Todavía no es conocimiento persistido. */
-export interface GeneratedInsight {
-  type: InsightType;
-  description: string;
-  proposedConfidence: number;
-  evidence: RelatedEntityRef[];
-}
-
-/**
- * Lo que el Knowledge Engine decide después de validar. El LLM propone;
- * LUZ decide — `confidence` y `status` los asigna esta etapa, nunca el
- * LLM directamente.
- */
-export interface ValidatedInsight extends GeneratedInsight {
-  confidence: number;
-  status: "validated" | "rejected";
-}
-
-export interface ExtractStage {
-  extract(context: PipelineContext): Promise<ExtractedItem[]>;
-}
-
-export interface ClassifyStage {
-  classify(
-    items: ExtractedItem[],
-    context: PipelineContext,
-  ): Promise<ClassifiedItem[]>;
-}
-
-export interface RelateStage {
-  relate(
-    items: ClassifiedItem[],
-    context: PipelineContext,
-  ): Promise<RelatedItem[]>;
-}
-
-export interface GenerateStage {
-  generate(
-    items: RelatedItem[],
-    context: PipelineContext,
-  ): Promise<GeneratedInsight[]>;
-}
-
-export interface ValidateStage {
-  validate(
-    insights: GeneratedInsight[],
-    context: PipelineContext,
-  ): Promise<ValidatedInsight[]>;
-}
-
-export interface PersistStage {
-  persist(
-    insights: ValidatedInsight[],
-    context: PipelineContext,
-  ): Promise<void>;
 }

@@ -45,7 +45,14 @@ export async function buildContext(
   lifeGraphContext: LifeGraphContext,
   conversation: ConversationTurn[],
 ): Promise<Context> {
-  const realitySnapshot = await assembleRealitySnapshot(db, lifeGraphContext);
+  // P0 (cierre del Alpha): el último turno es el mensaje que se está
+  // respondiendo (docblock de arriba) — se pasa explícito para que
+  // Reality Snapshot seleccione memorias relevantes para ESTE mensaje,
+  // no las de mayor rank global (`selectContextualMemories`).
+  const currentMessage = conversation.at(-1)?.content;
+  const realitySnapshot = await assembleRealitySnapshot(db, lifeGraphContext, {
+    currentMessage,
+  });
   const memories = realitySnapshot.memory.items;
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(

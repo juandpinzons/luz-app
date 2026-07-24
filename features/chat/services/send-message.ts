@@ -7,6 +7,7 @@ import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
+import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
@@ -89,7 +90,6 @@ async function getOrCreateConversation(
 interface PreparedMessage {
   conversationId: string;
   isNewConversation: boolean;
-  userMessageId: string;
   aiMessages: AIMessage[];
   /** Null si la captura en Memory Engine falló o se omitió (sin LifeGraphContext) — en ese caso, Life Capture (`finalizeReply`) tampoco corre, mismo criterio de degradación que el resto del archivo. */
   capturedMemory: Memory | null;
@@ -226,7 +226,6 @@ async function prepareMessage(
   return {
     conversationId,
     isNewConversation: conversationRef.isNew,
-    userMessageId: userMessage.id,
     aiMessages,
     capturedMemory,
   };
@@ -238,11 +237,10 @@ interface FinalizeReplyInput {
   conversationId: string;
   isNewConversation: boolean;
   userMessage: string;
-  userMessageId: string;
   requestId?: string;
   startedAt: number;
   reply: string;
-  /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture, ver `life-capture-service.ts`. */
+  /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture y de Knowledge Engine, ver `life-capture-service.ts` y `core/knowledge-engine`. Reemplaza a `userMessageId`, que ya no se usa acá (P0, cierre del Alpha: Knowledge Engine se dispara por Memory, no por el mensaje crudo). */
   capturedMemory: Memory | null;
 }
 
@@ -261,7 +259,6 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     conversationId,
     isNewConversation,
     userMessage,
-    userMessageId,
     requestId,
     startedAt,
     reply,
@@ -308,13 +305,24 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     );
   }
 
-  // El Knowledge Engine analiza el mensaje en segundo plano; esta llamada
-  // no espera su procesamiento (decisión CTO #6: worker independiente).
-  await enqueueKnowledgeJob(db, {
-    userId: context.userId,
-    sourceType: "conversation_message",
-    sourceId: userMessageId,
-  });
+  // El Knowledge Engine analiza en segundo plano (worker independiente,
+  // decisión CTO #6) — pero disparado por la Memory que Memory Engine ya
+  // clasificó y rankeó, no por el mensaje crudo (mismo criterio que Life
+  // Capture, arriba: un solo origen de verdad, Conversación → Memory
+  // Engine → Knowledge Engine). Sin señal real de comprensión, no hay
+  // nada que interpretar todavía — no se encola (evita que la cola crezca
+  // con trabajo que Validate rechazaría de todas formas por falta de
+  // evidencia real).
+  if (
+    capturedMemory &&
+    (capturedMemory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL
+  ) {
+    await enqueueKnowledgeJob(db, {
+      userId: context.userId,
+      sourceType: "memory",
+      sourceId: capturedMemory.id,
+    });
+  }
 
   const totalDurationMs = Date.now() - startedAt;
   logger.log({
@@ -391,7 +399,6 @@ export async function sendMessage(
     conversationId: prepared.conversationId,
     isNewConversation: prepared.isNewConversation,
     userMessage: input.message,
-    userMessageId: prepared.userMessageId,
     requestId: input.requestId,
     startedAt,
     reply,
@@ -464,8 +471,7 @@ export async function sendMessageStream(
       conversationId: prepared.conversationId,
       isNewConversation: prepared.isNewConversation,
       userMessage: input.message,
-      userMessageId: prepared.userMessageId,
-      requestId: input.requestId,
+        requestId: input.requestId,
       startedAt,
       reply: fullReply,
       capturedMemory: prepared.capturedMemory,

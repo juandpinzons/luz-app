@@ -16,6 +16,7 @@ export const ENTITY_TYPES = [
   "habit",
   "person",
   "insight",
+  "memory",
 ] as const;
 
 export type EntityType = (typeof ENTITY_TYPES)[number];

@@ -9,6 +9,7 @@ import {
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
+import { selectContextualMemories } from "./select-contextual-memories";
 
 /**
  * Ensamblador mínimo de `RealitySnapshot` (Beta 1 Roadmap, Sprint B2;
@@ -42,12 +43,26 @@ function toLifeStateItem(entity: {
 export async function assembleRealitySnapshot(
   db: Database,
   context: LifeGraphContext,
+  options: { currentMessage?: string } = {},
 ): Promise<RealitySnapshot> {
+  // P0 (cierre del Alpha): con `currentMessage`, la selección responde
+  // "¿qué necesita recordar LUZ para ESTE mensaje?" — no la de mayor
+  // rank global (`selectContextualMemories`). Sin `currentMessage`
+  // (p. ej. el Morning Brief del Dashboard, que no responde a un
+  // mensaje puntual) se preserva el comportamiento anterior sin
+  // cambios: ahí sí tiene sentido "lo más relevante en general".
   const [relevantMemories, activeGoals, activeProjects, activeHabits] =
     await Promise.all([
-      createMemoryEngine(db).retrieve(context, {
-        limit: RELEVANT_MEMORY_LIMIT,
-      }),
+      options.currentMessage
+        ? selectContextualMemories(
+            db,
+            context,
+            options.currentMessage,
+            RELEVANT_MEMORY_LIMIT,
+          )
+        : createMemoryEngine(db).retrieve(context, {
+            limit: RELEVANT_MEMORY_LIMIT,
+          }),
       listActiveGoals(db, context),
       listActiveProjects(db, context),
       listActiveHabits(db, context),
