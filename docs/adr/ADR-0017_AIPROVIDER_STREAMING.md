@@ -116,11 +116,55 @@ SDK does not support incremental streaming — its `generateReplyStream`
 would need to yield the full text as a single fragment, which the
 contract already permits.
 
+## Amendment (2026-07-24): `after()` must be called from the route handler, never from inside the stream
+
+`finalizeReply()` originally called `after()` directly (title
+generation, Life capture) to keep those side effects off the response's
+critical path. In production this threw `` `after` was called outside a
+request scope `` on every single streamed chat message (100% of the 25
+error events accumulated between 2026-07-23 and 2026-07-24, all on
+`POST /api/chat`) — confirmed against real `events` rows (`route` +
+`message` columns), not assumed.
+
+**Root cause**: `finalizeReply()` runs inside `sendMessageStream()`'s
+`generate()` async generator, which the route's `ReadableStream.pull()`
+drives. By the time `pull()` calls it, execution has passed through the
+`ReadableStream` spec's own internal callback scheduling — Next.js's
+`after()` relies on `AsyncLocalStorage`-based request-scope tracking
+(see `node_modules/next/dist/docs/01-app/03-api-reference/04-functions/after.md`),
+and that scope does not survive a `ReadableStream`'s `start`/`pull`/
+`cancel` callbacks. This is invisible at the type level and in local
+manual testing that doesn't specifically exercise the streaming path
+end-to-end against a real deployed request — it only surfaces at
+runtime, in production.
+
+**Standing architectural rule, from now on**: `after()` may only be
+called synchronously from a route handler's own top-level function body
+(or a Server Component/Server Function, per Next's docs) — **never**
+from a generator, a service function called from inside a
+`ReadableStream` callback, or any other internal layer. If a background
+task's data (like the full streamed reply text) is only known partway
+through a stream, the pattern is: the callee exposes a `Promise` that
+resolves once that data is ready, and the route handler registers a
+single `after()` — still in its own valid scope, before returning the
+`Response` — whose callback `await`s that promise and only then runs
+the actual work. See `finalizeReply()` / `sendMessageStream()`'s
+`backgroundTasksReady` in `features/chat/services/send-message.ts`, and
+the `after()` registration in `handleStreamRequest()` in
+`app/api/chat/route.ts`, for the reference implementation of this
+pattern. **Do not move `after()` back inside `finalizeReply()` or any
+other non-route-handler layer** — this is exactly the regression this
+amendment exists to prevent.
+
+Fixed and verified end-to-end (real streaming request against a real
+database, not just typechecked) in commit `212b248`.
+
 ## Related
 
 - ADR-0003 AI Provider Abstraction
 - ADR-0016 AIProvider Structured Output
 - `docs/engineering/ALPHA_BACKLOG.md` (P2-1)
+- `docs/engineering/DEPLOY_RUNBOOK.md`
 - `ai/provider.ts`, `ai/providers/openai-provider.ts`,
   `features/chat/services/send-message.ts`, `app/api/chat/route.ts`,
   `app/chat/page.tsx`

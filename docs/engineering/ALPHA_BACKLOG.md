@@ -14,10 +14,11 @@ futuras.
 
 ## P0 — Crítico
 
-Ninguno abierto al cierre de este sprint (2026-07-18). Todos los P0
-reales encontrados durante el pilotaje (auth intermitente, conversación
-perdida al recargar, input inaccesible en conversaciones largas) fueron
-arreglados el mismo día que se detectaron — ver "Resueltos" abajo.
+Ninguno abierto al cierre de este sprint (2026-07-24, War Room). Dos P0
+reales, ambos encontrados y cerrados el mismo día contra evidencia real
+de producción (logs de `events`, y las funciones de `core/life`
+ejecutadas directo contra los 13 usuarios reales) — ver "Resueltos"
+abajo y ADR-0017 (amendment 2026-07-24).
 
 ---
 
@@ -230,3 +231,33 @@ código:
    serializada en un `sql` crudo de `/admin` (`events.createdAt >=
    today` fallaba con `ERR_INVALID_ARG_TYPE`) → reemplazado por
    helpers de Drizzle (`and`, `gte`), verificado contra datos reales.
+
+## Resueltos (2026-07-24, War Room)
+
+Ambos verificados contra datos/runtime reales de producción, no solo
+lectura de código — ver ADR-0017 (amendment) y `DEPLOY_RUNBOOK.md`:
+
+9. **25 errores de producción, 100% en `POST /api/chat`** (`` `after`
+   was called outside a request scope ``): `finalizeReply` llamaba
+   `after()` desde dentro del generador que alimenta el streaming —
+   ahí Next.js ya perdió el scope de la petición. Corregido moviendo el
+   registro de `after()` al route handler (scope válido, antes de
+   devolver el stream); `sendMessageStream` expone
+   `backgroundTasksReady` para que el handler espere el resultado.
+   Verificado con streaming real contra la base local (título generado
+   correctamente, cero errores nuevos). Commit `212b248`, desplegado.
+10. **Dashboard/Life vacío para los 13 usuarios reales**: migración
+    `0011_left_imperial_guard` (tablas `life_goals`/`life_projects`/
+    `life_habits`/`life_routines`/`life_relationships`) estaba
+    commiteada desde hace días pero nunca se corrió contra producción —
+    nada en el pipeline de Vercel ejecutaba `drizzle-kit migrate`
+    automáticamente. Confirmado corriendo `listActiveGoals`,
+    `listActiveProjects`, `getUpcomingDeadlines`, `buildMorningBrief`
+    directo contra los 13 usuarios reales: 100% fallaban con `relation
+    "life_goals" does not exist`. Corregido aplicando la migración
+    contra producción; re-verificado después: 0/13 fallos. Prevención
+    permanente: `package.json`'s `build` ahora es `drizzle-kit migrate
+    && next build` — cada deploy aplica migraciones pendientes antes de
+    construir, y falla ruidosamente si `drizzle-kit migrate` no puede
+    aplicarlas, en vez de desplegar código que espera tablas que no
+    existen (ver `DEPLOY_RUNBOOK.md`).
