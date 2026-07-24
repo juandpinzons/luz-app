@@ -82,8 +82,11 @@ that the app works. Confirm manually:
    group by route, message;
    ```
 
-A fuller, automated version of this checklist is the next planned P1
-item (see `ALPHA_BACKLOG.md`); until then this manual pass is the gate.
+The full scope of this checklist — preconditions, steps, and success
+criteria per flow, plus what a smoke test does and doesn't guarantee —
+is `docs/engineering/SMOKE_TEST_PLAN.md`. Login, first message
+(streaming), and Dashboard are the first three flows planned for
+automation; until they're built, this manual pass is the gate.
 
 ## Checking migration status directly
 
