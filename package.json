@@ -13,7 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "worker": "tsx --env-file=.env worker/index.ts",
     "worker:dev": "tsx --env-file=.env watch worker/index.ts",
-    "smoke": "tsx --env-file=.env.smoke smoke/runner.ts"
+    "smoke": "tsx --env-file=.env smoke/runner.ts",
+    "smoke:prod": "tsx --env-file=.env.smoke smoke/runner.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",

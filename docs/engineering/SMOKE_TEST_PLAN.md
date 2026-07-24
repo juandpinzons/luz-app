@@ -161,14 +161,25 @@ smoke/
     http.ts               -- fetch wrapper carrying the session cookie
 ```
 
-Run with `npm run smoke` (all flows) or `npm run smoke -- --flow
-<name>` (one flow — still self-contained, the runner resets the
-fixture account before any flow regardless of which one is selected).
-Needs `.env.smoke` (gitignored — copy `.env.smoke.example`) pointing
-`DATABASE_URL` at whichever environment you're testing, normally
-production. Each flow throws to fail; the runner catches it, prints
-PASS/FAIL with duration, and exits `1` if anything failed — ready to
-wire into CI later without changes.
+**Environment, safe by default** (added 2026-07-24, same day, after
+first running the suite surfaced the risk directly):
+
+- `npm run smoke` — targets `http://localhost:3000` by default (see
+  `DEFAULT_BASE_URL` in `smoke/utils/http.ts`), reads `.env` (local dev
+  DB). Requires `npm run dev` running in another terminal. **This is
+  the one to run casually — it can never touch production.**
+- `npm run smoke:prod` — the only way to target production. Reads
+  `.env.smoke` (gitignored, copy `.env.smoke.example`), which fixes
+  `SMOKE_BASE_URL` to the production alias explicitly. The runner also
+  prints a `⚠️ PRODUCCIÓN` banner whenever the resolved target matches
+  the known production URL, regardless of which script launched it.
+- `-- --flow <name>` filters to one flow either way — still
+  self-contained, the runner resets the fixture account before any
+  flow regardless of which one is selected.
+
+Each flow throws to fail; the runner catches it, prints PASS/FAIL with
+duration, and exits `1` if anything failed — ready to wire into CI
+later without changes.
 
 ### Test data
 
@@ -184,9 +195,25 @@ session. Every run starts from the same known-empty state — no flow
 depends on what a previous run left behind.
 
 **This account is a real, permanent row in production's `users`
-table by design.** Exclude it from any user-count report or the
-`/admin` dashboard once it exists (`email <> 'smoke-test@luz.internal'`,
-or filter the `@luz.internal` domain generally) — it will otherwise
-inflate real user metrics. It was already excluded from the
-2026-07-24 user report by construction (that report predates this
-account).
+table by design.** Safety rules (Founder, 2026-07-24), all documented
+in full in `smoke/utils/test-account.ts`:
+
+1. **Can never authenticate via real OAuth** — `.internal` isn't a
+   real TLD, no provider (Google is the only one today) can verify or
+   issue that email. Structural, not a convention to remember — holds
+   as long as Google stays the only provider; revisit if a
+   self-declared-email provider is ever added.
+2. **Marked in the data model**: `users.metadata = { fixture: true,
+   purpose: "smoke-test" }`, set on every reset — inspectable directly
+   on the row, not just inferable from the email's naming convention.
+3. **Excluded from metrics/analytics/`/admin`**: exclude
+   `email = 'smoke-test@luz.internal'` (or `metadata->>'fixture' =
+   'true'`) in any future reporting query or dashboard — that
+   dashboard isn't live in production yet, so today this is
+   documentation for when it ships, not an active filter in shipped
+   code. It was already excluded from the 2026-07-24 user report by
+   construction (that report predates this account).
+4. **Emails/notifications**: not applicable — no email or notification
+   system exists anywhere in the project yet (confirmed by a full
+   codebase search, 2026-07-24). If one is ever added, it must exclude
+   `metadata.fixture = true` accounts.

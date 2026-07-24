@@ -9,8 +9,36 @@ import { accountIdentities, sessions } from "../../auth/schema";
 import { createAccountIdentityResolver } from "../../auth/drizzle-identity-resolver";
 import type { LifeGraphContext } from "../../core/life";
 
-/** Dominio inexistente a propósito -- nunca puede colisionar con un email real de Google. */
+/**
+ * Cuenta fixture, real y permanente en `users` -- reglas de seguridad
+ * (Founder, 2026-07-24):
+ *
+ * 1. Nunca puede autenticarse por un proveedor OAuth real: `.internal`
+ *    no es un TLD real, ningún proveedor (Google es el único hoy,
+ *    `auth/providers`) puede verificar ni emitir ese email -- no es una
+ *    convención a respetar, es estructuralmente imposible mientras
+ *    Google siga siendo el único proveedor. Si algún día se agrega un
+ *    proveedor que deje al usuario declarar su propio email sin
+ *    verificarlo, esta garantía deja de sostenerse sola y hace falta
+ *    una comprobación activa -- no aplica hoy.
+ * 2. Marcada en el modelo de datos: `metadata` abajo, para que sea
+ *    inspeccionable directo en la fila, no solo por convención de
+ *    nombre de email.
+ * 3. Excluir de métricas/analytics/`/admin`: ver
+ *    docs/engineering/SMOKE_TEST_PLAN.md -- ese dashboard no existe
+ *    todavía en producción, así que hoy esto es documentación para
+ *    cuando se construya, no un filtro activo en código real.
+ * 4. Correos/notificaciones: no aplica -- no existe ningún sistema de
+ *    envío de emails o notificaciones en el proyecto todavía
+ *    (confirmado por búsqueda en el código, 2026-07-24). Si se agrega
+ *    uno, debe excluir cuentas con `metadata.fixture = true`.
+ */
 export const SMOKE_TEST_EMAIL = "smoke-test@luz.internal";
+
+export const SMOKE_TEST_METADATA = {
+  fixture: true,
+  purpose: "smoke-test",
+} as const;
 
 const SESSION_TTL_MS = 60 * 60 * 1000;
 
@@ -43,10 +71,14 @@ export interface TestAccount {
 export async function resetTestAccount(db: Database): Promise<TestAccount> {
   const [user] = await db
     .insert(users)
-    .values({ email: SMOKE_TEST_EMAIL, name: "Smoke Test" })
+    .values({
+      email: SMOKE_TEST_EMAIL,
+      name: "Smoke Test",
+      metadata: SMOKE_TEST_METADATA,
+    })
     .onConflictDoUpdate({
       target: users.email,
-      set: { name: "Smoke Test" },
+      set: { name: "Smoke Test", metadata: SMOKE_TEST_METADATA },
     })
     .returning();
 

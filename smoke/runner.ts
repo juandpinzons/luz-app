@@ -1,6 +1,6 @@
 import { db } from "../core/db/client";
 import { resetTestAccount } from "./utils/test-account";
-import { smokeBaseUrl } from "./utils/http";
+import { isProductionTarget, smokeBaseUrl } from "./utils/http";
 import { loginFlow } from "./login.test";
 import { firstMessageFlow } from "./first-message.test";
 import { dashboardFlow } from "./dashboard.test";
@@ -33,7 +33,10 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Smoke test -- ${flowsToRun.length} flujo(s) contra ${smokeBaseUrl()}\n`);
+  const target = isProductionTarget()
+    ? `${smokeBaseUrl()} ⚠️  PRODUCCIÓN`
+    : smokeBaseUrl();
+  console.log(`Smoke test -- ${flowsToRun.length} flujo(s) contra ${target}\n`);
 
   const account = await resetTestAccount(db);
   const results: SmokeResult[] = [];
