@@ -40,10 +40,23 @@ export interface SendMessageResult {
   reply: string;
 }
 
-/** `sendMessageStream` devuelve el `conversationId` antes de tocar la IA (ver `prepareMessage`), para que el llamador pueda comprometerse a una respuesta 200 antes de que empiece el streaming. */
+/**
+ * `sendMessageStream` devuelve el `conversationId` antes de tocar la IA
+ * (ver `prepareMessage`), para que el llamador pueda comprometerse a
+ * una respuesta 200 antes de que empiece el streaming.
+ *
+ * `backgroundTasksReady` resuelve (con las tareas de fondo de
+ * `finalizeReply`, o `[]` si el stream falló antes de llegar ahí) una
+ * vez que `textStream` termina de generarse — el llamador
+ * (`app/api/chat/route.ts`) debe registrar su propio `after()` ANTES
+ * de devolver el `Response`, todavía en scope de la petición, y
+ * esperar esta promesa desde ahí. Nunca queda sin resolver: ver el
+ * `catch` que envuelve todo el cuerpo de `generate()`.
+ */
 export interface SendMessageStreamResult {
   conversationId: string;
   textStream: AsyncGenerator<string, void, void>;
+  backgroundTasksReady: Promise<Promise<unknown>[]>;
 }
 
 interface ConversationRef {
@@ -252,7 +265,21 @@ interface FinalizeReplyInput {
  * iterar todo el stream) — se llama una sola vez, con el texto final,
  * nunca con fragmentos parciales.
  */
-async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
+/**
+ * Ya no llama a `after()` directamente (causa real de los 25 errores
+ * "`after` was called outside a request scope" en producción, todos
+ * en `POST /api/chat`): esta función corre dentro del `ReadableStream`
+ * de la ruta con streaming (`sendMessageStream` → `generate()` →
+ * `pull()`), y ahí `after()` pierde el scope de la petición original
+ * porque pasa por la maquinaria interna de `ReadableStream` — Next.js
+ * lo rechaza en runtime, no en build. La programación real vía
+ * `after()` la hace el llamador (`sendMessage` o
+ * `app/api/chat/route.ts`), que sí sigue en scope válido; esta función
+ * solo arranca las tareas y devuelve sus promesas.
+ */
+async function finalizeReply(
+  input: FinalizeReplyInput,
+): Promise<{ backgroundTasks: Promise<unknown>[] }> {
   const {
     context,
     lifeGraphContext,
@@ -272,15 +299,15 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     content: reply,
   });
 
+  const backgroundTasks: Promise<unknown>[] = [];
+
   // Título automático (Sprint de pulido, Alpha): solo en el primer
   // intercambio real de una conversación nueva — nunca en los
-  // siguientes mensajes, y siempre vía `after()` (ADR-0017: esta
-  // función corre dentro del `ReadableStream` de `/api/chat`, después
-  // de que la respuesta 200 ya empezó a viajar — no puede bloquear ni
-  // esperar acá). Si falla, `generateConversationTitle` ya se traga el
-  // error: la conversación nunca depende de que esto funcione.
+  // siguientes mensajes. `generateConversationTitle` ya se traga
+  // cualquier error internamente: la conversación nunca depende de que
+  // esto funcione.
   if (isNewConversation) {
-    after(() =>
+    backgroundTasks.push(
       generateConversationTitle(db, {
         conversationId,
         userMessage,
@@ -295,12 +322,11 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
   // clasificó y rankeó (`capturedMemory`, de `prepareMessage`) — nunca
   // un análisis independiente de `userMessage`/`reply` (ver
   // life-capture-service.ts: reemplaza a extract-life-entities.ts,
-  // que sí hacía eso — un pipeline paralelo, ya retirado). Mismo
-  // criterio de contención vía `after()`: nunca bloquea la respuesta,
-  // nunca puede romper la conversación. Se omite si la captura de
-  // Memory Engine falló o se omitió arriba.
+  // que sí hacía eso — un pipeline paralelo, ya retirado).
+  // `captureLifeEntityFromMemory` también se traga sus propios errores.
+  // Se omite si la captura de Memory Engine falló o se omitió arriba.
   if (lifeGraphContext && capturedMemory) {
-    after(() =>
+    backgroundTasks.push(
       captureLifeEntityFromMemory(db, lifeGraphContext, capturedMemory),
     );
   }
@@ -337,6 +363,8 @@ async function finalizeReply(input: FinalizeReplyInput): Promise<void> {
     userId: context.userId,
     metadata: { conversationId, durationMs: totalDurationMs },
   });
+
+  return { backgroundTasks };
 }
 
 /**
@@ -393,7 +421,11 @@ export async function sendMessage(
     durationMs: Date.now() - openaiStart,
   });
 
-  await finalizeReply({
+  // Sin streaming de por medio: esta función corre síncronamente dentro
+  // del scope de la petición original de `app/api/chat/route.ts`, así
+  // que `after()` sí es válido acá (a diferencia de `sendMessageStream`,
+  // ver `finalizeReply`).
+  const { backgroundTasks } = await finalizeReply({
     context: input.context,
     lifeGraphContext: input.lifeGraphContext,
     conversationId: prepared.conversationId,
@@ -404,6 +436,7 @@ export async function sendMessage(
     reply,
     capturedMemory: prepared.capturedMemory,
   });
+  after(() => Promise.all(backgroundTasks));
 
   return { conversationId: prepared.conversationId, reply };
 }
@@ -432,51 +465,72 @@ export async function sendMessageStream(
   const prepared = await prepareMessage(input);
   const aiProvider = getAIProvider();
 
+  let resolveBackgroundTasks!: (tasks: Promise<unknown>[]) => void;
+  const backgroundTasksReady = new Promise<Promise<unknown>[]>((resolve) => {
+    resolveBackgroundTasks = resolve;
+  });
+
   async function* generate(): AsyncGenerator<string, void, void> {
     const openaiStart = Date.now();
     let fullReply = "";
 
     try {
-      for await (const chunk of aiProvider.generateReplyStream(
-        prepared.aiMessages,
-      )) {
-        fullReply += chunk;
-        yield chunk;
+      try {
+        for await (const chunk of aiProvider.generateReplyStream(
+          prepared.aiMessages,
+        )) {
+          fullReply += chunk;
+          yield chunk;
+        }
+      } catch (error) {
+        logger.log({
+          event: "openai.request_failed",
+          severity: "error",
+          requestId: input.requestId,
+          conversationId: prepared.conversationId,
+          provider: aiProvider.name,
+          durationMs: Date.now() - openaiStart,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
       }
-    } catch (error) {
+
       logger.log({
-        event: "openai.request_failed",
-        severity: "error",
+        event: "openai.response",
         requestId: input.requestId,
         conversationId: prepared.conversationId,
         provider: aiProvider.name,
+        replyLength: fullReply.length,
         durationMs: Date.now() - openaiStart,
-        error: error instanceof Error ? error.message : String(error),
       });
+
+      const { backgroundTasks } = await finalizeReply({
+        context: input.context,
+        lifeGraphContext: input.lifeGraphContext,
+        conversationId: prepared.conversationId,
+        isNewConversation: prepared.isNewConversation,
+        userMessage: input.message,
+        requestId: input.requestId,
+        startedAt,
+        reply: fullReply,
+        capturedMemory: prepared.capturedMemory,
+      });
+      resolveBackgroundTasks(backgroundTasks);
+    } catch (error) {
+      // Red de seguridad: si el stream falla antes de llegar a
+      // `finalizeReply` (error de IA, de `finalizeReply` mismo, etc.),
+      // `backgroundTasksReady` igual debe resolver — si no, el `after()`
+      // que el llamador registra en `app/api/chat/route.ts` queda
+      // esperando para siempre (hasta `maxDuration`). El error real ya
+      // se relanza tal cual: `pull()` en la ruta lo captura y registra.
+      resolveBackgroundTasks([]);
       throw error;
     }
-
-    logger.log({
-      event: "openai.response",
-      requestId: input.requestId,
-      conversationId: prepared.conversationId,
-      provider: aiProvider.name,
-      replyLength: fullReply.length,
-      durationMs: Date.now() - openaiStart,
-    });
-
-    await finalizeReply({
-      context: input.context,
-      lifeGraphContext: input.lifeGraphContext,
-      conversationId: prepared.conversationId,
-      isNewConversation: prepared.isNewConversation,
-      userMessage: input.message,
-        requestId: input.requestId,
-      startedAt,
-      reply: fullReply,
-      capturedMemory: prepared.capturedMemory,
-    });
   }
 
-  return { conversationId: prepared.conversationId, textStream: generate() };
+  return {
+    conversationId: prepared.conversationId,
+    textStream: generate(),
+    backgroundTasksReady,
+  };
 }

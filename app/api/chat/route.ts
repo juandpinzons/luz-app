@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { checkRateLimit } from "@/features/chat/services/check-rate-limit";
 import { getLatestConversation } from "@/features/chat/services/get-latest-conversation";
@@ -241,7 +241,21 @@ async function handleStreamRequest(
     );
   }
 
-  const { conversationId, textStream } = streamResult;
+  const { conversationId, textStream, backgroundTasksReady } = streamResult;
+
+  // `after()` debe registrarse acá, todavía en el scope síncrono de la
+  // petición — nunca dentro del `ReadableStream` de abajo (`start`/
+  // `pull` corren fuera de ese scope, causa real de los 25 errores
+  // "`after` was called outside a request scope" vistos en producción,
+  // todos en esta ruta). Su callback simplemente espera a que
+  // `sendMessageStream` termine de generar y resuelva las tareas de
+  // fondo (título, captura de Life) — nunca queda sin resolver, ver
+  // `backgroundTasksReady` en `features/chat/services/send-message.ts`.
+  after(async () => {
+    const backgroundTasks = await backgroundTasksReady;
+    await Promise.all(backgroundTasks);
+  });
+
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
