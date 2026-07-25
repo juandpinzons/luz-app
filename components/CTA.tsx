@@ -16,7 +16,7 @@ export default function CTA() {
           href="/dashboard"
           className="mt-8 inline-block rounded-full bg-white text-black px-8 py-3 hover:bg-zinc-200 transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
-          Abrir LUZ
+          Entrar
         </Link>
       </div>
     </section>

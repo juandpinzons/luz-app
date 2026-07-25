@@ -26,7 +26,7 @@ export default function LifeError({
 
   return (
     <ErrorState
-      title="No pudimos cargar tu Life."
+      title="No pudimos cargar tu vida."
       description="Intenta de nuevo en un momento."
       onRetry={() => unstable_retry()}
       fullHeight={false}

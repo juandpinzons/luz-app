@@ -79,7 +79,7 @@ export default async function MemoriesPage({
     <main className="min-h-full px-6 py-10 text-white">
       <div className="mx-auto w-full max-w-2xl">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-light tracking-[0.25em]">MEMORIAS</h1>
+          <h1 className="text-xl font-light tracking-[0.25em]">RECUERDOS</h1>
         </div>
 
         <form method="GET" action="/memories" className="mt-6 flex gap-2">
@@ -87,8 +87,8 @@ export default async function MemoriesPage({
             type="text"
             name="q"
             defaultValue={searchTerm ?? ""}
-            placeholder="Buscar en tus memorias..."
-            aria-label="Buscar en tus memorias"
+            placeholder="Buscar en tus recuerdos..."
+            aria-label="Buscar en tus recuerdos"
             className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white focus-visible:ring-luz"
           />
           <button
@@ -102,7 +102,7 @@ export default async function MemoriesPage({
         {!hasResults && (
           <p className="animate-fade-in mt-10 text-sm text-zinc-500">
             {searchTerm
-              ? "No encontré memorias con eso."
+              ? "No encontré recuerdos con eso."
               : "Esto se va a ir llenando con lo que me vayas contando."}
           </p>
         )}

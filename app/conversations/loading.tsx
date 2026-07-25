@@ -6,7 +6,7 @@ export default function ConversationsLoading() {
     <main className="min-h-screen bg-black px-6 py-10 text-white">
       <div className="mx-auto w-full max-w-2xl">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-light tracking-[0.25em]">HISTORIAL</h1>
+          <h1 className="text-xl font-light tracking-[0.25em]">CONVERSACIONES</h1>
         </div>
 
         <Skeleton className="mt-6 h-12 w-full" />

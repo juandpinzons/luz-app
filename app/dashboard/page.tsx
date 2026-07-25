@@ -296,7 +296,7 @@ export default async function DashboardPage() {
         {upcomingDeadlines.length > 0 && (
           <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
             <h2 className="text-sm font-medium text-zinc-400">
-              Próximos a vencer
+              Lo que se acerca
             </h2>
             <ul className="mt-3 space-y-2">
               {upcomingDeadlines.map((item, index) => (

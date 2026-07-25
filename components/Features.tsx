@@ -4,31 +4,31 @@ export default function Features() {
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
         <div className="rounded-2xl border border-zinc-800 p-8">
           <h3 className="text-xl font-semibold mb-3">
-            Conversaciones conscientes
+            Conversaciones sin prisa
           </h3>
 
           <p className="text-zinc-400">
-            Habla con una IA diseñada para acompañarte, no para presionarte.
+            LUZ te escucha sin juzgar y sin apurarte a llegar a ninguna parte.
           </p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 p-8">
           <h3 className="text-xl font-semibold mb-3">
-            Diario personal
+            Recuerdos que se guardan solos
           </h3>
 
           <p className="text-zinc-400">
-            Guarda pensamientos, emociones y reflexiones en un solo lugar.
+            No hace falta que anotes nada — LUZ recuerda lo que le cuentas.
           </p>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 p-8">
           <h3 className="text-xl font-semibold mb-3">
-            Reflexiones inteligentes
+            Comprensión que crece contigo
           </h3>
 
           <p className="text-zinc-400">
-            LUZ identifica patrones y te ayuda a comprender mejor tu proceso.
+            LUZ reconoce patrones en lo que compartimos y te ayuda a verte con más claridad.
           </p>
         </div>
       </div>

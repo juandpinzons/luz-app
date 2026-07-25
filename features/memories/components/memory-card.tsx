@@ -34,11 +34,11 @@ export function MemoryCard({
         <div className="mt-2 space-y-1 text-xs text-zinc-500">
           {connectedContents.map((content, index) => (
             <p key={`connected-${index}`}>
-              ⟶ conectada con: &ldquo;{content}&rdquo;
+              — también pensé en esto: &ldquo;{content}&rdquo;
             </p>
           ))}
           {mentionedLifeTitles.map((title) => (
-            <p key={`mentions-${title}`}>⟶ menciona: {title}</p>
+            <p key={`mentions-${title}`}>— tiene que ver con {title}</p>
           ))}
         </div>
       )}

@@ -26,7 +26,7 @@ export default function MemoriesError({
 
   return (
     <ErrorState
-      title="No pudimos cargar tus memorias."
+      title="No pudimos cargar tus recuerdos."
       description="Intenta de nuevo en un momento."
       onRetry={() => unstable_retry()}
       fullHeight={false}

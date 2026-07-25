@@ -26,7 +26,7 @@ export default function ConversationsError({
 
   return (
     <ErrorState
-      title="No pudimos cargar tu historial."
+      title="No pudimos cargar tus conversaciones."
       description="Intenta de nuevo en un momento."
       onRetry={() => unstable_retry()}
       fullHeight={false}

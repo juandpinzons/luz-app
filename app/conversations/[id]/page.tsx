@@ -71,7 +71,7 @@ export default async function ConversationDetailPage({
           href="/conversations"
           className="rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
-          Historial
+          Conversaciones
         </Link>
       </header>
 

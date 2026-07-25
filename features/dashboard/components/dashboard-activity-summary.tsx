@@ -90,7 +90,7 @@ export function DashboardActivitySummary({
               href="/conversations"
               className="rounded text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
             >
-              Ver historial
+              Ver conversaciones
             </Link>
           </div>
           <div className="mt-3 space-y-2">

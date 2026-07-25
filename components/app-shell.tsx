@@ -14,9 +14,9 @@ const SECTIONS: Array<{
   label: string;
   href: string;
 }> = [
-  { id: "dashboard", label: "Dashboard", href: "/dashboard" },
-  { id: "life", label: "Life", href: "/life" },
-  { id: "memories", label: "Memories", href: "/memories" },
+  { id: "dashboard", label: "Hoy", href: "/dashboard" },
+  { id: "life", label: "Vida", href: "/life" },
+  { id: "memories", label: "Recuerdos", href: "/memories" },
   { id: "chat", label: "Conversación", href: "/chat" },
 ];
 

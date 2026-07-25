@@ -26,7 +26,7 @@ export default function DashboardError({
 
   return (
     <ErrorState
-      title="No pudimos cargar tu Dashboard."
+      title="No pudimos cargar tu día."
       description="Intenta de nuevo en un momento."
       onRetry={() => unstable_retry()}
       fullHeight={false}
