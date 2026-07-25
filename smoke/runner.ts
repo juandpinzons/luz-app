@@ -4,6 +4,7 @@ import { isProductionTarget, smokeBaseUrl } from "./utils/http";
 import { loginFlow } from "./login.test";
 import { firstMessageFlow } from "./first-message.test";
 import { dashboardFlow } from "./dashboard.test";
+import { conversationStrategyFlow } from "./conversation-strategy.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -12,7 +13,12 @@ import type { SmokeFlow, SmokeResult } from "./types";
  * flujo nuevo es un archivo `<nombre>.test.ts` que exporte un
  * `SmokeFlow` + una línea acá, nunca reestructurar esto.
  */
-const ALL_FLOWS: SmokeFlow[] = [loginFlow, firstMessageFlow, dashboardFlow];
+const ALL_FLOWS: SmokeFlow[] = [
+  loginFlow,
+  firstMessageFlow,
+  dashboardFlow,
+  conversationStrategyFlow,
+];
 
 function parseFlowArg(argv: string[]): string | undefined {
   const idx = argv.indexOf("--flow");

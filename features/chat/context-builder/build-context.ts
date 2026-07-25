@@ -1,3 +1,4 @@
+import { createConversationStrategyEngine } from "../../../core/conversation-strategy-engine";
 import { createContextEngine } from "../../../core/context-engine";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
@@ -12,15 +13,16 @@ import type {
 
 /**
  * Determinista, sin IA — tres casos observables directamente, no un
- * clasificador. `conversation` incluye el mensaje que se está
- * respondiendo — `length <= 1` significa que no existe ningún turno
- * previo, la primera vez que esta conversación tiene contenido.
+ * clasificador. `isFirstContact` (`conversation.length <= 1`, sin
+ * ningún turno previo) se calcula una sola vez en `buildContext` y se
+ * pasa aquí — el mismo criterio que también necesita
+ * `ConversationStrategyEngine.select()`, nunca recalculado dos veces.
  */
 function determineResponseIntent(
-  conversation: ConversationTurn[],
+  isFirstContact: boolean,
   memories: Context["memories"],
 ): ResponseIntent {
-  if (conversation.length <= 1) {
+  if (isFirstContact) {
     return "first_contact";
   }
   if (memories.length > 0) {
@@ -31,21 +33,23 @@ function determineResponseIntent(
 
 /**
  * El puente explícito entre Conversation, Memory, Reality Snapshot,
- * Context Engine y Conversation Manual (Sprint B3, Beta 1 Roadmap;
- * Context Engine integrado Fase II). Consume únicamente información ya
+ * Context Engine, Conversation Strategy Engine y Conversation Manual
+ * (Sprint B3, Beta 1 Roadmap; Context Engine y Conversation Strategy
+ * Engine integrados en Fase II). Consume únicamente información ya
  * existente — ninguna fuente nueva: `assembleRealitySnapshot`
  * (Sprint B2) sigue siendo la única forma de obtener memorias
  * relevantes, nunca una segunda consulta paralela.
  *
- * `ContextEngine.build()` (ADR-0013, `core/context-engine`, sin
- * implementación real hasta ahora) es quien decide, cruzando las
- * cuatro fuentes de `RealitySnapshot`, qué merece atención en esta
- * respuesta puntual — antes de este cambio, cada regla decidía por su
- * cuenta si "aplicaba" y volcaba toda su fuente sin comparar contra
- * las demás, y `life` (goals/projects/habits activos) se calculaba en
- * `assembleRealitySnapshot` y nunca se usaba en ningún lado. Las
- * reglas del Conversation Manual ahora reciben esa decisión ya tomada
- * (`contextItems`), nunca las fuentes crudas por separado.
+ * `ContextEngine.build()` (ADR-0013, `core/context-engine`) decide,
+ * cruzando las cuatro fuentes de `RealitySnapshot`, qué merece
+ * atención en esta respuesta puntual. `ConversationStrategyEngine.select()`
+ * (`core/conversation-strategy-engine`) va un paso más allá: a partir
+ * de esa misma decisión, decide CÓMO conversar — una de ocho posturas
+ * deterministas (Listen/Clarify/Encourage/Challenge/Celebrate/Remind/
+ * Plan/FollowUp), nunca elegida por el modelo. Las reglas del
+ * Conversation Manual y el Prompt Builder reciben ambas decisiones ya
+ * tomadas (`contextItems`, `conversationStrategy`), nunca las fuentes
+ * crudas por separado.
  *
  * Requiere `LifeGraphContext` real — igual que `assembleRealitySnapshot`
  * y `MemoryEngine.capture`. El llamador decide qué hacer si no existe
@@ -62,6 +66,7 @@ export async function buildContext(
   // Reality Snapshot seleccione memorias relevantes para ESTE mensaje,
   // no las de mayor rank global (`selectContextualMemories`).
   const currentMessage = conversation.at(-1)?.content;
+  const isFirstContact = conversation.length <= 1;
   const realitySnapshot = await assembleRealitySnapshot(db, lifeGraphContext, {
     currentMessage,
   });
@@ -73,6 +78,17 @@ export async function buildContext(
   );
   const contextItems = engineContext.items;
 
+  // Conversation Strategy Engine (Fase II): inmediatamente después de
+  // Context Engine, antes del Prompt Builder (`renderContextToMessages`,
+  // `render-context.ts`) — nunca vuelve a consultar Memory Engine,
+  // Knowledge Engine ni Life State por su cuenta, solo lo que
+  // `realitySnapshot` y `contextItems` ya trajeron.
+  const conversationStrategy = createConversationStrategyEngine().select({
+    realitySnapshot,
+    contextItems,
+    isFirstContact,
+  });
+
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
     (rule) => rule.applies({ conversation, contextItems }),
   ).map((rule) => ({
@@ -80,13 +96,14 @@ export async function buildContext(
     instruction: rule.directive({ conversation, contextItems }),
   }));
 
-  const responseIntent = determineResponseIntent(conversation, memories);
+  const responseIntent = determineResponseIntent(isFirstContact, memories);
 
   return {
     conversation,
     memories,
     realitySnapshot,
     contextItems,
+    conversationStrategy,
     conversationRules,
     responseIntent,
   };

@@ -1,3 +1,4 @@
+import type { ConversationStrategyDirective } from "../../../core/conversation-strategy-engine";
 import type { ContextItem } from "../../../core/context-engine";
 import type { RealityMemoryItem } from "../../../core/reality";
 import type { RealitySnapshot } from "../../../core/reality";
@@ -48,12 +49,23 @@ export type ResponseIntent =
  * life/memory/insight/signal y ya recortado — las reglas del
  * Conversation Manual lo consumen en vez de decidir cada una por su
  * cuenta qué tanto de su propia fuente mostrar.
+ *
+ * `conversationStrategy` es la salida de
+ * `ConversationStrategyEngine.select()` (`core/conversation-strategy-engine`,
+ * Fase II) sobre ese mismo `contextItems` — no qué mostrar, sino cómo
+ * conversar: una de ocho posturas (Listen/Clarify/Encourage/Challenge/
+ * Celebrate/Remind/Plan/FollowUp), siempre exactamente una, nunca
+ * ausente (`ListenStrategyRule` es un catch-all incondicional). El
+ * Prompt Builder (`render-context.ts`) la traduce a un bloque de
+ * prompt explícito — el modelo recibe la intención ya decidida, nunca
+ * la decide él.
  */
 export interface Context {
   conversation: ConversationTurn[];
   memories: RealityMemoryItem[];
   realitySnapshot: RealitySnapshot;
   contextItems: ContextItem[];
+  conversationStrategy: ConversationStrategyDirective;
   conversationRules: RuleDirective[];
   responseIntent: ResponseIntent;
 }
