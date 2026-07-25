@@ -12,6 +12,14 @@ export interface ContextItem {
   sourceId?: EntityId;
   source: ContextItemSource;
   label: string;
+  /**
+   * Para cuándo importa este item, si su fuente lo sabe — hoy solo
+   * `life` lo trae (`LifeStateItem.dueDate`, `core/reality`). Existe
+   * aquí, no en un tipo aparte, porque `ContextScoringStrategy`
+   * (proximidad a un deadline) solo recibe `ContextItem[]`, nunca el
+   * `RealitySnapshot` completo — ver `context-scoring-strategy.ts`.
+   */
+  dueDate?: Date;
   /** 0-100. */
   relevanceScore: number;
 }

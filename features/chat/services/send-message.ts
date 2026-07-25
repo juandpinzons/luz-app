@@ -198,6 +198,7 @@ async function prepareMessage(
         requestId,
         conversationId,
         memoriesCount: builtContext.memories.length,
+        contextItemsCount: builtContext.contextItems.length,
         rulesApplied: builtContext.conversationRules.length,
         durationMs: Date.now() - contextBuilderStart,
       });

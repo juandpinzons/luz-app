@@ -1,3 +1,4 @@
+import { createContextEngine } from "../../../core/context-engine";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { assembleRealitySnapshot } from "../services/assemble-reality-snapshot";
@@ -29,11 +30,22 @@ function determineResponseIntent(
 }
 
 /**
- * El puente explícito entre Conversation, Memory, Reality Snapshot y
- * Conversation Manual (Sprint B3, Beta 1 Roadmap). Consume únicamente
- * información ya existente — ninguna fuente nueva: `assembleRealitySnapshot`
+ * El puente explícito entre Conversation, Memory, Reality Snapshot,
+ * Context Engine y Conversation Manual (Sprint B3, Beta 1 Roadmap;
+ * Context Engine integrado Fase II). Consume únicamente información ya
+ * existente — ninguna fuente nueva: `assembleRealitySnapshot`
  * (Sprint B2) sigue siendo la única forma de obtener memorias
  * relevantes, nunca una segunda consulta paralela.
+ *
+ * `ContextEngine.build()` (ADR-0013, `core/context-engine`, sin
+ * implementación real hasta ahora) es quien decide, cruzando las
+ * cuatro fuentes de `RealitySnapshot`, qué merece atención en esta
+ * respuesta puntual — antes de este cambio, cada regla decidía por su
+ * cuenta si "aplicaba" y volcaba toda su fuente sin comparar contra
+ * las demás, y `life` (goals/projects/habits activos) se calculaba en
+ * `assembleRealitySnapshot` y nunca se usaba en ningún lado. Las
+ * reglas del Conversation Manual ahora reciben esa decisión ya tomada
+ * (`contextItems`), nunca las fuentes crudas por separado.
  *
  * Requiere `LifeGraphContext` real — igual que `assembleRealitySnapshot`
  * y `MemoryEngine.capture`. El llamador decide qué hacer si no existe
@@ -54,13 +66,18 @@ export async function buildContext(
     currentMessage,
   });
   const memories = realitySnapshot.memory.items;
-  const insights = realitySnapshot.insights.items;
+
+  const engineContext = await createContextEngine().build(
+    realitySnapshot,
+    lifeGraphContext,
+  );
+  const contextItems = engineContext.items;
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
-    (rule) => rule.applies({ conversation, memories, insights }),
+    (rule) => rule.applies({ conversation, contextItems }),
   ).map((rule) => ({
     ruleId: rule.id,
-    instruction: rule.directive({ conversation, memories, insights }),
+    instruction: rule.directive({ conversation, contextItems }),
   }));
 
   const responseIntent = determineResponseIntent(conversation, memories);
@@ -69,6 +86,7 @@ export async function buildContext(
     conversation,
     memories,
     realitySnapshot,
+    contextItems,
     conversationRules,
     responseIntent,
   };

@@ -35,11 +35,11 @@ const RELEVANT_INSIGHT_LIMIT = 3;
  * neutral `LifeStateItem` vive aquí — la frontera anti-corrupción que
  * ADR-0013 exige, nunca dentro de `core/reality` ni de ningún engine.
  */
-function toLifeStateItem(entity: {
-  id: EntityId;
-  title: string;
-}): LifeStateItem {
-  return { id: entity.id, title: entity.title };
+function toLifeStateItem(
+  entity: { id: EntityId; title: string },
+  dueDate?: Date,
+): LifeStateItem {
+  return { id: entity.id, title: entity.title, dueDate };
 }
 
 export async function assembleRealitySnapshot(
@@ -116,9 +116,11 @@ export async function assembleRealitySnapshot(
     // "absence must be represented as absence"), ya no por un límite
     // de la implementación.
     life: {
-      activeGoals: activeGoals.map(toLifeStateItem),
-      activeProjects: activeProjects.map(toLifeStateItem),
-      activeHabits: activeHabits.map(toLifeStateItem),
+      activeGoals: activeGoals.map((goal) => toLifeStateItem(goal, goal.targetDate)),
+      activeProjects: activeProjects.map((project) =>
+        toLifeStateItem(project, project.dueDate),
+      ),
+      activeHabits: activeHabits.map((habit) => toLifeStateItem(habit)),
     },
     // Retrieval estructurado (ADR-0004), ordenado por rank — la mitad
     // semántica (PR-020) no existe todavía. "Relevante" hoy significa
@@ -126,8 +128,8 @@ export async function assembleRealitySnapshot(
     // Sin memorias con señal real de comprensión, `items` queda vacío
     // a propósito — nunca se rellena con lo mejor disponible aunque no
     // alcance la barra: forzar continuidad sobre algo superficial no es
-    // continuidad real (ver FavorContinuityRule y build-morning-brief.ts,
-    // los dos consumidores de este snapshot).
+    // continuidad real (ver FavorPrioritizedContextRule y
+    // build-morning-brief.ts, los dos consumidores de este snapshot).
     memory: {
       items: memoriesWithRealSignal.map((memory) => ({
         id: memory.id,

@@ -12,6 +12,13 @@ import type { EntityId } from "../life/value-objects/entity-id";
 export interface LifeStateItem {
   id: EntityId;
   title: string;
+  /**
+   * Unifica `Goal.targetDate` y `Project.dueDate` en una sola forma
+   * neutral — ambas expresan lo mismo desde `core/reality`: "para
+   * cuándo importa esto". `Habit` no tiene fecha natural, así que
+   * queda `undefined` para hábitos, nunca inventada.
+   */
+  dueDate?: Date;
 }
 
 /** Estado estructurado del Life Graph relevante para un engine, no todo el grafo. */

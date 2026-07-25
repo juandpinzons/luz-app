@@ -1,12 +1,18 @@
+import type { ContextItem } from "../../../../core/context-engine";
 import type { ConversationTurn } from "../context";
-import type { RealityInsightItem, RealityMemoryItem } from "../../../../core/reality";
 
-/** Lo mínimo que una regla necesita para decidir si aplica y qué decir. */
+/**
+ * Lo mínimo que una regla necesita para decidir si aplica y qué decir.
+ * `contextItems` reemplaza los arreglos separados `memories`/`insights`
+ * que existían antes de Context Engine (Fase II): ya es la decisión de
+ * qué merece atención, cruzada entre life/memory/insight/signal y
+ * recortada por `ContextEngine.build()` — ninguna regla vuelve a
+ * decidir eso por su cuenta, cada una solo decide cómo reaccionar a la
+ * decisión ya tomada.
+ */
 export interface ConversationRuleInput {
   conversation: ConversationTurn[];
-  memories: RealityMemoryItem[];
-  /** Insights ya validados del Knowledge Engine (2026-07-25) — conocimiento a través del tiempo, distinto de `memories` ("qué pasó"). */
-  insights: RealityInsightItem[];
+  contextItems: ContextItem[];
 }
 
 /**
