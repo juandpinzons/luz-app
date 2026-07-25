@@ -1,0 +1,122 @@
+# Observability Plan
+
+Status: Proposed\
+Owner: Founder\
+Last verified: 2026-07-24
+
+Scope first, same discipline as `SMOKE_TEST_PLAN.md`: it's easy to
+start emitting metrics and end up with data nobody looks at. Every
+metric below answers a real operational question, has a threshold, an
+owner, and a next action — a metric that doesn't clear that bar isn't
+in this plan.
+
+**Owner, for all of it, today**: the Founder — this is a team of one
+plus Claude as copilot. "Owner" columns below aren't a formality; they
+name who actually looks at it and does the next action, which matters
+once this grows past one person.
+
+## Three principles (Founder, 2026-07-24)
+
+1. **Every metric answers a question.** If it doesn't change an
+   operational decision, it doesn't belong on the panel.
+2. **Every metric has an owner** — a concrete answer to "if this
+   crosses its threshold, who looks, and at what first."
+3. **Every alert is actionable.** Never "something looks off" — always
+   the symptom plus where to look next. An alert that fires for a
+   *known, already-accepted* condition (see Knowledge Engine below) is
+   noise, not signal, and undermines trust in the rest.
+
+## What already exists vs. what's new
+
+Grounded against the real codebase, not assumed — this determines how
+much of this plan is "wire up a query" vs. "add instrumentation":
+
+| Already captured today | Where |
+|---|---|
+| Total message duration (request → finalize) | `events` (`type='message_sent'`, `metadata->>'durationMs'`) — written by `finalizeReply` in `send-message.ts` |
+| Errors, tagged by route | `events` (`type='error'`, `route`, `message`) — written by `recordEvent` in `app/api/chat/route.ts`, `app/api/conversations/[id]/route.ts` |
+| Knowledge job status/failure | `knowledge_jobs.status`, `.lastError` — written by `worker/index.ts` |
+| Migration drift | `drizzle.__drizzle_migrations` vs `core/db/migrations/meta/_journal.json` (see `DEPLOY_RUNBOOK.md`) — now auto-applied on every deploy, so this should always read zero pending |
+| Structured request-lifecycle logs | `core/observability/logger.ts` → Vercel stdout/stderr, e.g. `openai.response`, `api.request_completed`, `dashboard.*_failed` |
+
+| Needs new instrumentation | Why it doesn't exist yet |
+|---|---|
+| Time to first streamed token | Nothing currently timestamps the first SSE `chunk` in `handleStreamRequest` — `durationMs` on `message_sent` is *total* time, not first-token time, and total time is what ADR-0017 specifically tried to stop being the perceived-latency number |
+| Stream completed vs. aborted, as a rate | Derivable today from existing data (`message_sent` count = completed, `error` count on the same route = aborted/failed) — no new table, just a query that hadn't been written |
+| Title generation / Life Capture failures, recorded anywhere queryable | **Inconsistent today**: `life-capture-service.ts` logs failures via `logger.log` (console only); `generate-title.ts` logs via plain `console.error` (not even structured). Neither calls `recordEvent` — a failure here is invisible to any query, only visible if someone happens to grep Vercel logs at the right time |
+| DB query latency | Not instrumented in app code at all — see "Sistema" below, this one probably shouldn't be built here |
+
+## Metrics
+
+### Disponibilidad
+
+| Métrica | Fuente | Objetivo | Umbral | Acción |
+|---|---|---|---|---|
+| Requests a `/api/chat` | `events` (`message_sent` + `error` count, `route='POST /api/chat'`) | Volumen real de uso | Informativo — no alerta | — |
+| Tasa de éxito | `message_sent` / (`message_sent` + `error`) en la misma ventana | Detectar respuestas fallidas | < 99% en 15 min | Consultar `events.message` agrupado — el incidente de hoy (25 errores, 1 causa) se habría visto acá de inmediato |
+| Errores 5xx por ruta | `events` (`type='error'`, `group by route`) | Aislar qué endpoint se degrada | Incremento sostenido vs. la hora anterior | Revisar el `message` agrupado antes de asumir causa (regla ya aprendida hoy: nunca asumir, siempre leer el error real) |
+
+### Experiencia
+
+| Métrica | Fuente | Objetivo | Umbral | Acción |
+|---|---|---|---|---|
+| Latencia al primer token (P50/P95) | **Nuevo**: timestamp del primer `chunk` SSE en `handleStreamRequest`, guardado en `message_sent.metadata.firstTokenMs` | Medir lo que ADR-0017 existe para mejorar — percepción de respuesta rápida, no la generación completa | P95 a definir contra datos reales de esta semana antes de fijar un número (evitar un umbral inventado) | Revisar proveedor de IA (latencia de OpenAI) vs. tiempo previo (Context Builder, Memory Engine) en el mismo request |
+| Duración total del stream | Ya existe: `message_sent.metadata.durationMs` | Detectar generaciones anómalamente largas | P95 muy por encima de lo típico (ver `maxDuration = 60` en `route.ts` — el techo real de la plataforma) | Revisar si el mensaje era inusualmente largo o el proveedor estuvo lento |
+| Streams completados vs. abortados | Derivable hoy: `message_sent` vs `error` en `POST /api/chat` (sin tabla nueva) | Detectar streams que se cortan a mitad de camino | < 99% completados | Revisar `events.message` para esa ventana |
+
+### Sistema
+
+| Métrica | Fuente | Objetivo | Umbral | Acción |
+|---|---|---|---|---|
+| Latencia de base de datos | **Recomendado: el dashboard de Neon** (Monitoring, ya lo tiene gratis — visto en la sesión de hoy), no instrumentación propia | Detectar degradación de Neon/pooler | Lo que Neon ya marque como anómalo | Revisar el dashboard de Neon directamente antes de construir nada propio — instrumentar esto a mano sería reconstruir algo que el proveedor ya da |
+| Duración de background jobs (título, Life Capture) | **Nuevo**: falta timing en `generate-title.ts` / `life-capture-service.ts` | Detectar que estas tareas de fondo (que arreglamos hoy con el fix de `after()`) sigan siendo rápidas | Sin dato histórico aún — fijar umbral tras la primera semana | Revisar `events.message` una vez instrumentado |
+| Fallos de título / Life Capture | **Nuevo**: agregar `recordEvent(type:'error', route:'background.title'/'background.life_capture')` en ambos catch -- hoy uno usa `logger.log`, el otro `console.error` plano, ninguno queda en `events` | Detectar pérdida silenciosa de estas dos capacidades | Cualquier fallo repetido (>1 en 15 min) | Revisar el mensaje de error real, mismo criterio que el resto |
+| Fallos de `knowledge_jobs` | `knowledge_jobs.status='failed'` (ya existe) | — **deliberadamente sin alerta todavía** | N/A | Ninguna: P1-1 (`ALPHA_BACKLOG.md`) ya documenta que el Knowledge Engine es un stub que falla a propósito hoy — alertar sobre esto ahora mismo sería ruido conocido, no señal (viola el principio 3). Revisar cuando P1-1 se resuelva, no antes |
+| Migraciones pendientes | `drizzle.__drizzle_migrations` vs. journal (`DEPLOY_RUNBOOK.md`) | Confirmar que el build-time gate de hoy sigue funcionando | Cualquier valor > 0 | Revisar el log de build del último deploy — si esto no es cero, el gate falló silenciosamente, investigar de inmediato |
+
+## Instrumentation — naming convention
+
+Para logs estructurados nuevos (capa de depuración, vía
+`core/observability/logger.ts`, no la capa de métricas de arriba):
+namespace punteado y consistente, en vez de nombres de evento libres
+como hoy (`openai.response`, `dashboard.summary_failed` — inconsistentes
+entre sí). Convención a partir de ahora:
+
+```
+chat.request.started
+chat.request.completed
+chat.request.failed
+stream.started
+stream.completed
+stream.aborted
+background.title.completed
+background.title.failed
+background.life_capture.completed
+background.life_capture.failed
+background.job.failed        -- knowledge_jobs, cuando P1-1 se resuelva
+db.query.slow
+```
+
+Los eventos existentes (`api.request_completed`, `openai.response`,
+etc.) no se renombran retroactivamente en este cambio — la convención
+aplica a instrumentación nueva; migrar los nombres existentes es su
+propio cambio, separado, si alguna vez vale la pena el churn.
+
+## Decisiones abiertas (antes de escribir código)
+
+1. **¿Dónde vive el panel?** `/admin` ya existe en código local, sin
+   commitear (`app/admin/page.tsx`, junto con el feature de feedback
+   in-app -- ver P3-2 en `ALPHA_BACKLOG.md`), con parte de esto ya
+   resuelto (usuarios, conversaciones, error count). Extenderlo es la
+   ruta obvia -- pero publicarlo es una decisión aparte que el Founder
+   no ha confirmado todavía. Este plan no asume que se publica.
+2. **¿Alertas activas o panel de consulta?** Hoy no existe ningún canal
+   de alertas (sin Slack/email/webhook integrado). Mientras eso no
+   exista, "alerta" en la tabla de arriba significa "algo que se
+   revisa al abrir el panel", no un push automático -- si se quiere lo
+   segundo, es una pieza de infraestructura nueva y separada.
+3. **Umbrales de latencia**: los marcados como "a definir contra datos
+   reales" arriba deberían fijarse después de una semana normal de
+   uso, no inventados hoy -- un umbral sin datos reales detrás es
+   exactamente el tipo de alerta no accionable que el principio 3
+   quiere evitar.
