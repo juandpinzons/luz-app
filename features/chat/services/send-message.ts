@@ -33,6 +33,8 @@ export interface SendMessageInput {
   message: string;
   /** Para correlacionar logs de un mismo request (Sprint de Observabilidad). */
   requestId?: string;
+  /** Tag de `route` para `events` (`message_sent`/`error` quedan agrupables por ruta -- OBSERVABILITY_PLAN.md). */
+  route: string;
 }
 
 export interface SendMessageResult {
@@ -255,6 +257,10 @@ interface FinalizeReplyInput {
   reply: string;
   /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture y de Knowledge Engine, ver `life-capture-service.ts` y `core/knowledge-engine`. Reemplaza a `userMessageId`, que ya no se usa acá (P0, cierre del Alpha: Knowledge Engine se dispara por Memory, no por el mensaje crudo). */
   capturedMemory: Memory | null;
+  /** `route.ts` usa el mismo valor para taggear `error` en esta ruta -- así ambos son consultables juntos (OBSERVABILITY_PLAN.md). */
+  route: string;
+  /** Solo en el camino con streaming: ms desde `startedAt` hasta el primer chunk yielded. `undefined` en `sendMessage` -- ahí "primer token" y "duración total" son el mismo número, no hay nada nuevo que medir. */
+  firstTokenMs?: number;
 }
 
 /**
@@ -290,6 +296,8 @@ async function finalizeReply(
     startedAt,
     reply,
     capturedMemory,
+    route,
+    firstTokenMs,
   } = input;
 
   await db.insert(conversationMessages).values({
@@ -357,11 +365,13 @@ async function finalizeReply(
     userId: context.userId,
     conversationId,
     durationMs: totalDurationMs,
+    firstTokenMs,
   });
   await recordEvent(db, {
     type: "message_sent",
     userId: context.userId,
-    metadata: { conversationId, durationMs: totalDurationMs },
+    route,
+    metadata: { conversationId, durationMs: totalDurationMs, firstTokenMs },
   });
 
   return { backgroundTasks };
@@ -435,6 +445,7 @@ export async function sendMessage(
     startedAt,
     reply,
     capturedMemory: prepared.capturedMemory,
+    route: input.route,
   });
   after(() => Promise.all(backgroundTasks));
 
@@ -473,12 +484,14 @@ export async function sendMessageStream(
   async function* generate(): AsyncGenerator<string, void, void> {
     const openaiStart = Date.now();
     let fullReply = "";
+    let firstChunkAt: number | undefined;
 
     try {
       try {
         for await (const chunk of aiProvider.generateReplyStream(
           prepared.aiMessages,
         )) {
+          firstChunkAt ??= Date.now();
           fullReply += chunk;
           yield chunk;
         }
@@ -514,6 +527,8 @@ export async function sendMessageStream(
         startedAt,
         reply: fullReply,
         capturedMemory: prepared.capturedMemory,
+        route: input.route,
+        firstTokenMs: firstChunkAt ? firstChunkAt - startedAt : undefined,
       });
       resolveBackgroundTasks(backgroundTasks);
     } catch (error) {

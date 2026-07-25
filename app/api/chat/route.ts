@@ -142,6 +142,7 @@ async function handleJsonRequest(
       conversationId,
       message,
       requestId,
+      route,
     });
 
     logger.log({
@@ -215,6 +216,7 @@ async function handleStreamRequest(
       conversationId: inputConversationId,
       message,
       requestId,
+      route,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

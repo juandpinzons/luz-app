@@ -13,7 +13,7 @@ import {
 import type { Memory } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { describeError } from "../../../core/observability/describe-error";
-import { logger } from "../../../core/observability/logger";
+import { recordEvent } from "../../../core/observability/record-event";
 
 const lifeDomainSchema = z.enum(LIFE_DOMAIN_TYPES).nullable();
 
@@ -86,13 +86,19 @@ export async function captureLifeEntityFromMemory(
         return;
     }
   } catch (error) {
-    logger.log({
-      event: "life_capture.failed",
-      severity: "error",
-      lifeGraphId: context.lifeGraphId,
-      memoryId: memory.id,
-      memoryType: memory.type,
-      ...describeError(error),
+    // `recordEvent` ya loguea Y persiste en `events` -- antes esto solo
+    // pasaba por `logger.log`, invisible a cualquier consulta
+    // (OBSERVABILITY_PLAN.md: "Fallos de título / Life Capture").
+    await recordEvent(db, {
+      type: "error",
+      route: "background.life_capture",
+      message: error instanceof Error ? error.message : String(error),
+      metadata: {
+        lifeGraphId: context.lifeGraphId,
+        memoryId: memory.id,
+        memoryType: memory.type,
+        ...describeError(error),
+      },
     });
   }
 }

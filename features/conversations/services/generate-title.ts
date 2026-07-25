@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import { conversations } from "../../../core/db/schema";
+import { recordEvent } from "../../../core/observability/record-event";
 
 const titleSchema = z.object({
   title: z.string().min(1).max(60),
@@ -49,9 +50,14 @@ export async function generateConversationTitle(
       .set({ title: title.trim() })
       .where(eq(conversations.id, input.conversationId));
   } catch (error) {
-    console.error(
-      "[generate-title] no se pudo generar el título:",
-      error instanceof Error ? error.message : error,
-    );
+    // Antes: console.error plano, invisible a cualquier consulta.
+    // `recordEvent` loguea Y persiste en `events` (OBSERVABILITY_PLAN.md:
+    // "Fallos de título / Life Capture").
+    await recordEvent(db, {
+      type: "error",
+      route: "background.title",
+      message: error instanceof Error ? error.message : String(error),
+      metadata: { conversationId: input.conversationId },
+    });
   }
 }

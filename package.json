@@ -14,7 +14,8 @@
     "worker": "tsx --env-file=.env worker/index.ts",
     "worker:dev": "tsx --env-file=.env watch worker/index.ts",
     "smoke": "tsx --env-file=.env smoke/runner.ts",
-    "smoke:prod": "tsx --env-file=.env.smoke smoke/runner.ts"
+    "smoke:prod": "tsx --env-file=.env.smoke smoke/runner.ts",
+    "obs:report": "tsx --env-file=.env.smoke observability/report.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
