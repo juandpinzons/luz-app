@@ -8,6 +8,7 @@ import {
 } from "../../../core/life";
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
+import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { selectContextualMemories } from "./select-contextual-memories";
 
@@ -26,6 +27,7 @@ import { selectContextualMemories } from "./select-contextual-memories";
  */
 
 const RELEVANT_MEMORY_LIMIT = 5;
+const RELEVANT_INSIGHT_LIMIT = 3;
 
 /**
  * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
@@ -51,7 +53,7 @@ export async function assembleRealitySnapshot(
   // (p. ej. el Morning Brief del Dashboard, que no responde a un
   // mensaje puntual) se preserva el comportamiento anterior sin
   // cambios: ahí sí tiene sentido "lo más relevante en general".
-  const [relevantMemories, activeGoals, activeProjects, activeHabits] =
+  const [relevantMemories, activeGoals, activeProjects, activeHabits, insights] =
     await Promise.all([
       options.currentMessage
         ? selectContextualMemories(
@@ -66,6 +68,7 @@ export async function assembleRealitySnapshot(
       listActiveGoals(db, context),
       listActiveProjects(db, context),
       listActiveHabits(db, context),
+      new DrizzleInsightRepository(db).list(context),
     ]);
 
   // Auditoría de comportamiento (Presence Principles): dar continuidad
@@ -83,6 +86,25 @@ export async function assembleRealitySnapshot(
   const memoriesWithRealSignal = relevantMemories.filter(
     (memory) => (memory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL,
   );
+
+  // Mismo criterio que arriba, aplicado al Knowledge Engine
+  // (2026-07-25, docs/engineering/FIRST_MESSAGE_IDENTITY_PLAN.md):
+  // solo insights ya validados por `DeterministicInsightValidationStrategy`
+  // — "proposed"/"rejected" no aportan continuidad real todavía. Sin
+  // ninguno validado, `items` queda vacío a propósito, mismo criterio
+  // de "la ausencia real se representa como ausencia" que ya rige
+  // `memory` arriba. Orden por confianza (nunca por recencia sola: una
+  // relación de alta confianza no debe perder prioridad frente a un
+  // hallazgo reciente pero débil), empatando por más reciente.
+  const validatedInsights = insights
+    .filter((insight) => insight.status === "validated")
+    .sort((a, b) => {
+      const confidenceDelta = b.confidence.score - a.confidence.score;
+      return confidenceDelta !== 0
+        ? confidenceDelta
+        : b.updatedAt.getTime() - a.updatedAt.getTime();
+    })
+    .slice(0, RELEVANT_INSIGHT_LIMIT);
 
   return {
     lifeGraphId: context.lifeGraphId,
@@ -111,6 +133,16 @@ export async function assembleRealitySnapshot(
         id: memory.id,
         content: memory.content,
         occurredAt: memory.occurredAt,
+      })),
+    },
+    // Conocimiento derivado a través del tiempo, no de un solo mensaje
+    // (Knowledge Engine, desplegado 2026-07-25) — "qué significa",
+    // distinto de `memory` ("qué pasó").
+    insights: {
+      items: validatedInsights.map((insight) => ({
+        id: insight.id,
+        description: insight.description,
+        type: insight.type,
       })),
     },
     // Sin Connectors implementados todavía (ADR-0015) — vacío,

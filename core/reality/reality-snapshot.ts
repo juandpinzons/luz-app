@@ -1,5 +1,6 @@
 import type { EntityId } from "../life/value-objects/entity-id";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
+import type { InsightContextSnapshot } from "./insight-context-snapshot";
 import type { LifeStateSnapshot } from "./life-state-snapshot";
 import type { MemoryContextSnapshot } from "./memory-context-snapshot";
 
@@ -21,5 +22,6 @@ export interface RealitySnapshot {
   capturedAt: Date;
   life: LifeStateSnapshot;
   memory: MemoryContextSnapshot;
+  insights: InsightContextSnapshot;
   signals: ExternalSignalSnapshot;
 }

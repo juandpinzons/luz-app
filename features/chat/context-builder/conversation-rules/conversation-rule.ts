@@ -1,10 +1,12 @@
 import type { ConversationTurn } from "../context";
-import type { RealityMemoryItem } from "../../../../core/reality";
+import type { RealityInsightItem, RealityMemoryItem } from "../../../../core/reality";
 
 /** Lo mínimo que una regla necesita para decidir si aplica y qué decir. */
 export interface ConversationRuleInput {
   conversation: ConversationTurn[];
   memories: RealityMemoryItem[];
+  /** Insights ya validados del Knowledge Engine (2026-07-25) — conocimiento a través del tiempo, distinto de `memories` ("qué pasó"). */
+  insights: RealityInsightItem[];
 }
 
 /**

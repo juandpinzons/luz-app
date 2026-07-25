@@ -54,12 +54,13 @@ export async function buildContext(
     currentMessage,
   });
   const memories = realitySnapshot.memory.items;
+  const insights = realitySnapshot.insights.items;
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
-    (rule) => rule.applies({ conversation, memories }),
+    (rule) => rule.applies({ conversation, memories, insights }),
   ).map((rule) => ({
     ruleId: rule.id,
-    instruction: rule.directive({ conversation, memories }),
+    instruction: rule.directive({ conversation, memories, insights }),
   }));
 
   const responseIntent = determineResponseIntent(conversation, memories);
