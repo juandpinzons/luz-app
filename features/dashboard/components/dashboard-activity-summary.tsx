@@ -5,6 +5,7 @@ const WEEKDAY_DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
   day: "numeric",
   month: "long",
   year: "numeric",
+  timeZone: "America/Bogota",
 });
 
 function formatDate(date: Date): string {

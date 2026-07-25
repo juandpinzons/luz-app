@@ -54,7 +54,7 @@ export async function AppShell({
         <div className="flex flex-shrink-0 items-center gap-4 overflow-x-auto sm:gap-6">
           <Link
             href="/dashboard"
-            className="flex flex-shrink-0 items-center gap-2 text-sm font-light tracking-[0.25em] text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+            className="flex flex-shrink-0 items-center gap-2 text-sm font-light tracking-[0.25em] text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             LUZ
             <PresenceDot />
@@ -73,7 +73,7 @@ export async function AppShell({
                       className={
                         isActive
                           ? "block whitespace-nowrap rounded-full bg-zinc-900 px-2.5 py-1.5 text-xs text-white ring-1 ring-luz/40 ring-inset sm:px-3 sm:text-sm"
-                          : "block whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-700 sm:px-3 sm:text-sm"
+                          : "block whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-3 sm:text-sm"
                       }
                     >
                       {section.label}
@@ -99,7 +99,7 @@ export async function AppShell({
             >
               <button
                 type="submit"
-                className="whitespace-nowrap rounded-full border border-zinc-700 px-3 py-1.5 text-zinc-300 transition hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 sm:px-4"
+                className="whitespace-nowrap rounded-full border border-zinc-700 px-3 py-1.5 text-zinc-300 transition hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-4"
               >
                 Cerrar sesión
               </button>

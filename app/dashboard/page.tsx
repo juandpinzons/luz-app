@@ -6,7 +6,10 @@ import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { listActiveGoals, listActiveProjects, type Goal, type Project } from "@/core/life";
-import { buildMorningBrief } from "@/features/dashboard/services/build-morning-brief";
+import {
+  buildMorningBrief,
+  timeOfDayGreeting,
+} from "@/features/dashboard/services/build-morning-brief";
 import {
   buildDashboardSummary,
   type DashboardSummary,
@@ -210,7 +213,9 @@ export default async function DashboardPage() {
               <p className="text-sm text-zinc-500">{brief.dateLine}</p>
             </>
           ) : (
-            <p className="text-2xl font-light text-zinc-100">Buenos días.</p>
+            <p className="text-2xl font-light text-zinc-100">
+              {timeOfDayGreeting(new Date())}.
+            </p>
           )}
         </div>
 
@@ -304,7 +309,7 @@ export default async function DashboardPage() {
         <div>
           <Link
             href="/feedback"
-            className="mt-6 inline-block rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+            className="mt-6 inline-block rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             ¿Cómo vamos? Cuéntame
           </Link>

@@ -30,18 +30,48 @@ export interface MorningBrief {
   continuityLine: string | null;
 }
 
-const WEEKDAYS = [
-  "domingo",
-  "lunes",
-  "martes",
-  "miércoles",
-  "jueves",
-  "viernes",
-  "sábado",
-];
+/**
+ * LUZ es un producto en español, pensado para Colombia (`es-CO` ya se
+ * usa en el resto del producto para formatear fechas) — pero el
+ * servidor (Vercel) corre en UTC. Antes de esto, `dateLine` usaba
+ * `now.getDay()` (día del servidor) y `greetingLine` decía siempre
+ * "Buenos días" sin importar la hora real: de noche en Colombia, LUZ
+ * seguía saludando como si fuera de mañana — exactamente el tipo de
+ * detalle que rompe la sensación de presencia. Ambas se calculan
+ * ahora en la hora real de Bogotá, sin aritmética manual de offset
+ * (Colombia no tiene horario de verano, pero `Intl` es la forma
+ * correcta de expresar "esta hora, en esa zona" de todas formas).
+ */
+const BOGOTA_TIME_ZONE = "America/Bogota";
+
+const WEEKDAY_FORMAT = new Intl.DateTimeFormat("es-CO", {
+  weekday: "long",
+  timeZone: BOGOTA_TIME_ZONE,
+});
+
+const HOUR_FORMAT = new Intl.DateTimeFormat("es-CO", {
+  hour: "numeric",
+  hourCycle: "h23",
+  timeZone: BOGOTA_TIME_ZONE,
+});
 
 function buildDateLine(now: Date): string {
-  return `Hoy es ${WEEKDAYS[now.getDay()]}.`;
+  return `Hoy es ${WEEKDAY_FORMAT.format(now)}.`;
+}
+
+/**
+ * 5am-12pm: mañana. 12pm-7pm: tarde. Resto: noche — mismos cortes que
+ * cualquier persona usaría para saludar, no una convención técnica.
+ * Exportada: `app/dashboard/page.tsx` la reutiliza para su saludo de
+ * respaldo (cuando `buildMorningBrief` falla) — ese caso no debe
+ * quedarse con el mismo "Buenos días" fijo que este archivo ya dejó
+ * atrás.
+ */
+export function timeOfDayGreeting(now: Date): string {
+  const hour = Number(HOUR_FORMAT.format(now));
+  if (hour >= 5 && hour < 12) return "Buenos días";
+  if (hour >= 12 && hour < 19) return "Buenas tardes";
+  return "Buenas noches";
 }
 
 async function buildContinuityLine(
@@ -101,9 +131,11 @@ export async function buildMorningBrief(
 ): Promise<MorningBrief> {
   const snapshot = await assembleRealitySnapshot(db, lifeGraphContext);
 
+  const now = new Date();
   const firstName = personName.trim().split(/\s+/)[0];
-  const greetingLine = firstName ? `Buenos días, ${firstName}.` : "Buenos días.";
-  const dateLine = buildDateLine(new Date());
+  const greeting = timeOfDayGreeting(now);
+  const greetingLine = firstName ? `${greeting}, ${firstName}.` : `${greeting}.`;
+  const dateLine = buildDateLine(now);
 
   const topInsight = snapshot.insights.items[0];
   const topMemory = snapshot.memory.items[0];

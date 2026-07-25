@@ -93,6 +93,7 @@ function formatHistoricalLabel(date: Date): string {
     day: "numeric",
     month: "long",
     year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+    timeZone: "America/Bogota",
   }).format(date);
 
   return `Retomando una conversación del ${formatted}`;
@@ -507,7 +508,7 @@ function ChatPageContent() {
           <div className="flex items-center justify-end">
             <button
               onClick={startNewConversation}
-              className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+              className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
             >
               Nueva conversación
             </button>
@@ -542,7 +543,7 @@ function ChatPageContent() {
                 <Skeleton className="ml-auto h-11 w-52" />
               </div>
             ) : messages.length === 0 ? (
-              <div className="mt-32 text-center">
+              <div className="animate-fade-in mt-32 text-center">
                 <h2 className="text-4xl font-light">¿Cómo te sientes hoy?</h2>
 
                 <p className="mt-5 text-lg text-zinc-400">
@@ -576,7 +577,7 @@ function ChatPageContent() {
           <button
             onClick={scrollToBottom}
             aria-label="Ir al final de la conversación"
-            className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 shadow-lg transition hover:border-zinc-500 hover:text-white"
+            className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 shadow-lg transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             ↓ Ir al final
           </button>
@@ -599,7 +600,7 @@ function ChatPageContent() {
                 sendMessage();
               }
             }}
-            className="flex-1 rounded-xl bg-zinc-900 px-5 py-4 outline-none ring-1 ring-zinc-800 focus:ring-white disabled:opacity-50"
+            className="flex-1 rounded-xl bg-zinc-900 px-5 py-4 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50"
           />
 
           <button
@@ -607,7 +608,7 @@ function ChatPageContent() {
             disabled={isSending}
             aria-label="Enviar mensaje"
             aria-busy={isSending}
-            className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200 disabled:opacity-50 disabled:hover:bg-white"
+            className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 disabled:hover:bg-white"
           >
             {isSending ? "..." : "Enviar"}
           </button>

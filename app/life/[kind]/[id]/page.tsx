@@ -34,6 +34,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
   day: "numeric",
   month: "long",
   year: "numeric",
+  timeZone: "America/Bogota",
 });
 
 function formatRelativeTime(date: Date): string {
