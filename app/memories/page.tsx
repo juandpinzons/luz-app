@@ -8,7 +8,12 @@ import {
   searchMemories,
   type MemoryTimeGroup,
 } from "@/features/memories/services/search-memories";
+import {
+  listValidatedInsights,
+  type InsightWithEvidence,
+} from "@/features/knowledge/services/list-validated-insights";
 import { MemoryCard } from "@/features/memories/components/memory-card";
+import { InsightCard } from "@/features/memories/components/insight-card";
 
 /**
  * Memories, solo lectura (Sprint 4, docs/product/
@@ -42,19 +47,31 @@ export default async function MemoriesPage({
   let groups: MemoryTimeGroup[] = [];
   /** Títulos de Goal/Project ya persistidos — misma búsqueda literal de §3.2.1, en la dirección inversa (¿qué Life aparece dentro de esta memoria?). */
   let lifeTitles: string[] = [];
+  /**
+   * Comprensión ya validada por Knowledge Engine (ver
+   * `list-validated-insights.ts`) — solo tiene sentido como resumen de
+   * "lo que ya entiendo", nunca mezclada con una búsqueda puntual, así
+   * que no se pide durante `searchTerm` (misma disciplina de no
+   * mostrar algo fuera de lugar que ya usa el resto de la página).
+   */
+  let insights: InsightWithEvidence[] = [];
 
   if (lifeGraphContext) {
     try {
-      const [memoryGroups, goals, projects] = await Promise.all([
+      const [memoryGroups, goals, projects, validatedInsights] = await Promise.all([
         searchMemories(db, lifeGraphContext, {
           text: searchTerm,
           groupByTime: true,
         }),
         listAllGoals(db, lifeGraphContext),
         listAllProjects(db, lifeGraphContext),
+        searchTerm
+          ? Promise.resolve([])
+          : listValidatedInsights(db, lifeGraphContext),
       ]);
       groups = memoryGroups;
       lifeTitles = [...goals, ...projects].map((item) => item.title);
+      insights = validatedInsights;
     } catch (error) {
       console.error("[memories] no se pudieron cargar las memorias:", error);
     }
@@ -98,6 +115,24 @@ export default async function MemoriesPage({
             Buscar
           </button>
         </form>
+
+        {insights.length > 0 && (
+          <section className="animate-fade-in mt-8">
+            <h2 className="text-sm font-medium text-zinc-400">
+              Lo que he entendido
+            </h2>
+            <ul className="mt-3 space-y-2">
+              {insights.map((insight, index) => (
+                <InsightCard
+                  key={insight.id}
+                  description={insight.description}
+                  evidenceContents={insight.evidenceContents}
+                  index={index}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
 
         {!hasResults && (
           <p className="animate-fade-in mt-10 text-sm text-zinc-500">
