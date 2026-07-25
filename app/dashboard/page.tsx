@@ -30,6 +30,28 @@ function daysUntil(date: Date): number {
   return Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
+/** A partir de cuántos días sin hablar vale la pena reconocer la pausa, en vez de saludar como si fuera un día cualquiera. */
+const RETURNING_GAP_DAYS = 3;
+
+function daysSince(date: Date, now: Date): number {
+  return Math.floor((now.getTime() - date.getTime()) / (24 * 60 * 60 * 1000));
+}
+
+/**
+ * Sprint "Memorability": antes, volver después de dos semanas sin
+ * hablar se sentía exactamente igual que volver al día siguiente —
+ * mismo saludo, mismo silencio si no había memoria o insight lo
+ * bastante fuerte para que `continuityLine` (IA) dijera algo.
+ * Determinista a propósito, no una llamada a IA más: la pausa en sí
+ * ya es la señal, no hace falta interpretarla.
+ */
+function buildReturningLine(daysAway: number): string {
+  if (daysAway >= 14) {
+    return "Ha pasado bastante tiempo. Me alegra que hayas vuelto.";
+  }
+  return "Ha pasado un tiempo desde la última vez que hablamos. Qué bueno verte de nuevo.";
+}
+
 /**
  * Puerta de entrada de LUZ después del login (Sprint Alpha-1a; Dashboard
  * V2 en Sprint 2, docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §3.1/4.1).
@@ -195,6 +217,17 @@ export default async function DashboardPage() {
     });
   }
 
+  const daysSinceLastMessage = summary?.lastMessageAt
+    ? daysSince(summary.lastMessageAt, new Date())
+    : null;
+  const returningGapDays =
+    !isFirstVisit &&
+    !brief?.continuityLine &&
+    daysSinceLastMessage !== null &&
+    daysSinceLastMessage >= RETURNING_GAP_DAYS
+      ? daysSinceLastMessage
+      : null;
+
   return (
     <main className="flex min-h-full flex-col items-center px-6 py-16 text-white">
       <div className="w-full max-w-xl">
@@ -242,13 +275,20 @@ export default async function DashboardPage() {
               qué tienes en mente ahora mismo.
             </p>
           </div>
+        ) : brief?.continuityLine ? (
+          <div
+            className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
+            style={{ animationDelay: "100ms" }}
+          >
+            {brief.continuityLine}
+          </div>
         ) : (
-          brief?.continuityLine && (
+          returningGapDays !== null && (
             <div
               className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
               style={{ animationDelay: "100ms" }}
             >
-              {brief.continuityLine}
+              {buildReturningLine(returningGapDays)}
             </div>
           )
         )}

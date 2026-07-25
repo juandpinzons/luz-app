@@ -75,7 +75,10 @@ function parseStartedAtParam(value: string | null): Date | null {
 /**
  * Fecha en formato humano, nunca timestamp — "hoy"/"ayer"/"hace N
  * días" hasta una semana, después la fecha absoluta ("15 de julio",
- * con año solo si es distinto del actual).
+ * con año solo si es distinto del actual). A partir de dos meses, el
+ * tono cambia: no es lo mismo retomar algo de la semana pasada que
+ * abrir un hilo que llevaba tiempo cerrado — esto último merece
+ * sentirse como encontrar algo, no solo continuarlo.
  */
 function formatHistoricalLabel(date: Date): string {
   const now = new Date();
@@ -95,6 +98,10 @@ function formatHistoricalLabel(date: Date): string {
     year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
     timeZone: "America/Bogota",
   }).format(date);
+
+  if (diffDays >= 60) {
+    return `Volviendo a algo que hablamos hace tiempo, el ${formatted}`;
+  }
 
   return `Retomando una conversación del ${formatted}`;
 }

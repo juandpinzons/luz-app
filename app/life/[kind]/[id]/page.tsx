@@ -131,8 +131,7 @@ export default async function LifeDetailPage({
 
         <section className="animate-fade-in mt-10" style={{ animationDelay: "80ms" }}>
           <h2 className="text-sm font-medium text-zinc-400">
-            Memorias que mencionan &ldquo;{entity.searchTerm}&rdquo;
-            literalmente
+            Momentos donde hablamos de &ldquo;{entity.searchTerm}&rdquo;
           </h2>
           {relatedMemories.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -151,8 +150,8 @@ export default async function LifeDetailPage({
             </ul>
           ) : (
             <p className="mt-3 text-sm text-zinc-500">
-              Ninguna memoria usa esta palabra exacta todavía — búsqueda
-              por texto, no por significado (ver diseño §3.2.1).
+              Todavía no hay nada aquí — se va a ir llenando a medida que
+              hablemos de esto.
             </p>
           )}
         </section>

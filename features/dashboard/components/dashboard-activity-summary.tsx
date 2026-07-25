@@ -29,24 +29,28 @@ function formatRelativeTime(date: Date): string {
   return `hace ${diffMonths} ${diffMonths === 1 ? "mes" : "meses"}`;
 }
 
-function Stat({
-  label,
-  value,
-  index = 0,
-}: {
-  label: string;
-  value: string | number;
-  index?: number;
-}) {
-  return (
-    <div
-      className="animate-fade-in rounded-lg border border-zinc-800 p-4"
-      style={{ animationDelay: `${index * 40}ms` }}
-    >
-      <div className="text-2xl font-light text-white">{value}</div>
-      <div className="mt-1 text-xs text-zinc-500">{label}</div>
-    </div>
-  );
+/**
+ * Antes esto era una grilla de tres números decorativos ("Conversaciones
+ * iniciadas: 12", "Memorias almacenadas: 8") -- exactamente el tipo de
+ * panel de analítica genérico que el propio comentario de más abajo ya
+ * decía querer evitar ("§2 del diseño: ningún número decorativo"),
+ * pero nunca lo resolvía de verdad. Una frase continua, en la voz de
+ * LUZ, dice lo mismo sin volverlo una estadística de producto.
+ */
+function buildRelationshipSummary(summary: DashboardSummary): string {
+  const parts: string[] = [`Nos conocemos desde el ${formatDate(summary.memberSince)}.`];
+
+  if (summary.conversationsStarted > 0) {
+    const times = summary.conversationsStarted === 1 ? "vez" : "veces";
+    parts.push(`Hemos hablado ${summary.conversationsStarted} ${times}.`);
+  }
+
+  if (summary.memoriesStored > 0) {
+    const moments = summary.memoriesStored === 1 ? "momento" : "momentos";
+    parts.push(`Guardo ${summary.memoriesStored} ${moments} tuyos que no quiero olvidar.`);
+  }
+
+  return parts.join(" ");
 }
 
 interface DashboardActivitySummaryProps {
@@ -113,71 +117,26 @@ export function DashboardActivitySummary({
       )}
 
       {/*
-       * Cuenta / actividad / estadísticas de uso — de menor prioridad
-       * visual a propósito (§2 del diseño: "ningún número decorativo",
-       * el Dashboard muestra estado de la vida, no actividad del
-       * producto). Mismo separador que antes, ahora más abajo.
+       * Antes tres secciones separadas ("Tu cuenta"/"Actividad
+       * reciente"/"Estadísticas"), cada una con su propio encabezado
+       * frío y, en el caso de "Estadísticas", una grilla de números
+       * sueltos — el patrón más "panel de administración" que le
+       * quedaba al Dashboard. Una sola frase continua, en la voz de
+       * LUZ, dice lo mismo (desde cuándo, cuánto hemos hablado, qué
+       * guardo) sin que se sienta como analítica de producto.
        */}
-      <div className="space-y-10 border-t border-zinc-900 pt-10">
-        <section>
-          <h2 className="text-sm font-medium text-zinc-400">Tu cuenta</h2>
-          <div className="mt-3 space-y-1 text-sm">
-            {user.name && <p className="text-zinc-300">{user.name}</p>}
-            <p className="text-zinc-500">{user.email}</p>
-            {summary && (
-              <p className="text-zinc-500">
-                Miembro desde {formatDate(summary.memberSince)}
-              </p>
-            )}
-          </div>
-        </section>
-
-        {summary && summary.lastMessageAt && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">
-              Actividad reciente
-            </h2>
-            <p className="mt-3 text-sm text-zinc-500">
-              Última actividad: {formatRelativeTime(summary.lastMessageAt)}
-            </p>
-          </section>
-        )}
-
-        {summary && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">
-              Estadísticas
-            </h2>
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Stat
-                index={0}
-                label="Conversaciones iniciadas"
-                value={summary.conversationsStarted}
-              />
-              <Stat index={1} label="Mensajes enviados" value={summary.messagesSent} />
-              {summary.memoriesStored > 0 && (
-                <Stat
-                  index={2}
-                  label="Memorias almacenadas"
-                  value={summary.memoriesStored}
-                />
-              )}
-            </div>
-          </section>
-        )}
-
-        {/*
-         * Cuando todo carga bien no hay nada que anunciar — el silencio
-         * es la respuesta correcta (Principio de Silencio Intencional).
-         * Solo se muestra algo si de verdad no se pudo cargar la
-         * actividad, y en la voz de LUZ, no como un status de servidor.
-         */}
-        {!summary && (
-          <p className="text-sm text-zinc-500">
-            No pude traer tu actividad reciente. Intenta de nuevo en un
-            momento.
+      <div className="animate-fade-in space-y-3 border-t border-zinc-900 pt-10 text-sm">
+        {summary ? (
+          <p className="text-zinc-300">{buildRelationshipSummary(summary)}</p>
+        ) : (
+          <p className="text-zinc-500">
+            No pude traer lo que recuerdo de nuestra historia. Intenta de
+            nuevo en un momento.
           </p>
         )}
+        <p className="text-xs text-zinc-600">
+          {user.name ? `${user.name} · ${user.email}` : user.email}
+        </p>
       </div>
     </div>
   );

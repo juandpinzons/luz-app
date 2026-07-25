@@ -174,7 +174,7 @@ export default async function LifePage() {
     <main className="min-h-full px-6 py-10">
       <div className="mx-auto w-full max-w-3xl space-y-10">
         <h1 className="text-xl font-light tracking-[0.25em] text-white">
-          LIFE
+          VIDA
         </h1>
 
         {!hasAnything && timeline.length === 0 && (
@@ -186,7 +186,7 @@ export default async function LifePage() {
 
         {goals.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-zinc-400">Goals</h2>
+            <h2 className="text-sm font-medium text-zinc-400">Objetivos</h2>
             <div className="mt-3 flex flex-wrap gap-3">
               {goals.map((goal, index) => (
                 <LifeCard
@@ -195,7 +195,8 @@ export default async function LifePage() {
                   href={`/life/goals/${goal.id}`}
                   title={goal.title}
                   statusLabel={GOAL_STATUS_LABELS[goal.status]}
-                  muted={goal.status === "completed" || goal.status === "abandoned"}
+                  muted={goal.status === "abandoned"}
+                  celebrated={goal.status === "completed"}
                 />
               ))}
             </div>
@@ -204,7 +205,7 @@ export default async function LifePage() {
 
         {projects.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-zinc-400">Projects</h2>
+            <h2 className="text-sm font-medium text-zinc-400">Proyectos</h2>
             <div className="mt-3 flex flex-wrap gap-3">
               {projects.map((project, index) => (
                 <LifeCard
@@ -213,7 +214,8 @@ export default async function LifePage() {
                   href={`/life/projects/${project.id}`}
                   title={project.title}
                   statusLabel={PROJECT_STATUS_LABELS[project.status]}
-                  muted={project.status === "completed" || project.status === "cancelled"}
+                  muted={project.status === "cancelled"}
+                  celebrated={project.status === "completed"}
                 />
               ))}
             </div>
@@ -222,7 +224,7 @@ export default async function LifePage() {
 
         {habits.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-zinc-400">Habits</h2>
+            <h2 className="text-sm font-medium text-zinc-400">Hábitos</h2>
             <div className="mt-3 flex flex-wrap gap-3">
               {habits.map((habit, index) => (
                 <LifeCard
@@ -241,7 +243,7 @@ export default async function LifePage() {
         {relationships.length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-zinc-400">
-              Relationships
+              Relaciones
             </h2>
             <div className="mt-3 flex flex-wrap gap-3">
               {relationships.map((relationship, index) => (
@@ -259,7 +261,7 @@ export default async function LifePage() {
 
         {timeline.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-zinc-400">Timeline</h2>
+            <h2 className="text-sm font-medium text-zinc-400">Cronología</h2>
             <ul className="mt-3 space-y-3 border-l border-luz/25 pl-4">
               {timeline.map((memory, index) => (
                 <li

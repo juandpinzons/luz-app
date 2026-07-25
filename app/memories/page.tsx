@@ -79,7 +79,7 @@ export default async function MemoriesPage({
     <main className="min-h-full px-6 py-10 text-white">
       <div className="mx-auto w-full max-w-2xl">
         <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-light tracking-[0.25em]">MEMORIES</h1>
+          <h1 className="text-xl font-light tracking-[0.25em]">MEMORIAS</h1>
         </div>
 
         <form method="GET" action="/memories" className="mt-6 flex gap-2">
@@ -103,7 +103,7 @@ export default async function MemoriesPage({
           <p className="animate-fade-in mt-10 text-sm text-zinc-500">
             {searchTerm
               ? "No encontré memorias con eso."
-              : "Todavía no tengo memorias guardadas."}
+              : "Esto se va a ir llenando con lo que me vayas contando."}
           </p>
         )}
 
