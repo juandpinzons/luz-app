@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
+import { PresenceDot } from "@/components/ui/presence-dot";
 
 type ActiveSection = "dashboard" | "life" | "memories" | "chat";
 
@@ -53,9 +54,10 @@ export async function AppShell({
         <div className="flex flex-shrink-0 items-center gap-4 overflow-x-auto sm:gap-6">
           <Link
             href="/dashboard"
-            className="flex-shrink-0 text-sm font-light tracking-[0.25em] text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+            className="flex flex-shrink-0 items-center gap-2 text-sm font-light tracking-[0.25em] text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
           >
             LUZ
+            <PresenceDot />
           </Link>
 
           <nav aria-label="Secciones de LUZ">

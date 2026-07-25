@@ -87,18 +87,19 @@ export default async function ConversationsPage({
             name="q"
             defaultValue={searchTerm ?? ""}
             placeholder="Buscar en tus conversaciones..."
-            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white"
+            aria-label="Buscar en tus conversaciones"
+            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white focus-visible:ring-luz"
           />
           <button
             type="submit"
-            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200"
+            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             Buscar
           </button>
         </form>
 
         {conversations.length === 0 ? (
-          <div className="mt-32 text-center">
+          <div className="animate-fade-in mt-32 text-center">
             <h2 className="text-2xl font-light">
               {searchTerm
                 ? "No encontramos nada con eso."
@@ -112,11 +113,12 @@ export default async function ConversationsPage({
           </div>
         ) : (
           <div className="mt-8 space-y-3">
-            {conversations.map((conversation) => (
+            {conversations.map((conversation, index) => (
               <Link
                 key={conversation.id}
                 href={`/conversations/${conversation.id}`}
-                className="block rounded-lg border border-zinc-800 px-5 py-4 transition hover:border-zinc-600"
+                className="animate-fade-in block rounded-lg border border-zinc-800 px-5 py-4 transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
               >
                 <p className="text-sm text-zinc-300">
                   {conversation.title ?? conversation.previewText}

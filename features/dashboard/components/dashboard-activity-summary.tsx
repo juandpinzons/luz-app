@@ -28,9 +28,20 @@ function formatRelativeTime(date: Date): string {
   return `hace ${diffMonths} ${diffMonths === 1 ? "mes" : "meses"}`;
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function Stat({
+  label,
+  value,
+  index = 0,
+}: {
+  label: string;
+  value: string | number;
+  index?: number;
+}) {
   return (
-    <div className="rounded-lg border border-zinc-800 p-4">
+    <div
+      className="animate-fade-in rounded-lg border border-zinc-800 p-4"
+      style={{ animationDelay: `${index * 40}ms` }}
+    >
       <div className="text-2xl font-light text-white">{value}</div>
       <div className="mt-1 text-xs text-zinc-500">{label}</div>
     </div>
@@ -72,17 +83,18 @@ export function DashboardActivitySummary({
             </h2>
             <Link
               href="/conversations"
-              className="text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+              className="rounded text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
             >
               Ver historial
             </Link>
           </div>
           <div className="mt-3 space-y-2">
-            {summary.recentConversations.map((conversation) => (
+            {summary.recentConversations.map((conversation, index) => (
               <Link
                 key={conversation.id}
                 href={`/conversations/${conversation.id}`}
-                className="block rounded-lg border border-zinc-800 px-4 py-3 text-sm transition hover:border-zinc-600"
+                className="animate-fade-in block rounded-lg border border-zinc-800 px-4 py-3 text-sm transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
               >
                 <p className="text-zinc-300">
                   {formatDate(conversation.startedAt)}
@@ -137,12 +149,14 @@ export function DashboardActivitySummary({
             </h2>
             <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Stat
+                index={0}
                 label="Conversaciones iniciadas"
                 value={summary.conversationsStarted}
               />
-              <Stat label="Mensajes enviados" value={summary.messagesSent} />
+              <Stat index={1} label="Mensajes enviados" value={summary.messagesSent} />
               {summary.memoriesStored > 0 && (
                 <Stat
+                  index={2}
                   label="Memorias almacenadas"
                   value={summary.memoriesStored}
                 />

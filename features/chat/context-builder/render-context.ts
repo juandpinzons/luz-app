@@ -3,6 +3,7 @@ import type {
   ConversationStrategyDirective,
   ConversationStrategyType,
 } from "../../../core/conversation-strategy-engine";
+import { renderIdentityAsSystemPrompt } from "../../../core/persona";
 import type { Context } from "./context";
 
 /**
@@ -62,9 +63,16 @@ function renderConversationStrategy(directive: ConversationStrategyDirective): s
  * comportamiento permanente (brevedad, no parafrasear), la estrategia
  * es la postura de esta respuesta puntual — mezclarlas en un solo
  * mensaje les restaría la prominencia que el ejemplo del sprint pide.
+ *
+ * La identidad (`core/persona`) va primero, siempre, en todo mensaje
+ * — no condicionada a que alguien pregunte quién es LUZ. Es la única
+ * forma de que la respuesta sea consistente sin importar el turno: el
+ * modelo nunca tiene que adivinar ni inventar de dónde viene.
  */
 export function renderContextToMessages(context: Context): AIMessage[] {
-  const systemMessages: AIMessage[] = [];
+  const systemMessages: AIMessage[] = [
+    { role: "system", content: renderIdentityAsSystemPrompt() },
+  ];
 
   if (context.conversationRules.length > 0) {
     systemMessages.push({

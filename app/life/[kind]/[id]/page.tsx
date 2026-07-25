@@ -104,39 +104,42 @@ export default async function LifeDetailPage({
         <div className="flex items-center justify-between">
           <Link
             href="/life"
-            className="text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+            className="rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             ← Life
           </Link>
         </div>
 
-        <h1 className="mt-4 text-2xl font-light text-white">
-          {entity.title}
-        </h1>
-        {entity.statusLabel && (
-          <p className="mt-1 text-sm text-zinc-400">{entity.statusLabel}</p>
-        )}
+        <div className="animate-fade-in">
+          <h1 className="mt-4 text-2xl font-light text-white">
+            {entity.title}
+          </h1>
+          {entity.statusLabel && (
+            <p className="mt-1 text-sm text-zinc-400">{entity.statusLabel}</p>
+          )}
 
-        <dl className="mt-6 space-y-2 text-sm">
-          {entity.fields.map((field) => (
-            <div key={field.label} className="flex gap-2">
-              <dt className="text-zinc-500">{field.label}:</dt>
-              <dd className="text-zinc-300">{field.value}</dd>
-            </div>
-          ))}
-        </dl>
+          <dl className="mt-6 space-y-2 text-sm">
+            {entity.fields.map((field) => (
+              <div key={field.label} className="flex gap-2">
+                <dt className="text-zinc-500">{field.label}:</dt>
+                <dd className="text-zinc-300">{field.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
 
-        <section className="mt-10">
+        <section className="animate-fade-in mt-10" style={{ animationDelay: "80ms" }}>
           <h2 className="text-sm font-medium text-zinc-400">
             Memorias que mencionan &ldquo;{entity.searchTerm}&rdquo;
             literalmente
           </h2>
           {relatedMemories.length > 0 ? (
             <ul className="mt-3 space-y-2">
-              {relatedMemories.map((memory) => (
+              {relatedMemories.map((memory, index) => (
                 <li
                   key={memory.id}
-                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                  className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                  style={{ animationDelay: `${120 + Math.min(index, 10) * 30}ms` }}
                 >
                   <p className="text-zinc-300">&ldquo;{memory.content}&rdquo;</p>
                   <p className="mt-1 text-xs text-zinc-500">

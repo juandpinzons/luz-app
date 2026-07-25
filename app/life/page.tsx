@@ -178,7 +178,7 @@ export default async function LifePage() {
         </h1>
 
         {!hasAnything && timeline.length === 0 && (
-          <p className="text-zinc-500">
+          <p className="animate-fade-in text-zinc-500">
             Todavía no tengo nada guardado sobre tu vida — a medida que
             hables conmigo, esto se va a ir llenando.
           </p>
@@ -188,9 +188,10 @@ export default async function LifePage() {
           <section>
             <h2 className="text-sm font-medium text-zinc-400">Goals</h2>
             <div className="mt-3 flex flex-wrap gap-3">
-              {goals.map((goal) => (
+              {goals.map((goal, index) => (
                 <LifeCard
                   key={goal.id}
+                  index={Math.min(index, 10)}
                   href={`/life/goals/${goal.id}`}
                   title={goal.title}
                   statusLabel={GOAL_STATUS_LABELS[goal.status]}
@@ -205,9 +206,10 @@ export default async function LifePage() {
           <section>
             <h2 className="text-sm font-medium text-zinc-400">Projects</h2>
             <div className="mt-3 flex flex-wrap gap-3">
-              {projects.map((project) => (
+              {projects.map((project, index) => (
                 <LifeCard
                   key={project.id}
+                  index={Math.min(index, 10)}
                   href={`/life/projects/${project.id}`}
                   title={project.title}
                   statusLabel={PROJECT_STATUS_LABELS[project.status]}
@@ -222,9 +224,10 @@ export default async function LifePage() {
           <section>
             <h2 className="text-sm font-medium text-zinc-400">Habits</h2>
             <div className="mt-3 flex flex-wrap gap-3">
-              {habits.map((habit) => (
+              {habits.map((habit, index) => (
                 <LifeCard
                   key={habit.id}
+                  index={Math.min(index, 10)}
                   href={`/life/habits/${habit.id}`}
                   title={habit.title}
                   statusLabel={habit.active ? "activo" : "pausado"}
@@ -241,9 +244,10 @@ export default async function LifePage() {
               Relationships
             </h2>
             <div className="mt-3 flex flex-wrap gap-3">
-              {relationships.map((relationship) => (
+              {relationships.map((relationship, index) => (
                 <LifeCard
                   key={relationship.id}
+                  index={Math.min(index, 10)}
                   href={`/life/relationships/${relationship.id}`}
                   title={relationship.otherPersonName}
                   statusLabel={RELATIONSHIP_TYPE_LABELS[relationship.type]}
@@ -256,9 +260,13 @@ export default async function LifePage() {
         {timeline.length > 0 && (
           <section>
             <h2 className="text-sm font-medium text-zinc-400">Timeline</h2>
-            <ul className="mt-3 space-y-3 border-l border-zinc-800 pl-4">
-              {timeline.map((memory) => (
-                <li key={memory.id} className="text-sm">
+            <ul className="mt-3 space-y-3 border-l border-luz/25 pl-4">
+              {timeline.map((memory, index) => (
+                <li
+                  key={memory.id}
+                  className="animate-fade-in text-sm"
+                  style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
+                >
                   <span className="text-zinc-500">
                     {formatRelativeTime(memory.occurredAt ?? memory.createdAt)}
                   </span>{" "}

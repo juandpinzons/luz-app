@@ -1,4 +1,5 @@
 import { signIn } from "@/auth";
+import { PresenceDot } from "@/components/ui/presence-dot";
 
 /**
  * `callbackUrl` llega cuando `proxy.ts` redirigió aquí desde una
@@ -20,16 +21,23 @@ export default async function LoginPage({
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
-      <h1 className="text-3xl font-light tracking-[0.2em]">LUZ</h1>
+      <h1 className="animate-fade-in flex items-center gap-2 text-3xl font-light tracking-[0.2em]">
+        LUZ
+        <PresenceDot />
+      </h1>
 
-      <p className="mt-4 max-w-sm text-center text-zinc-400">
+      <p
+        className="animate-fade-in mt-4 max-w-sm text-center text-zinc-400"
+        style={{ animationDelay: "80ms" }}
+      >
         {callbackUrl
           ? "Tu sesión se refrescó. No perdiste nada — solo toca el botón para continuar donde estabas."
           : "Inicia sesión para continuar."}
       </p>
 
       <form
-        className="mt-10"
+        className="animate-fade-in mt-10"
+        style={{ animationDelay: "160ms" }}
         action={async () => {
           "use server";
           await signIn("google", { redirectTo });
@@ -37,7 +45,7 @@ export default async function LoginPage({
       >
         <button
           type="submit"
-          className="rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
+          className="rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
           Continuar con Google
         </button>

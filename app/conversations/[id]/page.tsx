@@ -69,22 +69,27 @@ export default async function ConversationDetailPage({
       <header className="flex items-center justify-end border-b border-zinc-800 px-8 py-5">
         <Link
           href="/conversations"
-          className="text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+          className="rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
           Historial
         </Link>
       </header>
 
-      <section className="min-h-0 flex-1 overflow-y-auto px-6 py-8">
+      <section
+        className="min-h-0 flex-1 overflow-y-auto px-6 py-8"
+        role="log"
+        aria-label={`Conversación con LUZ del ${conversation.createdAt.toLocaleDateString("es-CO")}`}
+      >
         <div className="mx-auto w-full max-w-3xl space-y-4">
           {conversation.messages.map((message, index) => (
             <div
               key={index}
               className={
                 message.role === "user"
-                  ? "ml-auto w-fit max-w-[80%] rounded-2xl bg-white px-5 py-3 text-black"
-                  : "mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-white"
+                  ? "animate-fade-in ml-auto w-fit max-w-[80%] rounded-2xl bg-white px-5 py-3 text-black"
+                  : "animate-fade-in mr-auto w-fit max-w-[80%] rounded-2xl bg-zinc-800 px-5 py-3 text-white"
               }
+              style={{ animationDelay: `${Math.min(index, 8) * 25}ms` }}
             >
               {message.content}
             </div>
@@ -93,7 +98,7 @@ export default async function ConversationDetailPage({
           <div className="pt-6 text-center">
             <Link
               href={`/chat?conversationId=${conversation.id}&startedAt=${encodeURIComponent(conversation.createdAt.toISOString())}`}
-              className="inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
+              className="inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
             >
               Continuar esta conversación
             </Link>

@@ -62,6 +62,19 @@ export default async function MemoriesPage({
 
   const hasResults = groups.some((group) => group.memories.length > 0);
 
+  /**
+   * Posición global de cada memoria (no solo dentro de su grupo de
+   * tiempo) — solo para escalonar la entrada (`MemoryCard.index`).
+   * Calculada antes del JSX, no mutando una variable dentro del
+   * `.map()` que lo renderiza (regla `react-hooks/immutability`).
+   */
+  const memoryIndexById = new Map<string, number>();
+  for (const group of groups) {
+    for (const memory of group.memories) {
+      memoryIndexById.set(memory.id, memoryIndexById.size);
+    }
+  }
+
   return (
     <main className="min-h-full px-6 py-10 text-white">
       <div className="mx-auto w-full max-w-2xl">
@@ -75,18 +88,19 @@ export default async function MemoriesPage({
             name="q"
             defaultValue={searchTerm ?? ""}
             placeholder="Buscar en tus memorias..."
-            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white"
+            aria-label="Buscar en tus memorias"
+            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white focus-visible:ring-luz"
           />
           <button
             type="submit"
-            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200"
+            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
           >
             Buscar
           </button>
         </form>
 
         {!hasResults && (
-          <p className="mt-10 text-sm text-zinc-500">
+          <p className="animate-fade-in mt-10 text-sm text-zinc-500">
             {searchTerm
               ? "No encontré memorias con eso."
               : "Todavía no tengo memorias guardadas."}
@@ -104,6 +118,7 @@ export default async function MemoriesPage({
                   <MemoryCard
                     key={memory.id}
                     memory={memory}
+                    index={Math.min(memoryIndexById.get(memory.id) ?? 0, 12)}
                     connectedContents={memory.connectedContents}
                     mentionedLifeTitles={lifeTitles.filter((title) =>
                       memory.content.toLowerCase().includes(title.toLowerCase()),

@@ -195,19 +195,38 @@ export default async function DashboardPage() {
   return (
     <main className="flex min-h-full flex-col items-center px-6 py-16 text-white">
       <div className="w-full max-w-xl">
-        <div className="space-y-3 text-lg font-light text-zinc-200">
+        {/*
+          El saludo es lo primero que LUZ "dice" en cada visita — antes
+          tenía el mismo peso tipográfico que cualquier otra línea de
+          la página (`text-lg font-light` para saludo y fecha por
+          igual). Ahora es la línea más grande de todo el Dashboard;
+          la fecha queda deliberadamente más chica y muted, como una
+          acotación, no como parte del saludo.
+        */}
+        <div className="animate-fade-in space-y-1">
           {brief ? (
             <>
-              <p>{brief.greetingLine}</p>
-              <p>{brief.dateLine}</p>
+              <p className="text-2xl font-light text-zinc-100">{brief.greetingLine}</p>
+              <p className="text-sm text-zinc-500">{brief.dateLine}</p>
             </>
           ) : (
-            <p>Buenos días.</p>
+            <p className="text-2xl font-light text-zinc-100">Buenos días.</p>
           )}
         </div>
 
+        {/*
+          Borde con el acento `luz` en vez de `zinc-800` genérico —
+          esta caja es la voz de LUZ dirigiéndose a la persona
+          (bienvenida o continuidad), no un dato mostrado sobre su
+          vida; antes usaba exactamente el mismo lenguaje visual que
+          "Próximos a vencer"/"Objetivos activos" más abajo y se
+          perdía entre ellos.
+        */}
         {isFirstVisit ? (
-          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-5 text-zinc-200">
+          <div
+            className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-5 text-zinc-200"
+            style={{ animationDelay: "100ms" }}
+          >
             <p>
               LUZ es un espacio para pensar en voz alta, sin que nadie
               juzgue ni presione. Cuanto más hables con ella, mejor te
@@ -220,22 +239,26 @@ export default async function DashboardPage() {
           </div>
         ) : (
           brief?.continuityLine && (
-            <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-4 text-zinc-200">
+            <div
+              className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
+              style={{ animationDelay: "100ms" }}
+            >
               {brief.continuityLine}
             </div>
           )
         )}
 
         {upcomingDeadlines.length > 0 && (
-          <section className="mt-8">
+          <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
             <h2 className="text-sm font-medium text-zinc-400">
               Próximos a vencer
             </h2>
             <ul className="mt-3 space-y-2">
-              {upcomingDeadlines.map((item) => (
+              {upcomingDeadlines.map((item, index) => (
                 <li
                   key={item.id}
-                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                  className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                  style={{ animationDelay: `${200 + index * 40}ms` }}
                 >
                   <span className="text-zinc-300">
                     {item.kind === "goal" ? "Objetivo" : "Proyecto"} &ldquo;
@@ -253,15 +276,16 @@ export default async function DashboardPage() {
         )}
 
         {activeLifeItems.length > 0 && (
-          <section className="mt-8">
+          <section className="animate-fade-in mt-8" style={{ animationDelay: "200ms" }}>
             <h2 className="text-sm font-medium text-zinc-400">
               Objetivos activos
             </h2>
             <div className="mt-3 flex flex-wrap gap-3">
-              {activeLifeItems.map((item) => (
+              {activeLifeItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className="rounded-xl border border-zinc-800 px-4 py-3"
+                  className="animate-fade-in rounded-xl border border-zinc-800 px-4 py-3"
+                  style={{ animationDelay: `${240 + index * 40}ms` }}
                 >
                   <p className="text-sm text-zinc-200">{item.title}</p>
                 </div>
@@ -272,7 +296,7 @@ export default async function DashboardPage() {
 
         <Link
           href="/chat"
-          className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
+          className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
           Hablar con LUZ
         </Link>
@@ -280,7 +304,7 @@ export default async function DashboardPage() {
         <div>
           <Link
             href="/feedback"
-            className="mt-6 inline-block text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+            className="mt-6 inline-block rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
           >
             ¿Cómo vamos? Cuéntame
           </Link>
