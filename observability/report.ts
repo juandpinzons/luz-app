@@ -1,5 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "../core/db/client";
 import { events } from "../core/db/schema/events";
@@ -130,9 +129,17 @@ async function main() {
   const [{ n: appliedMigrations }] = await db.execute<{ n: number }>(
     sql`select count(*)::int as n from drizzle.__drizzle_migrations`,
   ).then((r) => r as unknown as { n: number }[]);
-  const journalPath = path.join(import.meta.dirname, "..", "core", "db", "migrations", "meta", "_journal.json");
-  const journal = JSON.parse(fs.readFileSync(journalPath, "utf8")) as { entries: unknown[] };
-  const expectedMigrations = journal.entries.length;
+  // Lee el journal desde `git show HEAD:...`, nunca del archivo en
+  // disco -- un cambio local sin commitear (p. ej. una migración de un
+  // feature todavía no aprobado, ver `0010_lively_bug`) infla el
+  // conteo del working tree y da una falsa alarma de "pendientes" que
+  // no refleja lo que producción realmente tiene desplegado.
+  const journalAtHead = execFileSync(
+    "git",
+    ["show", "HEAD:core/db/migrations/meta/_journal.json"],
+    { cwd: import.meta.dirname + "/..", encoding: "utf8" },
+  );
+  const expectedMigrations = (JSON.parse(journalAtHead) as { entries: unknown[] }).entries.length;
 
   console.log(
     `  Migraciones: ${appliedMigrations} aplicadas / ${expectedMigrations} esperadas` +
