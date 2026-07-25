@@ -9,11 +9,22 @@ Last verified: 2026-07-24
 are one query, no new table), `firstTokenMs` in its metadata, both
 background tasks (`generate-title.ts`, `life-capture-service.ts`) now
 `recordEvent` their failures instead of `console.error`/bare
-`logger.log`, and `npm run obs:report` (`observability/report.ts`)
-printing all of it as text. Verified against real production traffic —
-see the commits for the exact before/after. **Not built**: a visual
-panel, active alerts, fixed thresholds — all three still blocked on
-the open decisions below.
+`logger.log`. Verified against real production traffic — see the
+commits for the exact before/after. **Not built**: a visual panel,
+active alerts, fixed thresholds — all three still blocked on the open
+decisions below.
+
+**Paused (2026-07-24), per the Founder's own call**: no more new
+events until the existing ones prove useful. `npm run obs:report`
+(`observability/report.ts`) was redesigned around that — it now
+answers the five operational questions directly (new errors since
+last deploy/window, first-token P50/P95, which background job failed
+and how often, which endpoint has an abnormal failure rate, trend vs.
+the equivalent prior period) instead of dumping raw numbers, and
+supports `--since-deploy` (uses the last commit's timestamp as the
+window start). See "Auditoría" below for what the checklist review
+found — one real bug fixed, two real gaps documented and deliberately
+left open.
 
 Scope first, same discipline as `SMOKE_TEST_PLAN.md`: it's easy to
 start emitting metrics and end up with data nobody looks at. Every
@@ -116,6 +127,64 @@ Los eventos existentes (`api.request_completed`, `openai.response`,
 etc.) no se renombran retroactivamente en este cambio — la convención
 aplica a instrumentación nueva; migrar los nombres existentes es su
 propio cambio, separado, si alguna vez vale la pena el churn.
+
+## Auditoría de lo ya emitido (2026-07-24)
+
+Antes de seguir agregando eventos, revisión de cada `recordEvent`/
+`logger.log` real del código (no una muestra) contra el checklist del
+Founder: propósito, consistencia de nombres, contexto suficiente,
+cardinalidad controlada.
+
+**Un hallazgo real, ya corregido**: `life-capture-service.ts` (agregado
+hoy mismo, ver commit del fix de `after()`) pasaba `...describeError(error)`
+completo -- incluye `errorStack`, `errorQuery`, `errorParameters` --
+directo a `events.metadata`, persistido en la base. Eso es exactamente
+la cardinalidad no acotada que el checklist pide evitar (un stack es
+distinto cada vez, no se puede agrupar) y además un riesgo de
+privacidad real: `errorParameters` son los parámetros reales de la
+consulta SQL, que pueden contener contenido del usuario. Corregido: el
+detalle completo sigue yendo a consola (`logger.log`, efímero, útil
+para depurar en el momento), pero solo `errorName`/`errorCode` -- el
+subconjunto acotado y seguro -- se persiste en `events.metadata`.
+
+**Nombres de eventos, estado real (no la convención propuesta arriba,
+que aplica solo hacia adelante)**: `api.*`, `openai.*`, `auth.*`,
+`life.*`, `dashboard.*`, `context_builder.*`, `message.*`,
+`feedback.*`, `health.*`, `client.*` -- ocho namespaces orgánicos, con
+inconsistencias reales encontradas:
+- `dashboard.active_goals_failed` (en `app/dashboard/page.tsx`) y
+  `life.goals_failed` (en `app/life/page.tsx`) describen la misma
+  operación de dominio (listar Goals activos) fallando, pero cada
+  página la nombra por separado en vez de compartir un nombre. No se
+  unifican en este cambio (mismo criterio que ADR-0017: no renombrar
+  eventos existentes de paso) -- queda como candidato documentado, no
+  una acción pendiente urgente.
+- `client.render_error` (los cuatro `error.tsx` de App Router) es
+  `console.error` **del navegador**, no de `logger.ts` -- nunca llega
+  a `events` ni a los logs de servidor de Vercel. Es exactamente un
+  evento que hoy nadie puede consultar (principio 1 del Founder): solo
+  ayuda si alguien tiene abiertas las devtools de ese usuario en ese
+  momento. Persistirlo de verdad (un `POST` a un endpoint propio)
+  sería instrumentación nueva -- **no implementado a propósito**,
+  respeta la pausa pedida. Queda documentado como el gap más grande
+  encontrado en la auditoría.
+
+**Contexto**: los eventos de `error` ya llevan `route`+`message`
+consistentemente; `message_sent` ya lleva `userId`+`conversationId`+
+`durationMs`+`firstTokenMs` (desde hoy). **Un gap real, tampoco
+corregido a propósito**: ningún evento persistido en `events` lleva
+`requestId`, aunque el concepto ya existe (`createRequestId()`, usado
+en todo `app/api/chat/route.ts`) -- hoy solo viaja en la línea de
+consola de `logger.log`, no en la fila de la base. Cerrar esto
+requiere una columna nueva (`events.request_id`) -- una migración, no
+solo una corrección de lo existente, así que queda como recomendación
+para la próxima vez que se toque este schema, no como trabajo de hoy.
+
+**Conclusión de la auditoría**: un problema real corregido (cardinalidad/
+privacidad), dos gaps reales documentados y deliberadamente no
+resueltos (`client.render_error` inalcanzable, sin `requestId` en
+`events`) porque arreglarlos es instrumentación nueva, no validación de
+la existente -- consistente con la pausa pedida.
 
 ## Decisiones abiertas (antes de escribir código)
 

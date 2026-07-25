@@ -102,10 +102,25 @@ select count(*) from drizzle.__drizzle_migrations;
 ```
 
 Compare against the number of entries in
-`core/db/migrations/meta/_journal.json` on `main` at the deployed
-commit. If the database count is lower, migrations are pending —
-redeploy (which re-runs `drizzle-kit migrate`) rather than applying
-anything by hand.
+`core/db/migrations/meta/_journal.json` **as committed on `main`**,
+never the file as it sits on your disk right now — read it with `git
+show HEAD:core/db/migrations/meta/_journal.json`, not a plain file
+read. This is a standing rule, not a one-off detail: your working tree
+can (and often does) have uncommitted, unapproved changes to that file
+— e.g. a migration for a feature that isn't ready to ship yet (see
+`0010_lively_bug` as of 2026-07-24) — and a plain disk read silently
+counts those too. The question this check answers is "does production
+match what `main` would deploy," so the comparison must be against the
+versioned state, never against whatever happens to be sitting locally
+uncommitted. `npm run obs:report` (`observability/report.ts`) already
+does this correctly — read it as the reference implementation. A
+report that instead read the file straight off disk produced a false
+"migrations pending" alarm the first time it ran against real
+production data (2026-07-24) for exactly this reason.
+
+If the database count is lower than the committed count, migrations
+are pending — redeploy (which re-runs `drizzle-kit migrate`) rather
+than applying anything by hand.
 
 ## Rollback
 

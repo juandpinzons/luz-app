@@ -13,6 +13,7 @@ import {
 import type { Memory } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { describeError } from "../../../core/observability/describe-error";
+import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
 
 const lifeDomainSchema = z.enum(LIFE_DOMAIN_TYPES).nullable();
@@ -86,9 +87,24 @@ export async function captureLifeEntityFromMemory(
         return;
     }
   } catch (error) {
-    // `recordEvent` ya loguea Y persiste en `events` -- antes esto solo
-    // pasaba por `logger.log`, invisible a cualquier consulta
-    // (OBSERVABILITY_PLAN.md: "Fallos de título / Life Capture").
+    // Detalle completo (incluye `errorStack`/`errorQuery`/`errorParameters`)
+    // solo a consola -- nunca a `events.metadata`: cardinalidad no
+    // acotada (un stack es distinto cada vez) y `errorParameters` puede
+    // traer contenido real del usuario (invariante de privacidad del
+    // dominio). Ver auditoría 2026-07-25 en OBSERVABILITY_PLAN.md.
+    const detail = describeError(error);
+    logger.log({
+      event: "background.life_capture.failed",
+      severity: "error",
+      lifeGraphId: context.lifeGraphId,
+      memoryId: memory.id,
+      memoryType: memory.type,
+      ...detail,
+    });
+
+    // `recordEvent` persiste en `events` (consultable por
+    // `obs:report`) -- solo el subconjunto acotado y seguro: nombre,
+    // código SQLSTATE y mensaje, no el stack ni los parámetros.
     await recordEvent(db, {
       type: "error",
       route: "background.life_capture",
@@ -97,7 +113,8 @@ export async function captureLifeEntityFromMemory(
         lifeGraphId: context.lifeGraphId,
         memoryId: memory.id,
         memoryType: memory.type,
-        ...describeError(error),
+        errorName: detail.errorName,
+        errorCode: detail.errorCode,
       },
     });
   }
