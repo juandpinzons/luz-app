@@ -1,7 +1,6 @@
 import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
-import type { LifeStateSnapshot } from "../../../core/reality";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 
 /**
@@ -10,11 +9,15 @@ import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-sn
  * IA, y solo a partir de la memoria real más relevante que ya trae el
  * snapshot. Nunca una segunda fuente de datos, nunca un bloque completo
  * generado por IA.
+ *
+ * `lifeLine` existió hasta el 2026-07-24 y nunca se renderizó en
+ * `app/dashboard/page.tsx` (goals/projects/deadlines activos ya tienen
+ * su propia sección en esa página) — retirado por redundante, no
+ * reemplazado (ONBOARDING_PLAN.md, hallazgo #4).
  */
 export interface MorningBrief {
   greetingLine: string;
   dateLine: string;
-  lifeLine: string;
   /** `null` cuando no hay memoria relevante — se oculta, nunca se inventa. */
   continuityLine: string | null;
 }
@@ -31,20 +34,6 @@ const WEEKDAYS = [
 
 function buildDateLine(now: Date): string {
   return `Hoy es ${WEEKDAYS[now.getDay()]}.`;
-}
-
-function buildLifeLine(life: LifeStateSnapshot): string {
-  const items = [
-    ...life.activeGoals,
-    ...life.activeProjects,
-    ...life.activeHabits,
-  ];
-
-  if (items.length === 0) {
-    return "No encontré eventos importantes para hoy.";
-  }
-
-  return `Hoy es relevante: ${items.map((item) => item.title).join(", ")}.`;
 }
 
 async function buildContinuityLine(
@@ -78,7 +67,6 @@ export async function buildMorningBrief(
   const firstName = personName.trim().split(/\s+/)[0];
   const greetingLine = firstName ? `Buenos días, ${firstName}.` : "Buenos días.";
   const dateLine = buildDateLine(new Date());
-  const lifeLine = buildLifeLine(snapshot.life);
 
   const topMemory = snapshot.memory.items[0];
   let continuityLine: string | null = null;
@@ -95,5 +83,5 @@ export async function buildMorningBrief(
     }
   }
 
-  return { greetingLine, dateLine, lifeLine, continuityLine };
+  return { greetingLine, dateLine, continuityLine };
 }

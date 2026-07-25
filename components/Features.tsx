@@ -1,6 +1,6 @@
 export default function Features() {
   return (
-    <section className="bg-black text-white py-24 px-6">
+    <section id="features" className="bg-black text-white py-24 px-6">
       <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
         <div className="rounded-2xl border border-zinc-800 p-8">
           <h3 className="text-xl font-semibold mb-3">

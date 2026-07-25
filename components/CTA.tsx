@@ -13,7 +13,7 @@ export default function CTA() {
         </p>
 
         <Link
-          href="/chat"
+          href="/dashboard"
           className="mt-8 inline-block rounded-full bg-white text-black px-8 py-3 hover:bg-zinc-200 transition"
         >
           Abrir LUZ

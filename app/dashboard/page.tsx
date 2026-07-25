@@ -1,8 +1,10 @@
+import { eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
+import { conversations } from "@/core/db/schema";
 import { listActiveGoals, listActiveProjects, type Goal, type Project } from "@/core/life";
 import { buildMorningBrief } from "@/features/dashboard/services/build-morning-brief";
 import {
@@ -38,7 +40,7 @@ function daysUntil(date: Date): number {
 export default async function DashboardPage() {
   const session = await auth();
 
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
@@ -46,6 +48,22 @@ export default async function DashboardPage() {
   // de log de esta carga del Dashboard entre sí (mismo patrón que
   // app/api/chat/route.ts).
   const requestId = createRequestId();
+
+  /**
+   * Señal de "primera visita" (ONBOARDING_PLAN.md, hallazgo #5):
+   * `isNewUser` ya se graba en `auth_sign_in` desde hace tiempo, pero
+   * solo describe el momento exacto del primer login -- alguien puede
+   * crear la cuenta y volver días después sin haber mandado un
+   * mensaje todavía, y sigue siendo "nuevo" en el sentido que importa
+   * acá. Cero conversaciones es la señal más directa y estable de
+   * "todavía no vivió nada con LUZ", así que se usa esa, no el evento
+   * de login.
+   */
+  const [conversationCount] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(conversations)
+    .where(eq(conversations.userId, session.user.id));
+  const isFirstVisit = conversationCount.n === 0;
 
   let lifeGraphContext = null;
   try {
@@ -188,10 +206,24 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {brief?.continuityLine && (
-          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-4 text-zinc-200">
-            {brief.continuityLine}
+        {isFirstVisit ? (
+          <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-5 text-zinc-200">
+            <p>
+              LUZ es un espacio para pensar en voz alta, sin que nadie
+              juzgue ni presione. Cuanto más hables con ella, mejor te
+              va a entender — hoy es el primer día.
+            </p>
+            <p className="mt-3 text-sm text-zinc-400">
+              No hay una forma correcta de empezar. Puedes contarle
+              qué tienes en mente ahora mismo.
+            </p>
           </div>
+        ) : (
+          brief?.continuityLine && (
+            <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/60 px-5 py-4 text-zinc-200">
+              {brief.continuityLine}
+            </div>
+          )
         )}
 
         {upcomingDeadlines.length > 0 && (

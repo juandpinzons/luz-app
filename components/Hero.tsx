@@ -20,15 +20,18 @@ export default function Hero() {
 
         <div className="mt-12 flex justify-center gap-4">
           <Link
-            href="/chat"
+            href="/dashboard"
             className="rounded-full bg-white text-black px-8 py-3 font-medium transition hover:bg-zinc-200"
           >
             Comenzar
           </Link>
 
-          <button className="rounded-full border border-zinc-700 px-8 py-3 transition hover:bg-zinc-900">
+          <a
+            href="#features"
+            className="rounded-full border border-zinc-700 px-8 py-3 transition hover:bg-zinc-900"
+          >
             Conocer más
-          </button>
+          </a>
         </div>
       </div>
     </main>
