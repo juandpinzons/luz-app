@@ -1,5 +1,11 @@
 import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
+import { createContextEngine } from "../../../core/context-engine";
+import {
+  createConversationStrategyEngine,
+  type ConversationStrategyDirective,
+  type ConversationStrategyType,
+} from "../../../core/conversation-strategy-engine";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 
@@ -14,14 +20,17 @@ import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-sn
  * su propia sección en esa página) — retirado por redundante, no
  * reemplazado (ONBOARDING_PLAN.md, hallazgo #4).
  *
- * Desde 2026-07-25 (Knowledge Engine desplegado, ver
- * FIRST_MESSAGE_IDENTITY_PLAN.md): si existe un Insight ya validado,
- * tiene precedencia sobre la memoria puntual para esta línea —
- * representa comprensión acumulada a través de varias conversaciones,
- * no solo la última cosa relevante que se dijo. Sin insight validado,
- * se preserva el comportamiento anterior exacto (memoria más
- * relevante). Sin ninguno de los dos, `continuityLine` sigue siendo
- * `null` — la ausencia real nunca se disfraza.
+ * Desde 2026-07-25 (sprint "presencia real"): `continuityLine` ya no
+ * elige entre "el insight más nuevo" o "la memoria más nueva" por
+ * precedencia fija — reutiliza exactamente el mismo Context Engine +
+ * Conversation Strategy Engine que ya decide, mensaje a mensaje, cómo
+ * conversar en el chat (`features/chat/context-builder/build-context.ts`).
+ * Antes, esta línea era más simple que la propia conversación: el chat
+ * ya sabía distinguir "esto merece un recordatorio suave" de "esto
+ * merece celebrarse" o "esto necesita un plan concreto" — el saludo
+ * del Dashboard, el primer momento real del día con LUZ, no. Mismas
+ * fuentes de siempre (`RealitySnapshot`), ningún engine ni tabla
+ * nueva — solo un segundo consumidor de dos engines que ya existían.
  */
 export interface MorningBrief {
   greetingLine: string;
@@ -74,50 +83,55 @@ export function timeOfDayGreeting(now: Date): string {
   return "Buenas noches";
 }
 
-async function buildContinuityLine(
-  lastMemoryContent: string,
-): Promise<string> {
-  const reply = await getAIProvider().generateReply([
-    {
-      role: "system",
-      content:
-        "Escribe UNA sola frase breve, cálida y natural que retome la " +
-        "última conversación con esta persona e invite a continuar. No " +
-        "inventes ningún dato que no esté en el texto que recibes. Sin " +
-        "comillas, sin markdown.",
-    },
-    {
-      role: "user",
-      content: `Última memoria relevante: "${lastMemoryContent}"`,
-    },
-  ]);
-
-  return reply.trim();
-}
+/**
+ * Solo estas cinco posturas abren bien un día — cada una ya trae algo
+ * concreto que reconocer o retomar (`Reason`/`PrimaryObjective`).
+ * `listen` (nada domina hoy) y `clarify` (varias cosas empatadas, hace
+ * falta preguntar cuál importa) no tienen nada que decir todavía sin
+ * que la persona hable primero — mismo resultado que hoy: sin línea.
+ * `challenge` (confrontar un patrón de postergación) queda fuera a
+ * propósito: es la postura correcta a mitad de una conversación donde
+ * la persona ya está presente, pero abrir el día confrontando algo
+ * antes de que diga una palabra es justo el tipo de presión que
+ * `PRESENCE_PRINCIPLES.md` pide nunca manufacturar.
+ */
+const OPENING_ELIGIBLE_STRATEGIES = new Set<ConversationStrategyType>([
+  "remind",
+  "follow_up",
+  "celebrate",
+  "encourage",
+  "plan",
+]);
 
 /**
- * Distinto prompt que `buildContinuityLine`: un Insight ya es una
- * interpretación ("qué significa"), no un hecho crudo que reinterpretar
- * -- pedirle a la IA que lo retome como comprensión acumulada, nunca
- * que lo anuncie como un descubrimiento nuevo o una lista.
+ * Un solo prompt para las cinco posturas elegibles — la postura ya
+ * decidió QUÉ decir y CÓMO (`reason`/`primaryObjective`/`avoid`, ver
+ * cada regla en `core/conversation-strategy-engine/rules`); esta
+ * función solo la traduce a una frase, igual que `render-context.ts`
+ * la traduce a un bloque de prompt para el chat — nunca reinterpreta
+ * la decisión ni mezcla una postura con otra.
  */
-async function buildInsightContinuityLine(
-  insightDescription: string,
+async function buildStrategicContinuityLine(
+  directive: ConversationStrategyDirective,
 ): Promise<string> {
   const reply = await getAIProvider().generateReply([
     {
       role: "system",
       content:
-        "Ya entendiste algo real sobre esta persona a partir de varias " +
-        "conversaciones, no solo una. Escribe UNA sola frase breve, " +
-        "cálida y natural que lo deje ver de forma sutil e invite a " +
-        "continuar — nunca lo anuncies como un descubrimiento ni lo " +
-        "repitas como una lista o un dato suelto. No inventes nada que " +
-        "no esté en el texto que recibes. Sin comillas, sin markdown.",
+        "Escribe UNA sola frase breve, cálida y natural, en primera " +
+        "persona (eres LUZ), que abra el día reflejando esto que ya " +
+        "entendiste sobre esta persona. Es una apertura, no la " +
+        "resolución completa del tema -- nunca la anuncies como una " +
+        "notificación ni la trates como una lista de pendientes. No " +
+        "inventes ningún dato que no esté en el texto que recibes. " +
+        "Sin comillas, sin markdown.",
     },
     {
       role: "user",
-      content: `Lo que ya entendiste: "${insightDescription}"`,
+      content:
+        `Lo que ya entendiste: "${directive.reason}"\n` +
+        `Qué lograr con esta frase: ${directive.primaryObjective}\n` +
+        `Qué evitar: ${directive.avoid}`,
     },
   ]);
 
@@ -128,6 +142,15 @@ export async function buildMorningBrief(
   db: Database,
   lifeGraphContext: LifeGraphContext,
   personName: string,
+  /**
+   * Cero conversaciones registradas todavía (ver `isFirstVisit` en
+   * `app/dashboard/page.tsx`) -- la señal equivalente a
+   * `isFirstContact` que ya usa `buildContext` para el chat, pero
+   * medida sobre la relación completa con esta persona, no sobre un
+   * hilo de conversación puntual (ese concepto no existe todavía
+   * cuando se arma el saludo del Dashboard).
+   */
+  isFirstVisit: boolean,
 ): Promise<MorningBrief> {
   const snapshot = await assembleRealitySnapshot(db, lifeGraphContext);
 
@@ -137,15 +160,18 @@ export async function buildMorningBrief(
   const greetingLine = firstName ? `${greeting}, ${firstName}.` : `${greeting}.`;
   const dateLine = buildDateLine(now);
 
-  const topInsight = snapshot.insights.items[0];
-  const topMemory = snapshot.memory.items[0];
   let continuityLine: string | null = null;
 
   try {
-    if (topInsight) {
-      continuityLine = await buildInsightContinuityLine(topInsight.description);
-    } else if (topMemory) {
-      continuityLine = await buildContinuityLine(topMemory.content);
+    const context = await createContextEngine().build(snapshot, lifeGraphContext);
+    const directive = createConversationStrategyEngine().select({
+      realitySnapshot: snapshot,
+      contextItems: context.items,
+      isFirstContact: isFirstVisit,
+    });
+
+    if (OPENING_ELIGIBLE_STRATEGIES.has(directive.strategy)) {
+      continuityLine = await buildStrategicContinuityLine(directive);
     }
   } catch (error) {
     console.error(

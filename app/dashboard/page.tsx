@@ -114,7 +114,12 @@ export default async function DashboardPage() {
   let brief = null;
   if (lifeGraphContext) {
     try {
-      brief = await buildMorningBrief(db, lifeGraphContext, session.user.name ?? "");
+      brief = await buildMorningBrief(
+        db,
+        lifeGraphContext,
+        session.user.name ?? "",
+        isFirstVisit,
+      );
     } catch (error) {
       logger.log({
         event: "dashboard.morning_brief_failed",
