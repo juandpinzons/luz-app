@@ -1,6 +1,6 @@
 # First Message → Identity Plan
 
-Status: Proposed\
+Status: Steps 1-2 implemented and verified in production\
 Owner: Founder\
 Last verified: 2026-07-25
 
@@ -10,6 +10,35 @@ sprint (`SMOKE_TEST_PLAN.md`, `OBSERVABILITY_PLAN.md`,
 in tooling, it's an architecture analysis of why the product might
 still feel generic after the first message — grounded in the real
 pipeline and real production data, not assumption.
+
+**Implemented (2026-07-25)**: Step 1 (Founder chose Vercel Cron over a
+separate host) and Step 2, both live in production and verified with
+real data, not mocks:
+
+- `app/api/cron/knowledge-worker` (daily, 5am UTC) + `features/knowledge/services/process-knowledge-job.ts`
+  (shared with `worker/index.ts`, local dev only) — the Knowledge
+  Engine has now run in production for the first time ever. The
+  146-job backlog described below was drained by hand right after
+  deploying (bounded batches, ~15 jobs/50s call): **146/146 completed,
+  0 failed, 356 real validated insights** now exist (were 0 before
+  today).
+- `RealitySnapshot.insights` (new field, same anti-corruption
+  boundary as `life`/`memory`) + `FavorInsightAwarenessRule` (Context
+  Builder) + `build-morning-brief.ts` (insight takes precedence over
+  plain memory for `continuityLine`) — validated insights now reach
+  both the live chat prompt and the Dashboard, not just a table
+  nobody reads.
+- Verified end-to-end against real runtime, not just types: two real
+  related messages ("quiero mudarme a otra ciudad" /
+  "siempre termino posponiendo esa decisión") produced a genuine
+  cross-message insight ("tiende a postergar esa decisión aunque la
+  reconoce como importante", confidence 78) that then appeared,
+  reworded naturally, in the Dashboard's continuity line and in the
+  actual `conversationRules` sent to the model for the next message.
+  Full local smoke suite (fresh user, 0 conversations) still 3/3 after
+  the change; `smoke:prod` 3/3 against the live deployment.
+- **Not done**: Step 3 (AI-based Memory classifier/ranker) — stays a
+  separate, Founder-level decision, not bundled into this change.
 
 ## Summary of the finding
 
