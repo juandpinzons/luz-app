@@ -597,6 +597,7 @@ function ChatPageContent() {
           <input
             ref={inputRef}
             type="text"
+            autoFocus
             placeholder="Escribe un mensaje..."
             aria-label="Escribe un mensaje para LUZ"
             value={message}

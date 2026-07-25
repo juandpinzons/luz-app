@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { PresenceDot } from "@/components/ui/presence-dot";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 type ActiveSection = "dashboard" | "life" | "memories" | "chat";
 
@@ -97,12 +98,12 @@ export async function AppShell({
                 await signOut({ redirectTo: "/" });
               }}
             >
-              <button
-                type="submit"
-                className="whitespace-nowrap rounded-full border border-zinc-700 px-3 py-1.5 text-zinc-300 transition hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-4"
+              <SubmitButton
+                pendingLabel="Saliendo…"
+                className="whitespace-nowrap rounded-full border border-zinc-700 px-3 py-1.5 text-zinc-300 transition hover:border-white hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-60 sm:px-4"
               >
                 Cerrar sesión
-              </button>
+              </SubmitButton>
             </form>
           </div>
         )}

@@ -1,5 +1,6 @@
 import { signIn } from "@/auth";
 import { PresenceDot } from "@/components/ui/presence-dot";
+import { SubmitButton } from "@/components/ui/submit-button";
 
 /**
  * `callbackUrl` llega cuando `proxy.ts` redirigió aquí desde una
@@ -43,12 +44,12 @@ export default async function LoginPage({
           await signIn("google", { redirectTo });
         }}
       >
-        <button
-          type="submit"
-          className="rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+        <SubmitButton
+          pendingLabel="Conectando…"
+          className="rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-60"
         >
           Continuar con Google
-        </button>
+        </SubmitButton>
       </form>
     </main>
   );
