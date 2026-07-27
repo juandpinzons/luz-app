@@ -18,6 +18,9 @@ export class DefaultExtractStage implements ExtractStage {
     snapshot: RealitySnapshot,
     _context: PipelineContext,
   ): Promise<ExtractedItem[]> {
-    return snapshot.memory.items.map((item) => ({ text: item.content }));
+    return snapshot.memory.items.map((item) => ({
+      sourceMemoryId: item.id,
+      text: item.content,
+    }));
   }
 }

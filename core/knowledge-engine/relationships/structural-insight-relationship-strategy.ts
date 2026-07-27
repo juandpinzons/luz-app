@@ -65,9 +65,18 @@ function countShared(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
  * comparte palabras literales con ella.
  */
 function triggeringMemoryMatches(
+  item: ClassifiedItem,
   memoryItems: readonly RealityMemoryItem[],
   context: PipelineContext,
 ): RealityMemoryItem[] {
+  // Solo el fragmento que salió de la Memory que disparó el job puede
+  // usarla como evidencia por identidad. Antes se añadía esa misma
+  // Memory a TODOS los fragmentos del snapshot, haciendo que evidencia
+  // no relacionada pareciera corroborar cualquier insight generado.
+  if (item.sourceMemoryId !== context.memoryId) {
+    return [];
+  }
+
   return memoryItems.filter((memoryItem) => memoryItem.id === context.memoryId);
 }
 
@@ -121,7 +130,7 @@ export class StructuralInsightRelationshipStrategy
     return items.map((item) => {
       const matches = new Map<EntityId, RealityMemoryItem>();
 
-      for (const match of triggeringMemoryMatches(memoryItems, context)) {
+      for (const match of triggeringMemoryMatches(item, memoryItems, context)) {
         matches.set(match.id, match);
       }
       for (const match of sharedKeywordMatches(item, memoryItems)) {

@@ -1,8 +1,11 @@
 import type { RealitySnapshot } from "../../reality/reality-snapshot";
+import type { EntityId } from "../../life/value-objects/entity-id";
 import type { PipelineContext } from "../pipeline-context";
 
 /** Fragmento de información relevante extraído de la realidad disponible. */
 export interface ExtractedItem {
+  /** Identidad de la Memory de la que salió el fragmento. */
+  sourceMemoryId: EntityId;
   text: string;
 }
 

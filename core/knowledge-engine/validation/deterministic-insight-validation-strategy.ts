@@ -45,7 +45,11 @@ function decideStatus(
   insight: GeneratedInsight,
   score: number,
 ): InsightStatus {
-  if (insight.evidence.length === 0) {
+  // Una sola Memory puede justificar que LUZ la recuerde, pero no que
+  // afirme haber entendido un patrón o significado duradero. Exigir
+  // corroboración evita persistir interpretaciones de IA basadas en un
+  // único mensaje aislado.
+  if (new Set(insight.evidence.map((item) => item.id)).size < 2) {
     return "rejected";
   }
 
