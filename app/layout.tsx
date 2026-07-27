@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Sacramento } from "next/font/google";
 import { LUZ_IDENTITY } from "../core/persona";
 import "./globals.css";
 
@@ -11,6 +11,19 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+/**
+ * Único uso: la palabra "Welcome" del ritual de apertura de
+ * conversación (`features/chat/components/conversation-opening-ritual.tsx`)
+ * -- un trazo manual, no un titular. Peso único (400) a propósito:
+ * Sacramento no tiene variantes, y una sola palabra nunca necesita
+ * más de un peso.
+ */
+const sacramento = Sacramento({
+  variable: "--font-sacramento",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 /**
@@ -63,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${sacramento.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

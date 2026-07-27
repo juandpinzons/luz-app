@@ -40,12 +40,14 @@ export interface ConversationOpeningRitualProps {
 
 /**
  * Pequeño ritual de bienvenida al abrir una conversación -- una esfera
- * que respira, la palabra "Welcome" apareciendo con calma, y la
- * conversación real revelándose después (fade + slide). Deliberadamente
- * NO es un loading screen: su duración es fija (`MIN_RITUAL_DURATION_MS`),
- * nunca depende de cuánto tarde una petición real -- lo único que la
- * extiende es esperar a que el contenido real ya esté listo, para no
- * ceder el paso a un skeleton debajo (ver `ready`).
+ * que respira, la palabra "Welcome" apareciendo como un trazo manual
+ * (script cursivo, Sacramento, revelándose de izquierda a derecha en
+ * vez de un simple fade), y la conversación real revelándose después
+ * (fade + slide). Deliberadamente NO es un loading screen: su duración
+ * es fija (`MIN_RITUAL_DURATION_MS`), nunca depende de cuánto tarde una
+ * petición real -- lo único que la extiende es esperar a que el
+ * contenido real ya esté listo, para no ceder el paso a un skeleton
+ * debajo (ver `ready`).
  *
  * Desacoplado a propósito: no sabe nada de mensajes, conversaciones ni
  * `/chat` -- envuelve cualquier `children` y decide únicamente cuándo
@@ -56,9 +58,9 @@ export interface ConversationOpeningRitualProps {
  * `prefers-reduced-motion` se respeta en dos capas: aquí, el ritual
  * completo se salta (el contenido aparece de inmediato, sin ninguna
  * animación de entrada) -- nunca solo "más rápido", sino ausente; y en
- * `app/globals.css`, las tres animaciones quedan neutralizadas también
- * a nivel de CSS como respaldo (mismo criterio que el resto del
- * vocabulario de animación del proyecto).
+ * `app/globals.css`, las cuatro animaciones quedan neutralizadas
+ * también a nivel de CSS como respaldo (mismo criterio que el resto
+ * del vocabulario de animación del proyecto).
  */
 export function ConversationOpeningRitual({
   children,
@@ -124,8 +126,8 @@ function WelcomeSphere({ exiting }: { exiting: boolean }) {
           boxShadow: "0 0 70px 18px rgba(227, 177, 104, 0.25)",
         }}
       />
-      <span className="animate-fade-in text-sm font-light tracking-[0.4em] text-white/70 [animation-delay:550ms]">
-        WELCOME
+      <span className="animate-script-reveal font-script text-4xl text-white/80 [animation-delay:550ms] sm:text-5xl">
+        Welcome
       </span>
     </div>
   );
