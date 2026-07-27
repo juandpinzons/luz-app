@@ -45,3 +45,6 @@ export * from "./engine/default-knowledge-engine";
 export * from "./events/insight-generated";
 export * from "./events/insight-validated";
 export * from "./events/insight-related";
+
+// Reasoning (submódulo -- razona sobre insights ya validados, no un motor nuevo separado)
+export * from "./reasoning";

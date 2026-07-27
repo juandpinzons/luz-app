@@ -16,8 +16,13 @@ import {
   detectContradictions,
   type ContradictionCandidate,
 } from "../../../core/contradiction-engine";
+import { createContextEngine } from "../../../core/context-engine";
 import { DrizzleImportanceRepository, updateImportance } from "../../../core/importance-engine";
-import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
+import {
+  createReasoningEngine,
+  DrizzleInsightRepository,
+  DrizzleReasoningRepository,
+} from "../../../core/knowledge-engine";
 import type { Insight } from "../../../core/knowledge-engine/entities/insight";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import type { EntityId } from "../../../core/life/value-objects/entity-id";
@@ -76,6 +81,7 @@ export async function enrichKnowledgeGraph(
 
     await decayStaleBeliefs(beliefRepository, context);
     await detectPredictivePatterns(db, context);
+    await runReasoning();
 
     async function enrichOneInsight(insight: Insight): Promise<void> {
       const evidence = await insightRepository.getEvidence(context, insight.id);
@@ -161,6 +167,46 @@ export async function enrichKnowledgeGraph(
         recencyDays: daysSince(belief.lastReinforcedAt, new Date()),
         involvedInOpenContradiction: contradictions.length > 0,
       });
+    }
+
+    /**
+     * Reasoning Engine (`core/knowledge-engine/reasoning`) -- corre una
+     * vez por job, no por insight: necesita la vista de Context Engine
+     * sobre TODO lo relevante ahora mismo, no solo lo que esta memoria
+     * disparó. Reutiliza `createContextEngine` (el mismo que ya usan
+     * chat y Morning Brief) en vez de inventar una segunda forma de
+     * decidir relevancia -- "consumir Context Engine", no duplicarlo.
+     */
+    async function runReasoning(): Promise<void> {
+      const engineContext = await createContextEngine(db).build(snapshot, context);
+      const memoryContentById = new Map(
+        snapshot.memory.items.map((item) => [item.id, item.content]),
+      );
+
+      const conclusions = await createReasoningEngine(db).run(
+        engineContext,
+        { ...context, memoryId },
+        memoryContentById,
+      );
+
+      const reasoningRepository = new DrizzleReasoningRepository(db);
+      for (const conclusion of conclusions) {
+        const conclusionEvidence = await reasoningRepository.getEvidence(context, conclusion.id);
+        await updateImportance(
+          importanceRepository,
+          context,
+          "reasoning_conclusion",
+          conclusion.id,
+          {
+            evidenceCount: conclusionEvidence.length,
+            confidence: conclusion.confidence.score,
+            recencyDays: 0,
+            involvedInOpenContradiction: conclusionEvidence.some(
+              (item) => item.ref.role === "contradicting",
+            ),
+          },
+        );
+      }
     }
   } catch (error) {
     logger.log({

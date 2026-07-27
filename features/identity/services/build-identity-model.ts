@@ -7,6 +7,7 @@ import { DrizzleContradictionRepository } from "../../../core/contradiction-engi
 import type { Database } from "../../../core/db/client";
 import { DrizzleImportanceRepository } from "../../../core/importance-engine";
 import type { DomainCoverage } from "../../../core/knowledge-gaps";
+import { DrizzleReasoningRepository, type ReasoningConclusion } from "../../../core/knowledge-engine";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { LIFE_DOMAIN_LABEL } from "../../../core/life/value-objects/life-domain-label";
 import type { LifeDomainType } from "../../../core/life/value-objects/life-domain-type";
@@ -16,6 +17,7 @@ import { describeEvolution } from "./describe-evolution";
 
 const TOP_BELIEFS_LIMIT = 8;
 const TOP_CONCEPTS_LIMIT = 8;
+const TOP_REASONING_CONCLUSIONS_LIMIT = 5;
 const RECENT_EVOLUTION_WINDOW_DAYS = 30;
 
 export interface DomainUnderstanding {
@@ -48,6 +50,8 @@ export interface PersonIdentityModel {
   openContradictions: Contradiction[];
   knowledgeGaps: DomainCoverage[];
   recentEvolution: EvolutionSummary;
+  /** `core/knowledge-engine/reasoning` -- síntesis sobre varios Beliefs/Insights a la vez, no una interpretación puntual. */
+  topReasoningConclusions: ReasoningConclusion[];
 }
 
 function rankByImportance<T extends { id: string }>(
@@ -82,8 +86,9 @@ export async function buildIdentityModel(
   const conceptRepository = new DrizzleConceptRepository(db);
   const contradictionRepository = new DrizzleContradictionRepository(db);
   const importanceRepository = new DrizzleImportanceRepository(db);
+  const reasoningRepository = new DrizzleReasoningRepository(db);
 
-  const [snapshot, beliefs, concepts, contradictions, importanceScores, evolution] =
+  const [snapshot, beliefs, concepts, contradictions, importanceScores, evolution, reasoningConclusions] =
     await Promise.all([
       assembleRealitySnapshot(db, context),
       beliefRepository.list(context),
@@ -91,6 +96,7 @@ export async function buildIdentityModel(
       contradictionRepository.list(context),
       importanceRepository.list(context),
       describeEvolution(db, context, RECENT_EVOLUTION_WINDOW_DAYS),
+      reasoningRepository.list(context),
     ]);
 
   const activeBeliefs = beliefs.filter((belief) => belief.status === "active");
@@ -133,5 +139,12 @@ export async function buildIdentityModel(
     openContradictions,
     knowledgeGaps: snapshot.knowledgeGaps.domains,
     recentEvolution: evolution.summary,
+    topReasoningConclusions: rankByImportance(
+      reasoningConclusions.filter((conclusion) => conclusion.status === "validated"),
+      "reasoning_conclusion",
+      importanceByKey,
+      (conclusion) => conclusion.confidence.score,
+      TOP_REASONING_CONCLUSIONS_LIMIT,
+    ),
   };
 }

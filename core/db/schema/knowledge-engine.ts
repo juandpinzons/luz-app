@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   check,
   index,
   integer,
@@ -176,3 +177,122 @@ export type KnowledgeEngineInsightRelationshipRow =
   typeof knowledgeEngineInsightRelationships.$inferSelect;
 export type NewKnowledgeEngineInsightRelationshipRow =
   typeof knowledgeEngineInsightRelationships.$inferInsert;
+
+/**
+ * `core/knowledge-engine/reasoning` -- una conclusión razonada a partir
+ * de VARIOS insights ya validados y correlacionados entre sí (nunca de
+ * una sola pieza de evidencia: eso ya es el trabajo de `Insight`).
+ * "Reasoning" es el siguiente nivel sobre Knowledge: Knowledge
+ * interpreta UNA evidencia ("qué significa esto"), Reasoning combina
+ * VARIAS interpretaciones ya validadas para concluir algo que ninguna
+ * de ellas dice por sí sola. Mismo criterio que `knowledgeEngineInsights`:
+ * `status` existe para soportar invalidación futura (Principio 4 --
+ * probabilística, no permanente), pero ninguna fila se inserta sin que
+ * Validate ya haya decidido -- sin `.default("validated")` a propósito,
+ * igual que insights no tiene `.default("proposed")`.
+ */
+export const knowledgeEngineReasoningStatusEnum = pgEnum(
+  "knowledge_engine_reasoning_status",
+  ["validated", "invalidated"],
+);
+
+export const knowledgeEngineReasoningConclusions = pgTable(
+  "knowledge_engine_reasoning_conclusions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifeGraphId: uuid("life_graph_id")
+      .notNull()
+      .references(() => lifeGraphs.id, { onDelete: "cascade" }),
+    statement: text("statement").notNull(),
+    confidenceScore: integer("confidence_score").notNull(),
+    confidenceAssignedAt: timestamp("confidence_assigned_at", {
+      withTimezone: true,
+    }).notNull(),
+    status: knowledgeEngineReasoningStatusEnum("status").notNull(),
+    /**
+     * Notas de incertidumbre explícitas -- lo que la conclusión NO
+     * puede respaldar todavía, o qué la fortalecería/debilitaría
+     * (Principio 3: explicabilidad completa, no solo para lo que LUZ
+     * SÍ sabe). Arreglo de notas discretas, no un párrafo libre: cada
+     * elemento es una afirmación de incertidumbre propia, consistente
+     * con el resto del contrato (nunca texto libre sin estructura).
+     */
+    uncertaintyNotes: text("uncertainty_notes").array().notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("knowledge_engine_reasoning_conclusions_life_graph_id_idx").on(
+      table.lifeGraphId,
+    ),
+    index("knowledge_engine_reasoning_conclusions_status_idx").on(table.status),
+    check(
+      "knowledge_engine_reasoning_conclusions_confidence_score_range",
+      sql`${table.confidenceScore} >= 0 AND ${table.confidenceScore} <= 100`,
+    ),
+  ],
+);
+
+export type KnowledgeEngineReasoningConclusionRow =
+  typeof knowledgeEngineReasoningConclusions.$inferSelect;
+export type NewKnowledgeEngineReasoningConclusionRow =
+  typeof knowledgeEngineReasoningConclusions.$inferInsert;
+
+/**
+ * Evidencia de una conclusión de razonamiento -- una sola tabla para
+ * evidencia de apoyo Y evidencia contradictoria (`role`), no dos
+ * tablas separadas: ambas son la misma relación estructural (esta
+ * pieza participó en el razonamiento), solo cambia su papel. `refType`
+ * es texto libre sin FK real -- mismo criterio que
+ * `knowledge_engine_evidence.memoryId`/`ContradictionRef`: hoy
+ * `"insight"`/`"memory"`, preparado para `"belief"`/`"concept"` cuando
+ * el Reasoning Engine se extienda a consumirlos directamente
+ * (compatibilidad futura explícita, sin adelantar esa integración
+ * todavía).
+ */
+export const knowledgeEngineReasoningEvidenceRoleEnum = pgEnum(
+  "knowledge_engine_reasoning_evidence_role",
+  ["supporting", "contradicting"],
+);
+
+export const knowledgeEngineReasoningEvidence = pgTable(
+  "knowledge_engine_reasoning_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifeGraphId: uuid("life_graph_id")
+      .notNull()
+      .references(() => lifeGraphs.id, { onDelete: "cascade" }),
+    conclusionId: uuid("conclusion_id")
+      .notNull()
+      .references((): AnyPgColumn => knowledgeEngineReasoningConclusions.id, {
+        onDelete: "cascade",
+      }),
+    refType: text("ref_type").notNull(),
+    refId: uuid("ref_id").notNull(),
+    role: knowledgeEngineReasoningEvidenceRoleEnum("role").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("knowledge_engine_reasoning_evidence_conclusion_id_idx").on(
+      table.conclusionId,
+    ),
+    index("knowledge_engine_reasoning_evidence_life_graph_id_idx").on(
+      table.lifeGraphId,
+    ),
+    index("knowledge_engine_reasoning_evidence_ref_idx").on(
+      table.refType,
+      table.refId,
+    ),
+  ],
+);
+
+export type KnowledgeEngineReasoningEvidenceRow =
+  typeof knowledgeEngineReasoningEvidence.$inferSelect;
+export type NewKnowledgeEngineReasoningEvidenceRow =
+  typeof knowledgeEngineReasoningEvidence.$inferInsert;

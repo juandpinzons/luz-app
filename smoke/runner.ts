@@ -5,6 +5,7 @@ import { loginFlow } from "./login.test";
 import { firstMessageFlow } from "./first-message.test";
 import { dashboardFlow } from "./dashboard.test";
 import { conversationStrategyFlow } from "./conversation-strategy.test";
+import { reasoningEngineFlow } from "./reasoning-engine.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -18,6 +19,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   firstMessageFlow,
   dashboardFlow,
   conversationStrategyFlow,
+  reasoningEngineFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {
