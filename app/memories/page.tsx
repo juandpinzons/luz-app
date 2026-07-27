@@ -8,10 +8,8 @@ import {
   searchMemories,
   type MemoryTimeGroup,
 } from "@/features/memories/services/search-memories";
-import {
-  listValidatedInsights,
-  type InsightWithEvidence,
-} from "@/features/knowledge/services/list-validated-insights";
+import { listValidatedInsights } from "@/features/knowledge/services/list-validated-insights";
+import type { InsightExplanation } from "@/features/knowledge/services/explain-insight";
 import { MemoryCard } from "@/features/memories/components/memory-card";
 import { InsightCard } from "@/features/memories/components/insight-card";
 
@@ -54,7 +52,7 @@ export default async function MemoriesPage({
    * que no se pide durante `searchTerm` (misma disciplina de no
    * mostrar algo fuera de lugar que ya usa el resto de la página).
    */
-  let insights: InsightWithEvidence[] = [];
+  let insights: InsightExplanation[] = [];
 
   if (lifeGraphContext) {
     try {
@@ -123,12 +121,7 @@ export default async function MemoriesPage({
             </h2>
             <ul className="mt-3 space-y-2">
               {insights.map((insight, index) => (
-                <InsightCard
-                  key={insight.id}
-                  description={insight.description}
-                  evidenceContents={insight.evidenceContents}
-                  index={index}
-                />
+                <InsightCard key={insight.id} explanation={insight} index={index} />
               ))}
             </ul>
           </section>

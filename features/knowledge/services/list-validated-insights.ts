@@ -1,37 +1,24 @@
 import type { Database } from "../../../core/db/client";
 import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
-import type { EntityId, LifeGraphContext } from "../../../core/life";
-import { DrizzleMemoryRepository } from "../../../core/memory-engine";
+import type { LifeGraphContext } from "../../../core/life";
+import { explainInsight, type InsightExplanation } from "./explain-insight";
 
 const DEFAULT_LIMIT = 5;
 
-export interface InsightWithEvidence {
-  id: EntityId;
-  description: string;
-  /** Contenido de las memorias que sustentan este insight (`Evidence`, ya real) -- nunca inventado, siempre trazable a algo que la persona ya contó. */
-  evidenceContents: string[];
-}
-
 /**
- * Insights ya validados por Knowledge Engine, con su evidencia
- * resuelta -- la primera vez que esa comprensión acumulada se vuelve
- * visible en algún lugar del producto (antes solo alimentaba, de forma
- * anónima, la línea de continuidad del Dashboard). Nunca `type` ni
- * `confidence` expuestos: mismo criterio que `MemoryCard` ya estableció
- * para `memory.type` -- es taxonomía interna del engine, no algo que la
- * persona necesita leer para confiar en lo que dice. Solo
- * `status === "validated"`: `proposed`/`rejected` son estados internos
- * del pipeline (Validate ya decidió esto; esta función no vuelve a
- * decidirlo, Principio 3 de explicabilidad).
+ * Los insights ya validados más recientes, cada uno ya explicado
+ * (`explainInsight`) -- nunca vuelve a resolver evidencia por su
+ * cuenta, para no mantener dos caminos que hacen lo mismo. Solo decide
+ * el orden y el límite; toda la explicación (evidencia, recencia,
+ * consistencia) es responsabilidad exclusiva de `explainInsight`.
  */
 export async function listValidatedInsights(
   db: Database,
   context: LifeGraphContext,
   options: { limit?: number } = {},
-): Promise<InsightWithEvidence[]> {
+): Promise<InsightExplanation[]> {
   const limit = options.limit ?? DEFAULT_LIMIT;
   const insightRepository = new DrizzleInsightRepository(db);
-  const memoryRepository = new DrizzleMemoryRepository(db);
 
   const insights = (await insightRepository.list(context))
     .filter((insight) => insight.status === "validated")
@@ -42,21 +29,13 @@ export async function listValidatedInsights(
     )
     .slice(0, limit);
 
-  return Promise.all(
-    insights.map(async (insight) => {
-      const evidence = await insightRepository.getEvidence(context, insight.id);
-      const contents = await Promise.all(
-        evidence.map(async (item) => {
-          const memory = await memoryRepository.getById(context, item.memoryId);
-          return memory?.content;
-        }),
-      );
-
-      return {
-        id: insight.id,
-        description: insight.description,
-        evidenceContents: contents.filter((content): content is string => Boolean(content)),
-      };
-    }),
+  const explanations = await Promise.all(
+    insights.map((insight) => explainInsight(db, context, insight.id)),
   );
+
+  // `explainInsight` solo devuelve `null` si el insight no existe o no
+  // está validado -- ninguno de los dos puede pasar aquí (venimos de
+  // `insightRepository.list()` filtrado a `validated` un instante
+  // antes), pero se filtra de todas formas en vez de asumirlo.
+  return explanations.filter((explanation): explanation is InsightExplanation => explanation !== null);
 }
