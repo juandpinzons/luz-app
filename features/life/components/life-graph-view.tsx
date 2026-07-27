@@ -1,0 +1,414 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import type {
+  LifeGraphBranch,
+  LifeGraphItem,
+  LifeGraphSummary,
+} from "../services/build-life-graph";
+import type { RelationshipWithDisplayName } from "../services/list-all-relationships";
+import type { Memory } from "../../../core/memory-engine";
+
+const VIEW_SIZE = 600;
+const CENTER = VIEW_SIZE / 2;
+const RADIUS = 190;
+const MIN_ZOOM = 60;
+const MAX_ZOOM = 150;
+const ZOOM_STEP = 15;
+
+function polarPosition(index: number, total: number) {
+  const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
+  return {
+    x: CENTER + RADIUS * Math.cos(angle),
+    y: CENTER + RADIUS * Math.sin(angle),
+  };
+}
+
+function formatRelativeTime(date: Date): string {
+  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (diffMinutes < 1) return "hace un momento";
+  if (diffMinutes < 60) return `hace ${diffMinutes} min`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `hace ${diffHours} h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "ayer";
+  if (diffDays < 30) return `hace ${diffDays} días`;
+  const diffMonths = Math.floor(diffDays / 30);
+  return `hace ${diffMonths} ${diffMonths === 1 ? "mes" : "meses"}`;
+}
+
+interface LifeGraphViewProps {
+  personName: string;
+  summary: LifeGraphSummary;
+  /** El render de la vista de lista ya existente -- este componente nunca reimplementa esa parte, solo la envuelve con el toggle. */
+  listView: React.ReactNode;
+}
+
+/**
+ * Mapa mental de la vida de la persona -- capa visual nueva sobre datos
+ * que `/life` ya mostraba en forma de lista (`listView` sigue siendo
+ * exactamente esa lista, sin tocar). Layout radial fijo, sin física ni
+ * librería nueva: los ángulos se calculan una vez con trigonometría
+ * simple, no hay simulación de fuerzas que mantener ni depurar.
+ *
+ * "Vista lista" existe porque un mapa no es siempre la forma más clara
+ * de leer la misma información -- ninguna de las dos es la fuente de
+ * verdad, ambas leen `summary`.
+ */
+export function LifeGraphView({ personName, summary, listView }: LifeGraphViewProps) {
+  const [mode, setMode] = useState<"map" | "list">("map");
+  const [zoom, setZoom] = useState(100);
+  const [selectedBranchId, setSelectedBranchId] = useState<LifeGraphBranch["id"] | null>(null);
+  const [showRelationships, setShowRelationships] = useState(true);
+  const [showMemories, setShowMemories] = useState(true);
+
+  const branches = summary.branches;
+  const positions = useMemo(
+    () => branches.map((_, index) => polarPosition(index, branches.length)),
+    [branches],
+  );
+
+  const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
+
+  if (mode === "list") {
+    return (
+      <div>
+        <ViewToggle mode={mode} onChange={setMode} />
+        {listView}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ViewToggle mode={mode} onChange={setMode} />
+          <div className="flex items-center gap-2 text-sm text-zinc-400">
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+              aria-label="Alejar"
+            >
+              −
+            </button>
+            <span className="w-12 text-center tabular-nums">{zoom}%</span>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-700 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+              aria-label="Acercar"
+            >
+              +
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(100)}
+              className="rounded-full border border-zinc-700 px-3 py-1.5 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+            >
+              Recentrar
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/40">
+          <div
+            className="mx-auto animate-fade-in transition-transform duration-300"
+            style={{
+              width: VIEW_SIZE,
+              maxWidth: "100%",
+              transform: `scale(${zoom / 100})`,
+              transformOrigin: "top center",
+            }}
+          >
+            <svg
+              viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
+              className="w-full"
+              role="img"
+              aria-label={`Mapa de la vida de ${personName}: ${branches.map((b) => b.label).join(", ")}`}
+            >
+              {branches.map((branch, index) => (
+                <line
+                  key={branch.id}
+                  x1={CENTER}
+                  y1={CENTER}
+                  x2={positions[index].x}
+                  y2={positions[index].y}
+                  stroke="var(--color-luz)"
+                  strokeOpacity={0.35}
+                  strokeWidth={1.5}
+                />
+              ))}
+            </svg>
+
+            <div className="relative" style={{ height: VIEW_SIZE, marginTop: -VIEW_SIZE }}>
+              <BranchButton
+                label={personName}
+                x={CENTER}
+                y={CENTER}
+                primary
+                onClick={() => setSelectedBranchId(null)}
+              />
+              {branches.map((branch, index) => (
+                <BranchButton
+                  key={branch.id}
+                  label={branch.label}
+                  count={branch.count}
+                  x={positions[index].x}
+                  y={positions[index].y}
+                  active={branch.id === selectedBranchId}
+                  onClick={() =>
+                    setSelectedBranchId((current) => (current === branch.id ? null : branch.id))
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {selectedBranch && (
+          <BranchDetailPanel branch={selectedBranch} onClose={() => setSelectedBranchId(null)} />
+        )}
+
+        {!selectedBranch && (
+          <p className="mt-6 text-center text-sm text-zinc-600">
+            Este mapa crece contigo. Cada conversación construye más claridad sobre tu vida.
+          </p>
+        )}
+      </div>
+
+      <div className="flex w-full flex-col gap-4 lg:w-72 lg:flex-shrink-0">
+        {showRelationships && summary.relationships.length > 0 && (
+          <SidePanel
+            title="Relaciones"
+            count={summary.relationships.length}
+            onClose={() => setShowRelationships(false)}
+          >
+            <ul className="space-y-3">
+              {summary.relationships.slice(0, 6).map((relationship) => (
+                <RelationshipRow key={relationship.id} relationship={relationship} />
+              ))}
+            </ul>
+          </SidePanel>
+        )}
+
+        {showMemories && summary.timeline.length > 0 && (
+          <SidePanel
+            title="Recuerdos"
+            count={summary.timeline.length}
+            onClose={() => setShowMemories(false)}
+          >
+            <ul className="space-y-3">
+              {summary.timeline.slice(0, 5).map((memory) => (
+                <MemoryRow key={memory.id} memory={memory} />
+              ))}
+            </ul>
+            <Link
+              href="/memories"
+              className="mt-1 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+            >
+              Ver todos
+            </Link>
+          </SidePanel>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ViewToggle({
+  mode,
+  onChange,
+}: {
+  mode: "map" | "list";
+  onChange: (mode: "map" | "list") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-full border border-zinc-800 p-0.5 text-sm">
+      <button
+        type="button"
+        onClick={() => onChange("map")}
+        className={
+          mode === "map"
+            ? "rounded-full bg-zinc-800 px-3 py-1.5 text-white"
+            : "rounded-full px-3 py-1.5 text-zinc-500 transition hover:text-white"
+        }
+      >
+        Vista mapa
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("list")}
+        className={
+          mode === "list"
+            ? "rounded-full bg-zinc-800 px-3 py-1.5 text-white"
+            : "rounded-full px-3 py-1.5 text-zinc-500 transition hover:text-white"
+        }
+      >
+        Vista lista
+      </button>
+    </div>
+  );
+}
+
+function BranchButton({
+  label,
+  count,
+  x,
+  y,
+  primary = false,
+  active = false,
+  onClick,
+}: {
+  label: string;
+  count?: number;
+  x: number;
+  y: number;
+  primary?: boolean;
+  active?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{ left: x, top: y }}
+      className={
+        (primary
+          ? "-translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-6 py-3 text-base font-medium text-black shadow-[0_0_30px_rgba(227,177,104,0.25)]"
+          : active
+            ? "-translate-x-1/2 -translate-y-1/2 rounded-full border border-luz bg-zinc-900 px-4 py-2.5 text-sm text-white shadow-[0_0_18px_rgba(227,177,104,0.3)]"
+            : "-translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-700 bg-black px-4 py-2.5 text-sm text-zinc-200 transition hover:border-luz/60 hover:text-white") +
+        " absolute flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+      }
+    >
+      {label}
+      {typeof count === "number" && (
+        <span className="text-xs text-zinc-500">{count}</span>
+      )}
+    </button>
+  );
+}
+
+function BranchDetailPanel({
+  branch,
+  onClose,
+}: {
+  branch: LifeGraphBranch;
+  onClose: () => void;
+}) {
+  return (
+    <section className="animate-fade-in mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-zinc-300">{branch.label}</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar"
+          className="text-zinc-500 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+        >
+          ✕
+        </button>
+      </div>
+
+      {branch.items.length === 0 ? (
+        <p className="mt-3 text-sm text-zinc-500">
+          Todavía no hay nada aquí -- se va a ir llenando a medida que hablemos de esto.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {branch.items.map((item) => (
+            <ItemRow key={item.id} item={item} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ItemRow({ item }: { item: LifeGraphItem }) {
+  const border = item.celebrated
+    ? "border-luz/30 hover:border-luz/60"
+    : "border-zinc-800 hover:border-zinc-600";
+  const opacity = item.muted ? "opacity-60 hover:opacity-100" : "";
+
+  return (
+    <li>
+      <Link
+        href={item.href}
+        className={`flex items-center justify-between gap-3 rounded-lg border ${border} ${opacity} px-4 py-3 text-sm transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz`}
+      >
+        <span className="text-zinc-200">{item.title}</span>
+        {item.subtitle && <span className="flex-shrink-0 text-xs text-zinc-500">{item.subtitle}</span>}
+      </Link>
+    </li>
+  );
+}
+
+function SidePanel({
+  title,
+  count,
+  onClose,
+  children,
+}: {
+  title: string;
+  count: number;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="animate-fade-in rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-zinc-300">
+          {title} <span className="text-xs text-zinc-600">{count}</span>
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Ocultar ${title}`}
+          className="text-zinc-600 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+        >
+          ✕
+        </button>
+      </div>
+      <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+function RelationshipRow({ relationship }: { relationship: RelationshipWithDisplayName }) {
+  return (
+    <li>
+      <Link
+        href={`/life/relationships/${relationship.id}`}
+        className="flex items-center gap-3 rounded-lg px-1 py-1 transition hover:bg-zinc-800/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+      >
+        <span
+          aria-hidden="true"
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-zinc-800 text-xs font-medium text-zinc-300"
+        >
+          {relationship.otherPersonName.charAt(0).toUpperCase()}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm text-zinc-200">
+            {relationship.otherPersonName}
+          </span>
+          <span className="block text-xs text-zinc-500">{relationship.type}</span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+function MemoryRow({ memory }: { memory: Memory }) {
+  return (
+    <li className="text-sm">
+      <p className="text-zinc-500">
+        {formatRelativeTime(memory.occurredAt ?? memory.createdAt)}
+      </p>
+      <p className="mt-0.5 text-zinc-300">&ldquo;{memory.content}&rdquo;</p>
+    </li>
+  );
+}

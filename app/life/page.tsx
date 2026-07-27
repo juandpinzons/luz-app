@@ -4,6 +4,7 @@ import { getLifeGraphContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
 import type { Goal, Habit, Project } from "@/core/life";
 import { LifeCard } from "@/features/life/components/life-card";
+import { LifeGraphView } from "@/features/life/components/life-graph-view";
 import { listAllGoals } from "@/features/life/services/list-all-goals";
 import { listAllProjects } from "@/features/life/services/list-all-projects";
 import { listAllHabits } from "@/features/life/services/list-all-habits";
@@ -12,6 +13,9 @@ import {
   type RelationshipWithDisplayName,
 } from "@/features/life/services/list-all-relationships";
 import { getLifeTimeline } from "@/features/life/services/get-life-timeline";
+import { assembleLifeGraph } from "@/features/life/services/build-life-graph";
+import { listValidatedInsights } from "@/features/knowledge/services/list-validated-insights";
+import type { InsightExplanation } from "@/features/knowledge/services/explain-insight";
 import {
   GOAL_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
@@ -42,13 +46,15 @@ function formatRelativeTime(date: Date): string {
 
 /**
  * Vista general de Life, solo lectura (Sprint 3, docs/product/
- * ALPHA_EXPERIENCE_V1_DESIGN.md §3.2/4.2) — cuatro franjas (Goals,
- * Projects, Habits, Relationships) + Timeline desde Memoria. Cada
- * franja se oculta si está vacía (silencio intencional) — hoy, para
- * cualquier usuario real, probablemente todas lo estén: nada en el
- * repositorio escribe Goal/Project/Habit/Relationship todavía (ningún
- * caller de `find-or-create-*`), así que esta pantalla es honesta
- * sobre eso, no rota.
+ * ALPHA_EXPERIENCE_V1_DESIGN.md §3.2/4.2) — cinco franjas (Goals,
+ * Projects, Habits, Relationships, Insights) + Timeline desde Memoria.
+ * Cada franja se oculta si está vacía (silencio intencional).
+ *
+ * Desde el mapa mental (LifeGraph): la misma información se reagrupa
+ * (`assembleLifeGraph`, síncrono, sin consultas nuevas) en ramas
+ * visuales -- la lista de abajo sigue siendo exactamente la misma
+ * lectura de siempre, ahora también disponible como "Vista lista"
+ * dentro de `LifeGraphView`.
  */
 export default async function LifePage() {
   const session = await auth();
@@ -78,24 +84,29 @@ export default async function LifePage() {
   let habits: Habit[] = [];
   let relationships: RelationshipWithDisplayName[] = [];
   let timeline: Memory[] = [];
+  let insights: InsightExplanation[] = [];
 
   /**
-   * `allSettled`, no `all`: antes, si una sola franja fallaba (p. ej.
-   * Goals), las cinco desaparecían juntas — incluido el Timeline, que
-   * no depende de las mismas tablas y podía tener datos reales de
-   * memoria. Bug real, encontrado en producción — cada franja se
-   * degrada por separado ahora, igual que ya se oculta por separado
-   * cuando está vacía.
+   * `allSettled`, no `all`: si una sola franja falla, las demás no
+   * desaparecen con ella (bug real, ya corregido en producción antes
+   * de este cambio) -- cada franja se degrada por separado.
    */
   if (lifeGraphContext) {
-    const [goalsResult, projectsResult, habitsResult, relationshipsResult, timelineResult] =
-      await Promise.allSettled([
-        listAllGoals(db, lifeGraphContext),
-        listAllProjects(db, lifeGraphContext),
-        listAllHabits(db, lifeGraphContext),
-        listAllRelationships(db, lifeGraphContext),
-        getLifeTimeline(db, lifeGraphContext),
-      ]);
+    const [
+      goalsResult,
+      projectsResult,
+      habitsResult,
+      relationshipsResult,
+      timelineResult,
+      insightsResult,
+    ] = await Promise.allSettled([
+      listAllGoals(db, lifeGraphContext),
+      listAllProjects(db, lifeGraphContext),
+      listAllHabits(db, lifeGraphContext),
+      listAllRelationships(db, lifeGraphContext),
+      getLifeTimeline(db, lifeGraphContext),
+      listValidatedInsights(db, lifeGraphContext),
+    ]);
 
     if (goalsResult.status === "fulfilled") {
       goals = goalsResult.value;
@@ -162,6 +173,19 @@ export default async function LifePage() {
         ...describeError(timelineResult.reason),
       });
     }
+    if (insightsResult.status === "fulfilled") {
+      insights = insightsResult.value;
+    } else {
+      logger.log({
+        event: "life.insights_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(insightsResult.reason),
+      });
+    }
   }
 
   const hasAnything =
@@ -170,116 +194,134 @@ export default async function LifePage() {
     habits.length > 0 ||
     relationships.length > 0;
 
+  const summary = assembleLifeGraph({
+    goals,
+    projects,
+    habits,
+    relationships,
+    timeline,
+    insights,
+  });
+  const firstName = (session.user.name ?? "").trim().split(/\s+/)[0] || "ti";
+
+  const listView = (
+    <div className="mx-auto w-full max-w-3xl space-y-10">
+      {!hasAnything && timeline.length === 0 && (
+        <p className="animate-fade-in text-zinc-500">
+          Todavía no tengo nada guardado sobre tu vida — a medida que
+          hables conmigo, esto se va a ir llenando.
+        </p>
+      )}
+
+      {goals.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-zinc-400">Objetivos</h2>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {goals.map((goal, index) => (
+              <LifeCard
+                key={goal.id}
+                index={Math.min(index, 10)}
+                href={`/life/goals/${goal.id}`}
+                title={goal.title}
+                statusLabel={GOAL_STATUS_LABELS[goal.status]}
+                muted={goal.status === "abandoned"}
+                celebrated={goal.status === "completed"}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {projects.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-zinc-400">Proyectos</h2>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {projects.map((project, index) => (
+              <LifeCard
+                key={project.id}
+                index={Math.min(index, 10)}
+                href={`/life/projects/${project.id}`}
+                title={project.title}
+                statusLabel={PROJECT_STATUS_LABELS[project.status]}
+                muted={project.status === "cancelled"}
+                celebrated={project.status === "completed"}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {habits.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-zinc-400">Hábitos</h2>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {habits.map((habit, index) => (
+              <LifeCard
+                key={habit.id}
+                index={Math.min(index, 10)}
+                href={`/life/habits/${habit.id}`}
+                title={habit.title}
+                statusLabel={habit.active ? "activo" : "pausado"}
+                muted={!habit.active}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {relationships.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-zinc-400">
+            Relaciones
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {relationships.map((relationship, index) => (
+              <LifeCard
+                key={relationship.id}
+                index={Math.min(index, 10)}
+                href={`/life/relationships/${relationship.id}`}
+                title={relationship.otherPersonName}
+                statusLabel={RELATIONSHIP_TYPE_LABELS[relationship.type]}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {timeline.length > 0 && (
+        <section>
+          <h2 className="text-sm font-medium text-zinc-400">Cronología</h2>
+          <ul className="mt-3 space-y-3 border-l border-luz/25 pl-4">
+            {timeline.map((memory, index) => (
+              <li
+                key={memory.id}
+                className="animate-fade-in text-sm"
+                style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
+              >
+                <span className="text-zinc-500">
+                  {formatRelativeTime(memory.occurredAt ?? memory.createdAt)}
+                </span>{" "}
+                <span className="text-zinc-300">
+                  &ldquo;{memory.content}&rdquo;
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+
   return (
     <main className="min-h-full px-6 py-10">
-      <div className="mx-auto w-full max-w-3xl space-y-10">
+      <div className="mx-auto w-full max-w-5xl">
         <h1 className="text-xl font-light tracking-[0.25em] text-white">
           VIDA
         </h1>
 
-        {!hasAnything && timeline.length === 0 && (
-          <p className="animate-fade-in text-zinc-500">
-            Todavía no tengo nada guardado sobre tu vida — a medida que
-            hables conmigo, esto se va a ir llenando.
-          </p>
-        )}
-
-        {goals.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">Objetivos</h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {goals.map((goal, index) => (
-                <LifeCard
-                  key={goal.id}
-                  index={Math.min(index, 10)}
-                  href={`/life/goals/${goal.id}`}
-                  title={goal.title}
-                  statusLabel={GOAL_STATUS_LABELS[goal.status]}
-                  muted={goal.status === "abandoned"}
-                  celebrated={goal.status === "completed"}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {projects.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">Proyectos</h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {projects.map((project, index) => (
-                <LifeCard
-                  key={project.id}
-                  index={Math.min(index, 10)}
-                  href={`/life/projects/${project.id}`}
-                  title={project.title}
-                  statusLabel={PROJECT_STATUS_LABELS[project.status]}
-                  muted={project.status === "cancelled"}
-                  celebrated={project.status === "completed"}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {habits.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">Hábitos</h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {habits.map((habit, index) => (
-                <LifeCard
-                  key={habit.id}
-                  index={Math.min(index, 10)}
-                  href={`/life/habits/${habit.id}`}
-                  title={habit.title}
-                  statusLabel={habit.active ? "activo" : "pausado"}
-                  muted={!habit.active}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {relationships.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">
-              Relaciones
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {relationships.map((relationship, index) => (
-                <LifeCard
-                  key={relationship.id}
-                  index={Math.min(index, 10)}
-                  href={`/life/relationships/${relationship.id}`}
-                  title={relationship.otherPersonName}
-                  statusLabel={RELATIONSHIP_TYPE_LABELS[relationship.type]}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {timeline.length > 0 && (
-          <section>
-            <h2 className="text-sm font-medium text-zinc-400">Cronología</h2>
-            <ul className="mt-3 space-y-3 border-l border-luz/25 pl-4">
-              {timeline.map((memory, index) => (
-                <li
-                  key={memory.id}
-                  className="animate-fade-in text-sm"
-                  style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
-                >
-                  <span className="text-zinc-500">
-                    {formatRelativeTime(memory.occurredAt ?? memory.createdAt)}
-                  </span>{" "}
-                  <span className="text-zinc-300">
-                    &ldquo;{memory.content}&rdquo;
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <div className="mt-6">
+          <LifeGraphView personName={firstName} summary={summary} listView={listView} />
+        </div>
       </div>
     </main>
   );
