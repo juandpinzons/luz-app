@@ -1,7 +1,6 @@
 import { DrizzleContradictionRepository } from "../../../contradiction-engine";
 import type { Database } from "../../../db/client";
 import type { EntityId } from "../../../life/value-objects/entity-id";
-import type { Context } from "../../../context-engine";
 import type { PipelineContext } from "../../pipeline-context";
 import { DrizzleInsightRepository } from "../../repositories/drizzle-insight.repository";
 import type { InsightRepository } from "../../repositories/insight.repository";
@@ -9,6 +8,7 @@ import { DefaultReasoningCorrelateStage } from "../correlation/default-reasoning
 import type { ReasoningCorrelateStage } from "../correlation/reasoning-correlate-stage";
 import type { ReasoningConclusion } from "../entities/reasoning-conclusion";
 import { DefaultReasoningGatherStage } from "../gathering/default-reasoning-gather-stage";
+import type { ReasoningEvidenceWindow } from "../gathering/reasoning-evidence-window";
 import type { ReasoningGatherStage } from "../gathering/reasoning-gather-stage";
 import { AIReasoningStrategy } from "../inference/ai-reasoning-strategy";
 import type { ReasoningStrategy } from "../inference/reasoning-strategy";
@@ -46,11 +46,11 @@ export class DefaultReasoningEngine implements ReasoningEngine {
   constructor(private readonly stages: ReasoningEngineStages) {}
 
   async run(
-    context: Context,
+    window: ReasoningEvidenceWindow,
     pipelineContext: PipelineContext,
     memoryContentById: Map<EntityId, string>,
   ): Promise<ReasoningConclusion[]> {
-    const insights = await this.stages.gather.gather(context, pipelineContext);
+    const insights = await this.stages.gather.gather(window, pipelineContext);
     const clusters = await this.stages.correlate.correlate(insights, pipelineContext);
 
     const conclusions: ReasoningConclusion[] = [];

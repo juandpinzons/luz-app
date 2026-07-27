@@ -1,43 +1,30 @@
-import type { Context } from "../../../context-engine";
-import type { EntityId } from "../../../life/value-objects/entity-id";
 import type { PipelineContext } from "../../pipeline-context";
 import type { Insight } from "../../entities/insight";
 import type { InsightRepository } from "../../repositories/insight.repository";
+import type { ReasoningEvidenceWindow } from "./reasoning-evidence-window";
 import type { ReasoningGatherStage } from "./reasoning-gather-stage";
 
 /**
  * Determinista, sin IA -- depende únicamente de `InsightRepository`,
- * igual que `DefaultPersistStage`. Conserva el orden que Context Engine
- * ya decidió (`relevanceScore` descendente): el primer insight de la
- * lista es el más relevante ahora mismo, no un orden nuevo inventado
- * aquí.
+ * igual que `DefaultPersistStage`. Conserva el orden de
+ * `window.insightIds`: quien arma la ventana ya decidió esa
+ * prioridad (hoy, `relevanceScore` descendente de Context Engine), no
+ * se vuelve a ordenar aquí.
  */
 export class DefaultReasoningGatherStage implements ReasoningGatherStage {
   constructor(private readonly repository: InsightRepository) {}
 
-  async gather(context: Context, pipelineContext: PipelineContext): Promise<Insight[]> {
-    const insightIds: EntityId[] = [];
-    const seen = new Set<EntityId>();
-
-    for (const item of context.items) {
-      if (item.source !== "insight" || !item.sourceId) {
-        continue;
-      }
-      if (seen.has(item.sourceId)) {
-        continue;
-      }
-      seen.add(item.sourceId);
-      insightIds.push(item.sourceId);
-    }
-
+  async gather(
+    window: ReasoningEvidenceWindow,
+    pipelineContext: PipelineContext,
+  ): Promise<Insight[]> {
     const insights: Insight[] = [];
-    for (const id of insightIds) {
+
+    for (const id of window.insightIds) {
       const insight = await this.repository.getById(pipelineContext, id);
-      // Context Engine solo debería haber recibido insights ya
-      // validados (`assembleRealitySnapshot` filtra por `status ===
-      // "validated"`), pero esta etapa no asume eso sin comprobarlo --
-      // un insight borrado o invalidado entre que Context Engine corrió
-      // y que Reasoning corre no debe colarse en la evidencia.
+      // Quien armó la ventana pudo haber leído un insight que, entre
+      // ese momento y este, se borró o se invalidó -- nunca se asume
+      // que sigue siendo válido solo porque llegó en la ventana.
       if (insight && insight.status === "validated") {
         insights.push(insight);
       }

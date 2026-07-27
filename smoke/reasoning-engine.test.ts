@@ -10,9 +10,9 @@ import {
   DrizzleReasoningRepository,
   DefaultReasoningEngine,
   type ProposedReasoning,
+  type ReasoningEvidenceWindow,
   type ReasoningStrategy,
 } from "../core/knowledge-engine";
-import type { Context } from "../core/context-engine";
 import type { Insight } from "../core/knowledge-engine/entities/insight";
 import type { SmokeContext, SmokeFlow } from "./types";
 
@@ -55,15 +55,6 @@ async function seedValidatedInsight(
     updatedAt: now,
     validatedAt: now,
   });
-}
-
-function toContextItem(insight: Insight, relevanceScore: number) {
-  return {
-    sourceId: insight.id,
-    source: "insight" as const,
-    label: insight.description,
-    relevanceScore,
-  };
 }
 
 export const reasoningEngineFlow: SmokeFlow = {
@@ -120,11 +111,8 @@ export const reasoningEngineFlow: SmokeFlow = {
       [memoryB, "Llevo toda la semana durmiendo como 5 horas."],
     ]);
 
-    const twoInsightContext: Context = {
-      id: createEntityId(crypto.randomUUID()),
-      lifeGraphId: context.lifeGraphId,
-      generatedAt: now,
-      items: [toContextItem(insightA, 90), toContextItem(insightB, 85)],
+    const twoInsightWindow: ReasoningEvidenceWindow = {
+      insightIds: [insightA.id, insightB.id],
     };
 
     const fakeStrategy = new FakeReasoningStrategy({
@@ -144,7 +132,7 @@ export const reasoningEngineFlow: SmokeFlow = {
     });
 
     const conclusions = await engine.run(
-      twoInsightContext,
+      twoInsightWindow,
       { ...context, memoryId: memoryA },
       memoryContentById,
     );
@@ -192,15 +180,10 @@ export const reasoningEngineFlow: SmokeFlow = {
       "Smoke: insight aislado sin relaciones",
       now,
     );
-    const soloContext: Context = {
-      id: createEntityId(crypto.randomUUID()),
-      lifeGraphId: context.lifeGraphId,
-      generatedAt: now,
-      items: [toContextItem(insightC, 90)],
-    };
+    const soloWindow: ReasoningEvidenceWindow = { insightIds: [insightC.id] };
 
     const rejectingConclusions = await engine.run(
-      soloContext,
+      soloWindow,
       { ...context, memoryId: memoryA },
       memoryContentById,
     );

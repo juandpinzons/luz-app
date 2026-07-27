@@ -16,12 +16,13 @@ import {
   detectContradictions,
   type ContradictionCandidate,
 } from "../../../core/contradiction-engine";
-import { createContextEngine } from "../../../core/context-engine";
+import { createContextEngine, type Context } from "../../../core/context-engine";
 import { DrizzleImportanceRepository, updateImportance } from "../../../core/importance-engine";
 import {
   createReasoningEngine,
   DrizzleInsightRepository,
   DrizzleReasoningRepository,
+  type ReasoningEvidenceWindow,
 } from "../../../core/knowledge-engine";
 import type { Insight } from "../../../core/knowledge-engine/entities/insight";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
@@ -32,6 +33,31 @@ import { detectPredictivePatterns } from "./detect-predictive-patterns";
 
 /** Cuántos otros Beliefs/items de vida se comparan como candidatos de contradicción -- acotado por costo/latencia (ver `AIContradictionDetectionStrategy`, una sola llamada por sujeto). */
 const MAX_CONTRADICTION_CANDIDATES = 10;
+
+/**
+ * Único lugar que traduce "lo que Context Engine decidió relevante"
+ * (`Context`) a la forma neutral que el Reasoning Engine sí conoce
+ * (`ReasoningEvidenceWindow`, `core/knowledge-engine/reasoning`) --
+ * exactamente el punto donde una ventana de razonamiento más amplia
+ * (Top N por `core/importance-engine`, o un recorrido del grafo de
+ * `core/concept-graph`/`core/belief-engine`) se conectaría a futuro:
+ * otra función con esta misma forma de salida, nunca un cambio dentro
+ * de `core/knowledge-engine/reasoning`.
+ */
+function toReasoningEvidenceWindow(context: Context): ReasoningEvidenceWindow {
+  const insightIds: EntityId[] = [];
+  const seen = new Set<EntityId>();
+
+  for (const item of context.items) {
+    if (item.source !== "insight" || !item.sourceId || seen.has(item.sourceId)) {
+      continue;
+    }
+    seen.add(item.sourceId);
+    insightIds.push(item.sourceId);
+  }
+
+  return { insightIds };
+}
 
 function daysSince(date: Date, now: Date): number {
   return Math.max(0, (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
@@ -179,12 +205,13 @@ export async function enrichKnowledgeGraph(
      */
     async function runReasoning(): Promise<void> {
       const engineContext = await createContextEngine(db).build(snapshot, context);
+      const window = toReasoningEvidenceWindow(engineContext);
       const memoryContentById = new Map(
         snapshot.memory.items.map((item) => [item.id, item.content]),
       );
 
       const conclusions = await createReasoningEngine(db).run(
-        engineContext,
+        window,
         { ...context, memoryId },
         memoryContentById,
       );

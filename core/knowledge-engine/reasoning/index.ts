@@ -7,6 +7,7 @@ export * from "./repositories/reasoning.repository";
 export * from "./repositories/drizzle-reasoning.repository";
 
 // Gathering
+export * from "./gathering/reasoning-evidence-window";
 export * from "./gathering/reasoning-gather-stage";
 export * from "./gathering/default-reasoning-gather-stage";
 

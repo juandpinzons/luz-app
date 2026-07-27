@@ -39,6 +39,7 @@ function emptySnapshot(): RealitySnapshot {
     insights: { items: [] },
     signals: { signals: [] },
     knowledgeGaps: { domains: [] },
+    reasoning: { items: [] },
   };
 }
 
@@ -204,6 +205,28 @@ export const conversationStrategyFlow: SmokeFlow = {
     assert(
       (await selectStrategyFor(followUpSnapshot, false)) === "follow_up",
       "una memoria relevante de hace 5 días, sin contacto previo marcado como primer contacto, debería producir 'follow_up'",
+    );
+
+    const reflectSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      reasoning: {
+        items: [
+          {
+            id: createEntityId("reasoning-1"),
+            statement:
+              "El ritmo de trabajo actual parece estar afectando su descanso.",
+            confidenceScore: 82,
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(reflectSnapshot, false)) === "reflect",
+      "una conclusión de razonamiento ya validada debería producir 'reflect'",
+    );
+    assert(
+      (await selectStrategyFor(reflectSnapshot, true)) !== "reflect",
+      "'reflect' nunca debería ganar en el primer contacto, sin importar qué conclusiones existan",
     );
 
     const celebrateSnapshot: RealitySnapshot = {

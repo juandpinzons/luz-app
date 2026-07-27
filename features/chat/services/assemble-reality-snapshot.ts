@@ -13,7 +13,7 @@ import { rankKnowledgeGaps, type DomainCoverageSignals } from "../../../core/kno
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { DrizzleMemoryRepository } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
-import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
+import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { selectContextualMemories } from "./select-contextual-memories";
 
@@ -33,6 +33,14 @@ import { selectContextualMemories } from "./select-contextual-memories";
 
 const RELEVANT_MEMORY_LIMIT = 5;
 const RELEVANT_INSIGHT_LIMIT = 3;
+/**
+ * Deliberadamente más baja que `RELEVANT_INSIGHT_LIMIT` -- una
+ * conclusión de razonamiento ya es una síntesis de varios insights
+ * (`core/knowledge-engine/reasoning`), así que compartir varias en el
+ * mismo turno se sentiría como una lista de diagnósticos, no como una
+ * observación puntual y genuina (ver `ReflectStrategyRule`).
+ */
+const RELEVANT_REASONING_LIMIT = 2;
 
 /**
  * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
@@ -67,6 +75,7 @@ export async function assembleRealitySnapshot(
     insights,
     beliefs,
     concepts,
+    reasoningConclusions,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -87,6 +96,7 @@ export async function assembleRealitySnapshot(
     new DrizzleInsightRepository(db).list(context),
     new DrizzleBeliefRepository(db).list(context),
     new DrizzleConceptRepository(db).list(context),
+    new DrizzleReasoningRepository(db).list(context),
   ]);
 
   const relevantMemories = focusedMemory
@@ -130,6 +140,21 @@ export async function assembleRealitySnapshot(
         : b.updatedAt.getTime() - a.updatedAt.getTime();
     })
     .slice(0, RELEVANT_INSIGHT_LIMIT);
+
+  // Mismo criterio que `validatedInsights`: solo conclusiones ya
+  // `validated` (nunca `invalidated`), ordenadas por confianza y
+  // desempatando por más reciente -- una conclusión de razonamiento
+  // fuerte no debe perder prioridad frente a una más nueva pero más
+  // débil.
+  const validatedReasoningConclusions = reasoningConclusions
+    .filter((conclusion) => conclusion.status === "validated")
+    .sort((a, b) => {
+      const confidenceDelta = b.confidence.score - a.confidence.score;
+      return confidenceDelta !== 0
+        ? confidenceDelta
+        : b.updatedAt.getTime() - a.updatedAt.getTime();
+    })
+    .slice(0, RELEVANT_REASONING_LIMIT);
 
   // Knowledge Gaps (Knowledge Engine V2) -- cuenta señales reales por
   // dominio, nunca inventa una para un dominio sin actividad todavía
@@ -205,5 +230,17 @@ export async function assembleRealitySnapshot(
     // indefinidamente, tal como ADR-0013 ya esperaba.
     signals: { signals: [] },
     knowledgeGaps: { domains: rankKnowledgeGaps(signalsByDomain) },
+    // Comprensión de segundo orden (Knowledge Engine V2, Reasoning
+    // Engine) -- síntesis ya validada sobre varios insights a la vez,
+    // no una interpretación puntual más. Sin ninguna conclusión
+    // validada todavía, `items` queda vacío a propósito, mismo
+    // criterio de ausencia real que el resto de este ensamblador.
+    reasoning: {
+      items: validatedReasoningConclusions.map((conclusion) => ({
+        id: conclusion.id,
+        statement: conclusion.statement,
+        confidenceScore: conclusion.confidence.score,
+      })),
+    },
   };
 }

@@ -4,6 +4,7 @@ import type { InsightContextSnapshot } from "./insight-context-snapshot";
 import type { KnowledgeGapsSnapshot } from "./knowledge-gaps-snapshot";
 import type { LifeStateSnapshot } from "./life-state-snapshot";
 import type { MemoryContextSnapshot } from "./memory-context-snapshot";
+import type { ReasoningContextSnapshot } from "./reasoning-snapshot";
 
 /**
  * El estado de realidad disponible para un engine en un momento dado
@@ -27,4 +28,6 @@ export interface RealitySnapshot {
   signals: ExternalSignalSnapshot;
   /** `core/knowledge-gaps` (Knowledge Engine V2) -- qué tan bien entiende LUZ cada área de vida ahora mismo. */
   knowledgeGaps: KnowledgeGapsSnapshot;
+  /** `core/knowledge-engine/reasoning` -- conclusiones razonadas ya validadas, para que Conversation Strategy pueda apoyarse en comprensión real, no solo en contexto inmediato. */
+  reasoning: ReasoningContextSnapshot;
 }
