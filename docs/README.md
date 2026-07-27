@@ -268,6 +268,7 @@ The implementation must be updated.
 Canonical roster and role definitions: [`docs/governance/ORGANIZATION_MODEL.md`](governance/ORGANIZATION_MODEL.md).
 Decision authority (who approves what): [`docs/engineering/claude/12_DECISION_BOUNDARIES.md`](engineering/claude/12_DECISION_BOUNDARIES.md).
 AI governance: [`docs/legal/AI_DEVELOPMENT_POLICY.md`](legal/AI_DEVELOPMENT_POLICY.md).
+Intellectual property and copyright: [`docs/legal/INTELLECTUAL_PROPERTY_AND_COPYRIGHT_DECLARATION.md`](legal/INTELLECTUAL_PROPERTY_AND_COPYRIGHT_DECLARATION.md).
 
 "CTO" is legacy terminology and no longer describes a role in this
 project (see `ORGANIZATION_MODEL.md`'s Legacy Terminology note).
