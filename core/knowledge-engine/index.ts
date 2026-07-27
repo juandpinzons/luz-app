@@ -26,6 +26,8 @@ export * from "./lifecycle/default-persist-stage";
 // Relationships
 export * from "./relationships/insight-relationship-strategy";
 export * from "./relationships/structural-insight-relationship-strategy";
+export * from "./relationships/insight-connect-stage";
+export * from "./relationships/default-insight-connect-stage";
 
 // Generation
 export * from "./generation/insight-generation-strategy";
