@@ -34,19 +34,24 @@
 
   /*
    * Ritual de apertura de conversación
-   * (`features/chat/components/conversation-opening-ritual.tsx`). Tres
-   * piezas del mismo momento: la esfera respira mientras espera
-   * (`sphere-breathe`), se disuelve hacia afuera al ceder el paso
-   * (`sphere-exit`), y la conversación real entra un poco más marcada
-   * que una burbuja cualquiera (`conversation-enter`, más
-   * desplazamiento que `fade-in`) porque es la revelación de todo el
-   * hilo, no un mensaje más.
+   * (`features/chat/components/conversation-opening-ritual.tsx`) -- una
+   * sola coreografía, no piezas independientes: la esfera respira
+   * mientras espera (`sphere-breathe`), "Welcome" se escribe
+   * (`script-reveal`), y al terminar, un único gesto compartido cierra
+   * el momento -- la esfera emite un pulso de luz (`light-pulse`) en el
+   * mismo instante en que el velo que la rodea se disuelve
+   * (`veil-dissolve`) y la conversación real emerge desde ese punto
+   * (`emerge`). Las tres últimas comparten duración y punto de
+   * arranque a propósito (ver `PULSE_DURATION_MS` en el componente) --
+   * es lo que las hace leerse como un solo movimiento, no como tres
+   * animaciones que casualmente ocurren juntas.
    */
   --animate-sphere-breathe: sphere-breathe 3.2s ease-in-out infinite;
-  --animate-sphere-exit: sphere-exit 550ms ease-in both;
-  --animate-conversation-enter: conversation-enter 550ms ease-out both;
   /** "Welcome" revelándose de izquierda a derecha, como un trazo manual -- nunca un simple fade, ver `script-reveal`. */
   --animate-script-reveal: script-reveal 900ms ease-out both;
+  --animate-light-pulse: light-pulse 700ms ease-in both;
+  --animate-veil-dissolve: veil-dissolve 700ms ease-in both;
+  --animate-emerge: emerge 700ms ease-out both;
 }
 
 @keyframes fade-in {
@@ -102,27 +107,53 @@
   }
 }
 
-/* La esfera cede el paso -- se disuelve hacia afuera, nunca desaparece de golpe. */
-@keyframes sphere-exit {
-  from {
-    opacity: 1;
+/*
+ * El momento en que LUZ despierta -- no una salida, un pulso. Un solo
+ * movimiento continuo desde donde `sphere-breathe` la dejó: crece un
+ * instante (25%, el pulso en sí, apenas más marcado que respirar) y
+ * se desvanece mientras sigue creciendo un poco más -- nunca una
+ * explosión, un latido que se deja ir.
+ */
+@keyframes light-pulse {
+  0% {
     transform: scale(1);
+    opacity: 0.95;
   }
-  to {
+  25% {
+    transform: scale(1.22);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.4);
     opacity: 0;
-    transform: scale(1.08);
   }
 }
 
-/* La conversación real, revelándose -- más desplazamiento que `fade-in` a propósito (14px, no 4px): es el hilo completo entrando, no un mensaje más. */
-@keyframes conversation-enter {
+/* El velo que envolvía la esfera cede -- misma duración y arranque que `light-pulse` (ver el componente), para que ambas se lean como una sola disolución, nunca dos animaciones que casualmente coinciden. */
+@keyframes veil-dissolve {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/*
+ * La conversación real asentándose como si emergiera de la luz, no
+ * apareciendo sin más -- apenas perceptible (escala, nunca
+ * desplazamiento: un desplazamiento leería como "entrar desde un
+ * lado", esto es "crecer desde el centro"), misma duración que
+ * `light-pulse`/`veil-dissolve` para completar el mismo gesto.
+ */
+@keyframes emerge {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: scale(0.99);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
 }
 
@@ -175,9 +206,10 @@
   .animate-fade-in,
   .animate-pulse-soft,
   .animate-sphere-breathe,
-  .animate-sphere-exit,
-  .animate-conversation-enter,
-  .animate-script-reveal {
+  .animate-script-reveal,
+  .animate-light-pulse,
+  .animate-veil-dissolve,
+  .animate-emerge {
     animation: none;
     opacity: 1;
     transform: none;

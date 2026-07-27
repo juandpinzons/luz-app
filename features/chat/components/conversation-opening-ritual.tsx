@@ -2,10 +2,23 @@
 
 import { useEffect, useState } from "react";
 
-/** "1-2 segundos" (spec) -- el mínimo que la esfera respira antes de poder ceder el paso. */
-const MIN_RITUAL_DURATION_MS = 1500;
-/** Debe coincidir con `--animate-sphere-exit`/`--animate-conversation-enter` (`app/globals.css`) -- cuánto dura la transición de salida antes de desmontar la esfera. */
-const EXIT_DURATION_MS = 550;
+/**
+ * Toda la coreografía deriva de estos cuatro números, nunca de
+ * constantes independientes elegidas por separado -- es lo que hace
+ * que el ritual se lea como un solo movimiento en vez de cuatro
+ * animaciones que casualmente ocurren cerca una de otra. El orden es
+ * literal: respira ~1s, "Welcome" se escribe, y solo cuando termina de
+ * escribirse (nunca antes) puede empezar el pulso que la cierra.
+ */
+const BREATHE_BEFORE_TEXT_MS = 1000;
+/** Debe coincidir con `--animate-script-reveal` (`app/globals.css`). */
+const TEXT_REVEAL_DURATION_MS = 900;
+/** Un respiro breve después de terminar de escribir -- nunca instantáneo, para que el pulso se sienta como una reacción, no como un cronómetro. */
+const PULSE_BUFFER_MS = 150;
+const MIN_RITUAL_DURATION_MS =
+  BREATHE_BEFORE_TEXT_MS + TEXT_REVEAL_DURATION_MS + PULSE_BUFFER_MS;
+/** Debe coincidir con `--animate-light-pulse`/`--animate-veil-dissolve`/`--animate-emerge` (`app/globals.css`) -- las tres comparten esta duración a propósito, para disolverse como un solo gesto. */
+const PULSE_DURATION_MS = 700;
 
 function prefersReducedMotion(): boolean {
   return (
@@ -39,12 +52,17 @@ export interface ConversationOpeningRitualProps {
 }
 
 /**
- * Pequeño ritual de bienvenida al abrir una conversación -- una esfera
- * que respira, la palabra "Welcome" apareciendo como un trazo manual
- * (script cursivo, Sacramento, revelándose de izquierda a derecha en
- * vez de un simple fade), y la conversación real revelándose después
- * (fade + slide). Deliberadamente NO es un loading screen: su duración
- * es fija (`MIN_RITUAL_DURATION_MS`), nunca depende de cuánto tarde una
+ * El momento en que LUZ despierta -- una esfera que respira, "Welcome"
+ * escribiéndose como un trazo manual, y al terminar, un único pulso de
+ * luz del que la conversación real emerge. Una sola coreografía
+ * continua, no cuatro piezas independientes: el pulso de la esfera
+ * (`light-pulse`), la disolución del velo que la rodea
+ * (`veil-dissolve`) y el asentamiento de la conversación (`emerge`)
+ * comparten el mismo instante de arranque y la misma duración
+ * (`PULSE_DURATION_MS`) -- se leen como una sola luz que se expande y
+ * dentro de la cual la conversación queda, nunca como una salida y una
+ * entrada que casualmente coinciden. Deliberadamente NO es un loading
+ * screen: su duración es fija, nunca depende de cuánto tarde una
  * petición real -- lo único que la extiende es esperar a que el
  * contenido real ya esté listo, para no ceder el paso a un skeleton
  * debajo (ver `ready`).
@@ -58,9 +76,9 @@ export interface ConversationOpeningRitualProps {
  * `prefers-reduced-motion` se respeta en dos capas: aquí, el ritual
  * completo se salta (el contenido aparece de inmediato, sin ninguna
  * animación de entrada) -- nunca solo "más rápido", sino ausente; y en
- * `app/globals.css`, las cuatro animaciones quedan neutralizadas
- * también a nivel de CSS como respaldo (mismo criterio que el resto
- * del vocabulario de animación del proyecto).
+ * `app/globals.css`, las animaciones quedan neutralizadas también a
+ * nivel de CSS como respaldo (mismo criterio que el resto del
+ * vocabulario de animación del proyecto).
  */
 export function ConversationOpeningRitual({
   children,
@@ -84,49 +102,53 @@ export function ConversationOpeningRitual({
   }, [reducedMotion]);
 
   // Derivado, no una tercera pieza de estado sincronizada a mano: "está
-  // saliendo" es simplemente "ya pasó el mínimo Y el contenido real ya
-  // está listo Y todavía no terminó de salir" -- nunca una fuente de
-  // verdad propia que pueda desincronizarse de estas tres.
-  const isExiting = !reducedMotion && minDurationElapsed && ready && !exited;
+  // pulsando" es simplemente "ya terminó de escribirse Y el contenido
+  // real ya está listo Y todavía no terminó de disolverse" -- nunca una
+  // fuente de verdad propia que pueda desincronizarse de estas tres.
+  const isPulsing = !reducedMotion && minDurationElapsed && ready && !exited;
 
   useEffect(() => {
-    if (!isExiting) {
+    if (!isPulsing) {
       return;
     }
-    const timer = setTimeout(() => setExited(true), EXIT_DURATION_MS);
+    const timer = setTimeout(() => setExited(true), PULSE_DURATION_MS);
     return () => clearTimeout(timer);
-  }, [isExiting]);
+  }, [isPulsing]);
 
   const showSphere = !reducedMotion && !exited;
-  const contentAnimationClass =
-    showSphere && !isExiting ? "invisible" : "animate-conversation-enter";
+  const contentAnimationClass = showSphere && !isPulsing ? "invisible" : "animate-emerge";
 
   return (
     <div className="relative h-full">
-      {showSphere && <WelcomeSphere exiting={isExiting} />}
+      {showSphere && <WelcomeSphere pulsing={isPulsing} />}
 
       <div className={`${contentClassName} ${contentAnimationClass}`}>{children}</div>
     </div>
   );
 }
 
-function WelcomeSphere({ exiting }: { exiting: boolean }) {
+function WelcomeSphere({ pulsing }: { pulsing: boolean }) {
   return (
     <div
       aria-hidden="true"
       className={`absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-black ${
-        exiting ? "animate-sphere-exit" : ""
+        pulsing ? "animate-veil-dissolve" : ""
       }`}
     >
       <div
-        className="h-28 w-28 flex-shrink-0 animate-sphere-breathe rounded-full sm:h-32 sm:w-32"
+        className={`h-28 w-28 flex-shrink-0 rounded-full sm:h-32 sm:w-32 ${
+          pulsing ? "animate-light-pulse" : "animate-sphere-breathe"
+        }`}
         style={{
           background:
             "radial-gradient(circle at 35% 30%, #ffffff 0%, var(--color-luz) 55%, rgba(227, 177, 104, 0.15) 100%)",
           boxShadow: "0 0 70px 18px rgba(227, 177, 104, 0.25)",
         }}
       />
-      <span className="animate-script-reveal font-script text-4xl text-white/80 [animation-delay:550ms] sm:text-5xl">
+      <span
+        className="animate-script-reveal font-script text-4xl text-white/80 sm:text-5xl"
+        style={{ animationDelay: `${BREATHE_BEFORE_TEXT_MS}ms` }}
+      >
         Welcome
       </span>
     </div>
