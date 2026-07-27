@@ -34,6 +34,8 @@ export const knowledgeJobs = pgTable(
     status: knowledgeJobStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
+    /** Momento en que un worker reclamó el job; permite recuperar claims abandonados. */
+    processingAt: timestamp("processing_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

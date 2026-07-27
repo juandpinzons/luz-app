@@ -7,6 +7,7 @@ import {
   type LifeGraphContext,
 } from "../../../core/life";
 import { createMemoryEngine } from "../../../core/memory-engine";
+import { DrizzleMemoryRepository } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
@@ -45,7 +46,7 @@ function toLifeStateItem(
 export async function assembleRealitySnapshot(
   db: Database,
   context: LifeGraphContext,
-  options: { currentMessage?: string } = {},
+  options: { currentMessage?: string; focusMemoryId?: EntityId } = {},
 ): Promise<RealitySnapshot> {
   // P0 (cierre del Alpha): con `currentMessage`, la selección responde
   // "¿qué necesita recordar LUZ para ESTE mensaje?" — no la de mayor
@@ -53,7 +54,7 @@ export async function assembleRealitySnapshot(
   // (p. ej. el Morning Brief del Dashboard, que no responde a un
   // mensaje puntual) se preserva el comportamiento anterior sin
   // cambios: ahí sí tiene sentido "lo más relevante en general".
-  const [relevantMemories, activeGoals, activeProjects, activeHabits, insights] =
+  const [candidateMemories, focusedMemory, activeGoals, activeProjects, activeHabits, insights] =
     await Promise.all([
       options.currentMessage
         ? selectContextualMemories(
@@ -65,11 +66,21 @@ export async function assembleRealitySnapshot(
         : createMemoryEngine(db).retrieve(context, {
             limit: RELEVANT_MEMORY_LIMIT,
           }),
+      options.focusMemoryId
+        ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
+        : Promise.resolve(null),
       listActiveGoals(db, context),
       listActiveProjects(db, context),
       listActiveHabits(db, context),
       new DrizzleInsightRepository(db).list(context),
     ]);
+
+  const relevantMemories = focusedMemory
+    ? [
+        focusedMemory,
+        ...candidateMemories.filter((memory) => memory.id !== focusedMemory.id),
+      ].slice(0, RELEVANT_MEMORY_LIMIT)
+    : candidateMemories;
 
   // Auditoría de comportamiento (Presence Principles): dar continuidad
   // a partir de un dato solo porque existe, sin que represente

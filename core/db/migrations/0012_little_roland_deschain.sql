@@ -1,0 +1,1 @@
+ALTER TABLE "knowledge_jobs" ADD COLUMN "processing_at" timestamp with time zone;
