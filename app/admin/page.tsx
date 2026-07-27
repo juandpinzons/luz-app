@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/core/db/client";
 import { env } from "@/core/config/env";
@@ -7,6 +7,7 @@ import {
   conversationMessages,
   conversations,
   events,
+  feedbackResponses,
   users,
 } from "@/core/db/schema";
 
@@ -73,6 +74,24 @@ export default async function AdminPage() {
     .orderBy(sql`${events.createdAt} desc`)
     .limit(10);
 
+  const [avgHelpfulness] = await db
+    .select({ avg: sql<number>`avg(${feedbackResponses.helpfulness})` })
+    .from(feedbackResponses);
+
+  const recentFeedback = await db
+    .select({
+      id: feedbackResponses.id,
+      helpfulness: feedbackResponses.helpfulness,
+      remembersMe: feedbackResponses.remembersMe,
+      comment: feedbackResponses.comment,
+      createdAt: feedbackResponses.createdAt,
+      userEmail: users.email,
+    })
+    .from(feedbackResponses)
+    .leftJoin(users, eq(feedbackResponses.userId, users.id))
+    .orderBy(desc(feedbackResponses.createdAt))
+    .limit(20);
+
   const buildVersion =
     process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
   const deploymentUrl = process.env.VERCEL_URL ?? "localhost";
@@ -98,6 +117,10 @@ export default async function AdminPage() {
           }
         />
         <Stat label="Errores hoy" value={errorsToday?.count ?? 0} />
+        <Stat
+          label="Utilidad promedio (feedback)"
+          value={avgHelpfulness?.avg ? `${Number(avgHelpfulness.avg).toFixed(1)}/5` : "—"}
+        />
       </div>
 
       <h2 className="mt-10 text-lg font-light">Últimos errores</h2>
@@ -118,9 +141,40 @@ export default async function AdminPage() {
           ))
         )}
       </div>
+
+      <h2 className="mt-10 text-lg font-light">Feedback reciente</h2>
+      <div className="mt-3 space-y-2">
+        {recentFeedback.length === 0 ? (
+          <p className="text-zinc-500">Sin respuestas todavía.</p>
+        ) : (
+          recentFeedback.map((f) => (
+            <div
+              key={f.id}
+              className="rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+            >
+              <div className="text-zinc-500">
+                {f.createdAt.toISOString()} · {f.userEmail ?? "usuario eliminado"}
+              </div>
+              <div className="mt-1">
+                Utilidad: {f.helpfulness}/5 · Recuerda con el tiempo:{" "}
+                {REMEMBERS_ME_LABEL[f.remembersMe]}
+              </div>
+              {f.comment && (
+                <div className="mt-1 text-zinc-300">&ldquo;{f.comment}&rdquo;</div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
     </main>
   );
 }
+
+const REMEMBERS_ME_LABEL: Record<"yes" | "no" | "unsure", string> = {
+  yes: "Sí",
+  no: "No",
+  unsure: "Aún no sé",
+};
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (

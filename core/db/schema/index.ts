@@ -11,3 +11,4 @@ export * from "./jobs";
 export * from "./life-graph";
 export * from "./life-entities";
 export * from "./events";
+export * from "./feedback";
