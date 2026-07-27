@@ -17,12 +17,29 @@ const MIN_ZOOM = 60;
 const MAX_ZOOM = 150;
 const ZOOM_STEP = 15;
 
+/** Posición para el SVG (líneas) -- coordenadas fijas 0-600, el propio `viewBox` ya las escala al tamaño real. */
 function polarPosition(index: number, total: number) {
   const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
   return {
     x: CENTER + RADIUS * Math.cos(angle),
     y: CENTER + RADIUS * Math.sin(angle),
   };
+}
+
+/**
+ * Posición para los `BranchButton` (HTML, no SVG) -- en porcentaje del
+ * contenedor, no píxeles absolutos del espacio 0-600. Un `<button>`
+ * posicionado con `left`/`top` en px fijos no escala cuando el
+ * contenedor se angosta (móvil): el mapa se veía correcto en desktop
+ * (contenedor = 600px) pero los nodos se salían del borde en una
+ * pantalla de iPhone (contenedor real ≈ 320-390px), donde el `viewBox`
+ * del SVG sí escalaba sus líneas pero este overlay HTML no. Mismo
+ * ángulo/radio, solo expresado como fracción del contenedor en vez de
+ * unidades absolutas.
+ */
+function polarPositionPercent(index: number, total: number) {
+  const { x, y } = polarPosition(index, total);
+  return { x: (x / VIEW_SIZE) * 100, y: (y / VIEW_SIZE) * 100 };
 }
 
 function formatRelativeTime(date: Date): string {
@@ -66,6 +83,10 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
   const branches = summary.branches;
   const positions = useMemo(
     () => branches.map((_, index) => polarPosition(index, branches.length)),
+    [branches],
+  );
+  const percentPositions = useMemo(
+    () => branches.map((_, index) => polarPositionPercent(index, branches.length)),
     [branches],
   );
 
@@ -115,17 +136,16 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
 
         <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/40">
           <div
-            className="mx-auto animate-fade-in transition-transform duration-300"
+            className="relative mx-auto aspect-square w-full animate-fade-in transition-transform duration-300"
             style={{
-              width: VIEW_SIZE,
-              maxWidth: "100%",
+              maxWidth: VIEW_SIZE,
               transform: `scale(${zoom / 100})`,
               transformOrigin: "top center",
             }}
           >
             <svg
               viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
-              className="w-full"
+              className="absolute inset-0 h-full w-full"
               role="img"
               aria-label={`Mapa de la vida de ${personName}: ${branches.map((b) => b.label).join(", ")}`}
             >
@@ -143,11 +163,11 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
               ))}
             </svg>
 
-            <div className="relative" style={{ height: VIEW_SIZE, marginTop: -VIEW_SIZE }}>
+            <div className="absolute inset-0">
               <BranchButton
                 label={personName}
-                x={CENTER}
-                y={CENTER}
+                x={50}
+                y={50}
                 primary
                 onClick={() => setSelectedBranchId(null)}
               />
@@ -156,8 +176,8 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
                   key={branch.id}
                   label={branch.label}
                   count={branch.count}
-                  x={positions[index].x}
-                  y={positions[index].y}
+                  x={percentPositions[index].x}
+                  y={percentPositions[index].y}
                   active={branch.id === selectedBranchId}
                   onClick={() =>
                     setSelectedBranchId((current) => (current === branch.id ? null : branch.id))
@@ -264,6 +284,7 @@ function BranchButton({
 }: {
   label: string;
   count?: number;
+  /** Porcentaje del contenedor (0-100), no píxeles -- ver `polarPositionPercent`. */
   x: number;
   y: number;
   primary?: boolean;
@@ -274,13 +295,13 @@ function BranchButton({
     <button
       type="button"
       onClick={onClick}
-      style={{ left: x, top: y }}
+      style={{ left: `${x}%`, top: `${y}%` }}
       className={
         (primary
-          ? "-translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-6 py-3 text-base font-medium text-black shadow-[0_0_30px_rgba(227,177,104,0.25)]"
+          ? "-translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-black shadow-[0_0_30px_rgba(227,177,104,0.25)] sm:px-6 sm:py-3 sm:text-base"
           : active
-            ? "-translate-x-1/2 -translate-y-1/2 rounded-full border border-luz bg-zinc-900 px-4 py-2.5 text-sm text-white shadow-[0_0_18px_rgba(227,177,104,0.3)]"
-            : "-translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-700 bg-black px-4 py-2.5 text-sm text-zinc-200 transition hover:border-luz/60 hover:text-white") +
+            ? "-translate-x-1/2 -translate-y-1/2 rounded-full border border-luz bg-zinc-900 px-3 py-2 text-xs text-white shadow-[0_0_18px_rgba(227,177,104,0.3)] sm:px-4 sm:py-2.5 sm:text-sm"
+            : "-translate-x-1/2 -translate-y-1/2 rounded-full border border-zinc-700 bg-black px-3 py-2 text-xs text-zinc-200 transition hover:border-luz/60 hover:text-white sm:px-4 sm:py-2.5 sm:text-sm") +
         " absolute flex items-center gap-1.5 whitespace-nowrap focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
       }
     >

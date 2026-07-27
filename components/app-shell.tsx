@@ -52,7 +52,7 @@ export async function AppShell({
       </a>
 
       <header className="flex flex-shrink-0 flex-col gap-2 border-b border-zinc-800 bg-black px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6">
-        <div className="flex flex-shrink-0 items-center gap-4 overflow-x-auto sm:gap-6">
+        <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto sm:gap-6">
           <Link
             href="/dashboard"
             className="flex flex-shrink-0 items-center gap-2 text-sm font-light tracking-[0.25em] text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
@@ -62,7 +62,7 @@ export async function AppShell({
           </Link>
 
           <nav aria-label="Secciones de LUZ">
-            <ul className="flex flex-shrink-0 items-center gap-1">
+            <ul className="flex flex-shrink-0 items-center gap-0.5 sm:gap-1">
               {SECTIONS.map((section) => {
                 const isActive = section.id === activeSection;
 
@@ -73,8 +73,8 @@ export async function AppShell({
                       aria-current={isActive ? "page" : undefined}
                       className={
                         isActive
-                          ? "block whitespace-nowrap rounded-full bg-zinc-900 px-2.5 py-1.5 text-xs text-white ring-1 ring-luz/40 ring-inset sm:px-3 sm:text-sm"
-                          : "block whitespace-nowrap rounded-full px-2.5 py-1.5 text-xs text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-3 sm:text-sm"
+                          ? "block whitespace-nowrap rounded-full bg-zinc-900 px-1.5 py-1.5 text-[11px] text-white ring-1 ring-luz/40 ring-inset sm:px-3 sm:text-sm"
+                          : "block whitespace-nowrap rounded-full px-1.5 py-1.5 text-[11px] text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-3 sm:text-sm"
                       }
                     >
                       {section.label}

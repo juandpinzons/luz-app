@@ -592,8 +592,8 @@ function ChatPageContent() {
       </div>
 
       {/* Input */}
-      <footer className="flex-shrink-0 border-t border-zinc-800 px-6 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto flex max-w-4xl gap-3">
+      <footer className="flex-shrink-0 border-t border-zinc-800 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-6">
+        <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
           <input
             ref={inputRef}
             type="text"
@@ -608,7 +608,7 @@ function ChatPageContent() {
                 sendMessage();
               }
             }}
-            className="flex-1 rounded-xl bg-zinc-900 px-5 py-4 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50"
+            className="min-w-0 flex-1 rounded-xl bg-zinc-900 px-3 py-3 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50 sm:px-5 sm:py-4"
           />
 
           <button
@@ -616,7 +616,7 @@ function ChatPageContent() {
             disabled={isSending}
             aria-label="Enviar mensaje"
             aria-busy={isSending}
-            className="rounded-xl bg-white px-6 text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 disabled:hover:bg-white"
+            className="flex-shrink-0 rounded-xl bg-white px-4 text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 disabled:hover:bg-white sm:px-6"
           >
             {isSending ? "..." : "Enviar"}
           </button>
