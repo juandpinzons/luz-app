@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
+import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
 import type {
   GetLatestConversationResponse,
@@ -319,9 +320,7 @@ function ChatPageContent() {
               // queda desincronizado del conversationId real que el
               // servidor usó para guardarlo.
               setConversationId((prev) => prev ?? data.conversationId);
-              setMessages((prev) =>
-                prev.length === 0 ? data.messages : prev,
-              );
+              setMessages((prev) => (prev.length === 0 ? data.messages : prev));
               resolvedConversationId = data.conversationId;
             }
             setIsHistoricalConversation(false);
@@ -507,121 +506,123 @@ function ChatPageContent() {
   }
 
   return (
-    <main className="flex h-full flex-col bg-black text-white">
-      {/* Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
+    <main className="h-full bg-black text-white">
+      <ConversationOpeningRitual ready={!isLoadingHistory}>
+        {/* Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
           header solo aporta lo específico de /chat: retomar/empezar de nuevo. */}
-      {!isLoadingHistory && isHistoricalConversation && (
-        <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
-          <div className="flex items-center justify-end">
+        {!isLoadingHistory && isHistoricalConversation && (
+          <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
+            <div className="flex items-center justify-end">
+              <button
+                onClick={startNewConversation}
+                className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+              >
+                Nueva conversación
+              </button>
+            </div>
+
+            {historicalLabel && (
+              <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
+            )}
+          </header>
+        )}
+
+        {/* Conversación */}
+        <div className="relative min-h-0 flex-1">
+          <section
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-label="Conversación con LUZ"
+            tabIndex={0}
+            className="h-full overflow-y-auto px-6 py-8 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-zinc-700"
+          >
+            <div className="mx-auto w-full max-w-3xl">
+              {isLoadingHistory ? (
+                // Misma geometría que las burbujas reales (rounded-2xl,
+                // max-w-[80%]) para que no haya salto de layout al llegar
+                // el historial de verdad.
+                <div className="space-y-4">
+                  <Skeleton className="ml-auto h-11 w-40" />
+                  <Skeleton className="mr-auto h-16 w-64" />
+                  <Skeleton className="ml-auto h-11 w-52" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="animate-fade-in mt-32 text-center">
+                  <h2 className="text-4xl font-light">¿Cómo te sientes hoy?</h2>
+
+                  <p className="mt-5 text-lg text-zinc-400">
+                    Estoy aquí para escucharte.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {messages.map((msg, index) => (
+                    <div
+                      key={index}
+                      className={
+                        msg.role === "user"
+                          ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
+                          : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
+                      }
+                    >
+                      {msg.content}
+                    </div>
+                  ))}
+
+                  {isThinking && <TypingIndicator />}
+
+                  <div ref={bottomRef} />
+                </div>
+              )}
+            </div>
+          </section>
+
+          {showScrollToBottom && (
             <button
-              onClick={startNewConversation}
-              className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+              onClick={scrollToBottom}
+              aria-label="Ir al final de la conversación"
+              className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 shadow-lg transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
             >
-              Nueva conversación
+              ↓ Ir al final
+            </button>
+          )}
+        </div>
+
+        {/* Input */}
+        <footer className="flex-shrink-0 border-t border-zinc-800 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-6">
+          <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
+            <input
+              ref={inputRef}
+              type="text"
+              autoFocus
+              placeholder="Escribe un mensaje..."
+              aria-label="Escribe un mensaje para LUZ"
+              value={message}
+              disabled={isSending}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  sendMessage();
+                }
+              }}
+              className="min-w-0 flex-1 rounded-xl bg-zinc-900 px-3 py-3 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50 sm:px-5 sm:py-4"
+            />
+
+            <button
+              onClick={sendMessage}
+              disabled={isSending}
+              aria-label="Enviar mensaje"
+              aria-busy={isSending}
+              className="flex-shrink-0 rounded-xl bg-white px-4 text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 disabled:hover:bg-white sm:px-6"
+            >
+              {isSending ? "..." : "Enviar"}
             </button>
           </div>
-
-          {historicalLabel && (
-            <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
-          )}
-        </header>
-      )}
-
-      {/* Conversación */}
-      <div className="relative min-h-0 flex-1">
-        <section
-          ref={scrollContainerRef}
-          onScroll={handleScroll}
-          role="log"
-          aria-live="polite"
-          aria-relevant="additions"
-          aria-label="Conversación con LUZ"
-          tabIndex={0}
-          className="h-full overflow-y-auto px-6 py-8 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-zinc-700"
-        >
-          <div className="mx-auto w-full max-w-3xl">
-            {isLoadingHistory ? (
-              // Misma geometría que las burbujas reales (rounded-2xl,
-              // max-w-[80%]) para que no haya salto de layout al llegar
-              // el historial de verdad.
-              <div className="space-y-4">
-                <Skeleton className="ml-auto h-11 w-40" />
-                <Skeleton className="mr-auto h-16 w-64" />
-                <Skeleton className="ml-auto h-11 w-52" />
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="animate-fade-in mt-32 text-center">
-                <h2 className="text-4xl font-light">¿Cómo te sientes hoy?</h2>
-
-                <p className="mt-5 text-lg text-zinc-400">
-                  Estoy aquí para escucharte.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {messages.map((msg, index) => (
-                  <div
-                    key={index}
-                    className={
-                      msg.role === "user"
-                        ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
-                        : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
-                    }
-                  >
-                    {msg.content}
-                  </div>
-                ))}
-
-                {isThinking && <TypingIndicator />}
-
-                <div ref={bottomRef} />
-              </div>
-            )}
-          </div>
-        </section>
-
-        {showScrollToBottom && (
-          <button
-            onClick={scrollToBottom}
-            aria-label="Ir al final de la conversación"
-            className="animate-fade-in absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm text-zinc-300 shadow-lg transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-          >
-            ↓ Ir al final
-          </button>
-        )}
-      </div>
-
-      {/* Input */}
-      <footer className="flex-shrink-0 border-t border-zinc-800 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-6">
-        <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
-          <input
-            ref={inputRef}
-            type="text"
-            autoFocus
-            placeholder="Escribe un mensaje..."
-            aria-label="Escribe un mensaje para LUZ"
-            value={message}
-            disabled={isSending}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                sendMessage();
-              }
-            }}
-            className="min-w-0 flex-1 rounded-xl bg-zinc-900 px-3 py-3 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50 sm:px-5 sm:py-4"
-          />
-
-          <button
-            onClick={sendMessage}
-            disabled={isSending}
-            aria-label="Enviar mensaje"
-            aria-busy={isSending}
-            className="flex-shrink-0 rounded-xl bg-white px-4 text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 disabled:hover:bg-white sm:px-6"
-          >
-            {isSending ? "..." : "Enviar"}
-          </button>
-        </div>
-      </footer>
+        </footer>
+      </ConversationOpeningRitual>
     </main>
   );
 }
