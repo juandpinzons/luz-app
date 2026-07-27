@@ -24,6 +24,18 @@ import type { InsightRelationship } from "../entities/insight-relationship";
 export interface InsightRepository {
   getById(context: LifeGraphContext, id: EntityId): Promise<Insight | null>;
   list(context: LifeGraphContext): Promise<Insight[]>;
+  /**
+   * Insights validados cuya evidencia incluye esta memoria -- usado por
+   * `enrich-knowledge-graph.ts` (capa de aplicación) para encontrar,
+   * después de una corrida del pipeline, exactamente qué insights nació
+   * de la memoria que disparó el job, sin que `DefaultKnowledgeEngine`
+   * tenga que devolver ese resultado explícitamente (Extract→Persist no
+   * cambia de forma, ver `default-knowledge-engine.ts`).
+   */
+  listByEvidenceMemoryId(
+    context: LifeGraphContext,
+    memoryId: EntityId,
+  ): Promise<Insight[]>;
   save(context: LifeGraphContext, insight: Insight): Promise<Insight>;
   delete(context: LifeGraphContext, id: EntityId): Promise<void>;
   getEvidence(

@@ -72,7 +72,7 @@ export async function buildContext(
   });
   const memories = realitySnapshot.memory.items;
 
-  const engineContext = await createContextEngine().build(
+  const engineContext = await createContextEngine(db).build(
     realitySnapshot,
     lifeGraphContext,
   );

@@ -23,6 +23,7 @@ const STRATEGY_LABEL: Record<ConversationStrategyType, string> = {
   remind: "Remind",
   plan: "Plan",
   follow_up: "FollowUp",
+  curiosity: "Curiosity",
 };
 
 /**

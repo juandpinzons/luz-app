@@ -5,6 +5,7 @@ export * from "./value-objects/goal-status";
 export * from "./value-objects/project-status";
 export * from "./value-objects/routine-frequency";
 export * from "./value-objects/life-domain-type";
+export * from "./value-objects/life-domain-label";
 
 // Identity
 export * from "./life-graph-context";
@@ -38,6 +39,7 @@ export * from "./repositories/relationship.repository";
 export * from "./repositories/drizzle-relationship.repository";
 export * from "./repositories/life-event.repository";
 export * from "./repositories/life-domain.repository";
+export * from "./repositories/drizzle-life-domain.repository";
 
 // Events
 export * from "./events/domain-event";
@@ -66,3 +68,4 @@ export * from "./services/find-or-create-project";
 export * from "./services/find-or-create-habit";
 export * from "./services/find-or-create-person";
 export * from "./services/find-or-create-relationship";
+export * from "./services/get-or-create-life-domain";

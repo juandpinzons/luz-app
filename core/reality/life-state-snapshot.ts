@@ -1,4 +1,5 @@
 import type { EntityId } from "../life/value-objects/entity-id";
+import type { LifeDomainType } from "../life/value-objects/life-domain-type";
 
 /**
  * Proyección mínima de una entidad del Life Graph — deliberadamente no
@@ -19,6 +20,15 @@ export interface LifeStateItem {
    * queda `undefined` para hábitos, nunca inventada.
    */
   dueDate?: Date;
+  /**
+   * `LifeDomainType` es un value object primitivo (una unión de
+   * strings, sin comportamiento ni repositorio propio) — mismo estatus
+   * que `EntityId`, no el de una entidad de `core/life` (Goal/Project/
+   * Habit), así que importarlo aquí no cruza la frontera anti-
+   * corrupción que este archivo ya documenta. Opcional porque no toda
+   * entidad tiene un dominio clasificado todavía.
+   */
+  domain?: LifeDomainType;
 }
 
 /** Estado estructurado del Life Graph relevante para un engine, no todo el grafo. */

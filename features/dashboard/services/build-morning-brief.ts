@@ -163,7 +163,7 @@ export async function buildMorningBrief(
   let continuityLine: string | null = null;
 
   try {
-    const context = await createContextEngine().build(snapshot, lifeGraphContext);
+    const context = await createContextEngine(db).build(snapshot, lifeGraphContext);
     const directive = createConversationStrategyEngine().select({
       realitySnapshot: snapshot,
       contextItems: context.items,

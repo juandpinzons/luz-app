@@ -5,6 +5,7 @@ import { type KnowledgeJob, knowledgeJobs } from "../../../core/db/schema";
 import type { KnowledgeEngine } from "../../../core/knowledge-engine";
 import { createEntityId } from "../../../core/life";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
+import { enrichKnowledgeGraph } from "./enrich-knowledge-graph";
 
 const MAX_ATTEMPTS = 3;
 /** Un cron tiene 60s; cinco minutos cubren una ejecución lenta sin dejar jobs huérfanos para siempre. */
@@ -88,10 +89,17 @@ export async function processKnowledgeJob(
       focusMemoryId: createEntityId(job.sourceId),
     });
 
+    const triggeringMemoryId = createEntityId(job.sourceId);
+
     await knowledgeEngine.run(snapshot, {
       ...lifeGraphContext,
-      memoryId: createEntityId(job.sourceId),
+      memoryId: triggeringMemoryId,
     });
+
+    // Knowledge Engine V2 -- Concept Graph, Belief Engine, Contradiction
+    // Detection, Importance Engine. Corre después del pipeline base y
+    // nunca lo puede fallar (ver docblock de `enrichKnowledgeGraph`).
+    await enrichKnowledgeGraph(db, snapshot, lifeGraphContext, triggeringMemoryId);
 
     await db
       .update(knowledgeJobs)

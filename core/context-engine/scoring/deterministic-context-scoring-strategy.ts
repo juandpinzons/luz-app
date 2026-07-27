@@ -1,4 +1,5 @@
 import type { LifeGraphContext } from "../../life/life-graph-context";
+import type { ImportanceRepository } from "../../importance-engine/repositories/importance.repository";
 import type { ContextItem } from "../entities/context";
 import type { ContextItemSource } from "../value-objects/context-item-source";
 import type { ContextScoringStrategy } from "./context-scoring-strategy";
@@ -48,6 +49,21 @@ const URGENCY_WINDOW_DAYS = 30;
 
 const MAX_SCORE = 100;
 
+/**
+ * Solo `memory`/`insight` tienen un `entityType` de
+ * `core/importance-engine` inequívoco desde un `ContextItem` -- `life`
+ * no distingue goal/project/habit en esta forma neutral (ver docblock
+ * de `LifeStateItem`), así que no se le asigna un tipo aquí a
+ * propósito, en vez de adivinar uno potencialmente incorrecto.
+ */
+const IMPORTANCE_ENTITY_TYPE: Partial<Record<ContextItemSource, string>> = {
+  memory: "memory",
+  insight: "insight",
+};
+
+/** Cuánto puede sumar la importancia global persistida (`core/importance-engine`) -- una señal más, nunca la dominante frente al peso base por fuente. */
+const IMPORTANCE_BONUS_MAX = 15;
+
 /** Primero de su fuente = bono completo, último = 0, lineal entre ambos. */
 function positionBonus(index: number, total: number, max: number): number {
   if (max === 0 || total <= 1) {
@@ -84,15 +100,25 @@ function urgencyBonus(dueDate: Date | undefined, now: Date): number {
  * de una misma fuente, eso ya lo hizo quien la produjo.
  */
 export class DeterministicContextScoringStrategy implements ContextScoringStrategy {
+  /**
+   * `importanceRepository` es opcional: sin él, esta estrategia se
+   * comporta exactamente igual que antes de que existiera
+   * `core/importance-engine` (compatibilidad hacia atrás real, no solo
+   * de tipos) -- ningún llamador existente que la instancie sin
+   * argumentos se rompe.
+   */
+  constructor(private readonly importanceRepository?: ImportanceRepository) {}
+
   async score(
     items: ContextItem[],
-    _context: LifeGraphContext,
+    context: LifeGraphContext,
   ): Promise<ContextItem[]> {
     const totalsBySource = new Map<ContextItemSource, number>();
     for (const item of items) {
       totalsBySource.set(item.source, (totalsBySource.get(item.source) ?? 0) + 1);
     }
 
+    const importanceByKey = await this.loadImportance(context);
     const seenBySource = new Map<ContextItemSource, number>();
     const now = new Date();
 
@@ -104,9 +130,34 @@ export class DeterministicContextScoringStrategy implements ContextScoringStrate
       const score =
         SOURCE_BASE_WEIGHT[item.source] +
         positionBonus(index, total, POSITION_BONUS_MAX[item.source]) +
-        urgencyBonus(item.dueDate, now);
+        urgencyBonus(item.dueDate, now) +
+        this.importanceBonus(item, importanceByKey);
 
       return { ...item, relevanceScore: Math.max(0, Math.min(MAX_SCORE, score)) };
     });
+  }
+
+  private importanceBonus(
+    item: ContextItem,
+    importanceByKey: Map<string, number>,
+  ): number {
+    const entityType = IMPORTANCE_ENTITY_TYPE[item.source];
+    if (!entityType || !item.sourceId) {
+      return 0;
+    }
+    const score = importanceByKey.get(`${entityType}:${item.sourceId}`);
+    return score === undefined ? 0 : Math.round(IMPORTANCE_BONUS_MAX * (score / 100));
+  }
+
+  private async loadImportance(context: LifeGraphContext): Promise<Map<string, number>> {
+    const map = new Map<string, number>();
+    if (!this.importanceRepository) {
+      return map;
+    }
+    const scores = await this.importanceRepository.list(context);
+    for (const entry of scores) {
+      map.set(`${entry.entityType}:${entry.entityId}`, entry.score);
+    }
+    return map;
   }
 }

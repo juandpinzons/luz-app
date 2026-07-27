@@ -107,6 +107,28 @@ export class DrizzleInsightRepository implements InsightRepository {
     return rows.map(toInsight);
   }
 
+  async listByEvidenceMemoryId(
+    context: LifeGraphContext,
+    memoryId: EntityId,
+  ): Promise<Insight[]> {
+    const rows = await this.db
+      .selectDistinct({ insight: knowledgeEngineInsights })
+      .from(knowledgeEngineInsights)
+      .innerJoin(
+        knowledgeEngineEvidence,
+        eq(knowledgeEngineEvidence.insightId, knowledgeEngineInsights.id),
+      )
+      .where(
+        and(
+          eq(knowledgeEngineInsights.lifeGraphId, context.lifeGraphId),
+          eq(knowledgeEngineEvidence.memoryId, memoryId),
+          eq(knowledgeEngineInsights.status, "validated"),
+        ),
+      );
+
+    return rows.map((row) => toInsight(row.insight));
+  }
+
   /**
    * Upsert. `insight.lifeGraphId` debe coincidir con
    * `context.lifeGraphId` — una discrepancia no se corrige en

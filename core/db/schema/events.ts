@@ -12,6 +12,7 @@ import { users } from "./users";
 export const eventTypeEnum = pgEnum("event_type", [
   "auth_sign_in",
   "error",
+  "message_attempted",
   "message_sent",
 ]);
 

@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
-import { checkRateLimit } from "@/features/chat/services/check-rate-limit";
+import { reserveRateLimitSlot } from "@/features/chat/services/check-rate-limit";
 import { getLatestConversation } from "@/features/chat/services/get-latest-conversation";
 import {
   sendMessage,
@@ -52,10 +52,23 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "No autenticado." }, { status: 401 });
   }
 
-  // P1-2/P1-5 (ALPHA_BACKLOG.md): antes de cualquier trabajo real (DB,
-  // LifeGraphContext, OpenAI), para que una cuenta que excede el límite
-  // no siga generando costo ni carga.
-  const rateLimit = await checkRateLimit(context.userId);
+  const body: unknown = await request.json();
+  const parsed = sendMessageRequestSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Solicitud inválida." },
+      { status: 400 },
+    );
+  }
+
+  // Reserva atómica antes de resolver LifeGraph o llamar a OpenAI. El
+  // límite debe contar solicitudes concurrentes en curso, no únicamente
+  // respuestas que ya terminaron.
+  const rateLimit = await reserveRateLimitSlot(db, {
+    userId: context.userId,
+    route,
+  });
   if (!rateLimit.allowed) {
     logger.log({
       event: "rate_limit.rejected",
@@ -89,16 +102,6 @@ export async function POST(request: Request): Promise<Response> {
       userId: context.userId,
       error: error instanceof Error ? error.message : String(error),
     });
-  }
-
-  const body: unknown = await request.json();
-  const parsed = sendMessageRequestSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Solicitud inválida." },
-      { status: 400 },
-    );
   }
 
   const wantsStream = (request.headers.get("Accept") ?? "").includes(

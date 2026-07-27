@@ -1,11 +1,15 @@
 import type { Database } from "../../../core/db/client";
+import { DrizzleBeliefRepository } from "../../../core/belief-engine";
+import { DrizzleConceptRepository } from "../../../core/concept-graph";
 import {
   listActiveGoals,
   listActiveHabits,
   listActiveProjects,
   type EntityId,
+  type LifeDomainType,
   type LifeGraphContext,
 } from "../../../core/life";
+import { rankKnowledgeGaps, type DomainCoverageSignals } from "../../../core/knowledge-gaps";
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { DrizzleMemoryRepository } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
@@ -37,10 +41,10 @@ const RELEVANT_INSIGHT_LIMIT = 3;
  * ADR-0013 exige, nunca dentro de `core/reality` ni de ningún engine.
  */
 function toLifeStateItem(
-  entity: { id: EntityId; title: string },
+  entity: { id: EntityId; title: string; domain?: LifeDomainType },
   dueDate?: Date,
 ): LifeStateItem {
-  return { id: entity.id, title: entity.title, dueDate };
+  return { id: entity.id, title: entity.title, dueDate, domain: entity.domain };
 }
 
 export async function assembleRealitySnapshot(
@@ -54,26 +58,36 @@ export async function assembleRealitySnapshot(
   // (p. ej. el Morning Brief del Dashboard, que no responde a un
   // mensaje puntual) se preserva el comportamiento anterior sin
   // cambios: ahí sí tiene sentido "lo más relevante en general".
-  const [candidateMemories, focusedMemory, activeGoals, activeProjects, activeHabits, insights] =
-    await Promise.all([
-      options.currentMessage
-        ? selectContextualMemories(
-            db,
-            context,
-            options.currentMessage,
-            RELEVANT_MEMORY_LIMIT,
-          )
-        : createMemoryEngine(db).retrieve(context, {
-            limit: RELEVANT_MEMORY_LIMIT,
-          }),
-      options.focusMemoryId
-        ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
-        : Promise.resolve(null),
-      listActiveGoals(db, context),
-      listActiveProjects(db, context),
-      listActiveHabits(db, context),
-      new DrizzleInsightRepository(db).list(context),
-    ]);
+  const [
+    candidateMemories,
+    focusedMemory,
+    activeGoals,
+    activeProjects,
+    activeHabits,
+    insights,
+    beliefs,
+    concepts,
+  ] = await Promise.all([
+    options.currentMessage
+      ? selectContextualMemories(
+          db,
+          context,
+          options.currentMessage,
+          RELEVANT_MEMORY_LIMIT,
+        )
+      : createMemoryEngine(db).retrieve(context, {
+          limit: RELEVANT_MEMORY_LIMIT,
+        }),
+    options.focusMemoryId
+      ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
+      : Promise.resolve(null),
+    listActiveGoals(db, context),
+    listActiveProjects(db, context),
+    listActiveHabits(db, context),
+    new DrizzleInsightRepository(db).list(context),
+    new DrizzleBeliefRepository(db).list(context),
+    new DrizzleConceptRepository(db).list(context),
+  ]);
 
   const relevantMemories = focusedMemory
     ? [
@@ -116,6 +130,35 @@ export async function assembleRealitySnapshot(
         : b.updatedAt.getTime() - a.updatedAt.getTime();
     })
     .slice(0, RELEVANT_INSIGHT_LIMIT);
+
+  // Knowledge Gaps (Knowledge Engine V2) -- cuenta señales reales por
+  // dominio, nunca inventa una para un dominio sin actividad todavía
+  // (`rankKnowledgeGaps` ya representa eso como coverage 0). Beliefs
+  // activos únicamente: uno expirado/retractado ya no cuenta como
+  // comprensión vigente de esa área.
+  const signalsByDomain: Partial<Record<LifeDomainType, DomainCoverageSignals>> = {};
+  const bump = (
+    domain: LifeDomainType | undefined,
+    field: keyof DomainCoverageSignals,
+  ): void => {
+    if (!domain) return;
+    const current = signalsByDomain[domain] ?? {
+      goalsCount: 0,
+      projectsCount: 0,
+      habitsCount: 0,
+      beliefsCount: 0,
+      conceptsCount: 0,
+    };
+    current[field] += 1;
+    signalsByDomain[domain] = current;
+  };
+  for (const goal of activeGoals) bump(goal.domain, "goalsCount");
+  for (const project of activeProjects) bump(project.domain, "projectsCount");
+  for (const habit of activeHabits) bump(habit.domain, "habitsCount");
+  for (const belief of beliefs) {
+    if (belief.status === "active") bump(belief.domain, "beliefsCount");
+  }
+  for (const concept of concepts) bump(concept.domain, "conceptsCount");
 
   return {
     lifeGraphId: context.lifeGraphId,
@@ -161,5 +204,6 @@ export async function assembleRealitySnapshot(
     // Sin Connectors implementados todavía (ADR-0015) — vacío,
     // indefinidamente, tal como ADR-0013 ya esperaba.
     signals: { signals: [] },
+    knowledgeGaps: { domains: rankKnowledgeGaps(signalsByDomain) },
   };
 }

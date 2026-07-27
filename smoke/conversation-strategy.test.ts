@@ -7,6 +7,7 @@ import {
 } from "../core/conversation-strategy-engine";
 import { buildContext } from "../features/chat/context-builder";
 import { createEntityId, type LifeGraphContext } from "../core/life";
+import { rankKnowledgeGaps } from "../core/knowledge-gaps";
 import type { RealitySnapshot } from "../core/reality";
 import type { SmokeContext, SmokeFlow } from "./types";
 
@@ -37,6 +38,7 @@ function emptySnapshot(): RealitySnapshot {
     memory: { items: [] },
     insights: { items: [] },
     signals: { signals: [] },
+    knowledgeGaps: { domains: [] },
   };
 }
 
@@ -153,6 +155,38 @@ export const conversationStrategyFlow: SmokeFlow = {
     assert(
       (await selectStrategyFor(remindSnapshot, false)) === "remind",
       "un goal activo sin fecha y sin memoria reciente debería producir 'remind'",
+    );
+
+    const curiositySnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      life: {
+        activeGoals: [
+          { id: createEntityId("goal-curiosity-1"), title: "Crecer profesionalmente", domain: "career" },
+        ],
+        activeProjects: [],
+        activeHabits: [],
+      },
+      // Mismo cálculo que haría `assembleRealitySnapshot` a partir del
+      // goal de arriba -- nunca números fabricados a mano, mismo
+      // criterio que el resto de este archivo (no duplicar lógica real).
+      knowledgeGaps: { domains: rankKnowledgeGaps({ career: { goalsCount: 1, projectsCount: 0, habitsCount: 0, beliefsCount: 0, conceptsCount: 0 } }) },
+      memory: {
+        items: [
+          {
+            id: createEntityId("memory-curiosity-1"),
+            content: "Mencionó que quiere avanzar en su carrera este año.",
+            // Ni fresca (Celebrate exige <=48h) ni vieja (FollowUp exige >3
+            // días) -- la única ventana donde Remind no puede ganar (exige
+            // cero memorias) y ninguna otra postura de mayor prioridad
+            // aplica tampoco.
+            occurredAt: hoursAgo(60),
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(curiositySnapshot, false)) === "curiosity",
+      "un dominio de vida (health) sin ningún goal/project/habit clasificado ahí, con otro dominio (career) ya cubierto, debería producir 'curiosity'",
     );
 
     const followUpSnapshot: RealitySnapshot = {

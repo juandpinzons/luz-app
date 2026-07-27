@@ -1,3 +1,5 @@
+import type { Belief } from "../../../core/belief-engine";
+import type { Concept } from "../../../core/concept-graph";
 import type { EntityId, Goal, Habit, Project } from "../../../core/life";
 import type { Memory } from "../../../core/memory-engine";
 import type { RelationshipWithDisplayName } from "./list-all-relationships";
@@ -18,7 +20,9 @@ export type LifeGraphBranchId =
   | "relaciones"
   | "recuerdos"
   | "comprension"
-  | "logros";
+  | "logros"
+  | "creencias"
+  | "conceptos";
 
 export interface LifeGraphBranch {
   id: LifeGraphBranchId;
@@ -50,8 +54,11 @@ export function assembleLifeGraph(input: {
   relationships: RelationshipWithDisplayName[];
   timeline: Memory[];
   insights: InsightExplanation[];
+  beliefs: Belief[];
+  concepts: Concept[];
 }): LifeGraphSummary {
-  const { goals, projects, habits, relationships, timeline, insights } = input;
+  const { goals, projects, habits, relationships, timeline, insights, beliefs, concepts } = input;
+  const activeBeliefs = beliefs.filter((belief) => belief.status === "active");
 
   const activeGoals = goals.filter((goal) => goal.status !== "completed");
   const completedGoals = goals.filter((goal) => goal.status === "completed");
@@ -121,6 +128,28 @@ export function assembleLifeGraph(input: {
         id: insight.id,
         title: insight.reason,
         href: `/memories`,
+      })),
+    },
+    {
+      id: "creencias",
+      label: "Creencias",
+      count: activeBeliefs.length,
+      items: activeBeliefs.map((belief) => ({
+        id: belief.id,
+        title: belief.statement,
+        subtitle: belief.domain,
+        href: `/life/beliefs/${belief.id}`,
+      })),
+    },
+    {
+      id: "conceptos",
+      label: "Conceptos",
+      count: concepts.length,
+      items: concepts.map((concept) => ({
+        id: concept.id,
+        title: concept.label,
+        subtitle: concept.domain,
+        href: `/life/concepts/${concept.id}`,
       })),
     },
     {

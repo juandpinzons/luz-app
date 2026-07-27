@@ -16,6 +16,7 @@ export const CONVERSATION_STRATEGY_TYPES = [
   "remind",
   "plan",
   "follow_up",
+  "curiosity",
 ] as const;
 
 export type ConversationStrategyType = (typeof CONVERSATION_STRATEGY_TYPES)[number];

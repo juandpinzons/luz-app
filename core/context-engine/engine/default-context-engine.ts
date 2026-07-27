@@ -1,3 +1,5 @@
+import type { Database } from "../../db/client";
+import { DrizzleImportanceRepository } from "../../importance-engine/repositories/drizzle-importance.repository";
 import { createEntityId } from "../../life/value-objects/entity-id";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import type { RealitySnapshot } from "../../reality/reality-snapshot";
@@ -37,10 +39,18 @@ export class DefaultContextEngine implements ContextEngine {
   }
 }
 
-export function createContextEngine(): ContextEngine {
+/**
+ * `db` es opcional (Principio 8, retrocompatibilidad real): sin él, el
+ * scoring por importancia simplemente no aporta nada, igual que antes
+ * de que `core/importance-engine` existiera -- ningún llamador
+ * existente que use `createContextEngine()` sin argumentos se rompe.
+ */
+export function createContextEngine(db?: Database): ContextEngine {
   const stages: ContextEngineStages = {
     filter: new DeterministicContextFilterStrategy(),
-    score: new DeterministicContextScoringStrategy(),
+    score: new DeterministicContextScoringStrategy(
+      db ? new DrizzleImportanceRepository(db) : undefined,
+    ),
     prioritize: new DeterministicContextPrioritizationStrategy(),
   };
 

@@ -1,4 +1,5 @@
 import type { LifeDomain } from "../entities/life-domain";
+import type { LifeGraphContext } from "../life-graph-context";
 import type { LifeRepository } from "./life-repository";
 
 export type LifeDomainInput = Omit<
@@ -6,4 +7,11 @@ export type LifeDomainInput = Omit<
   "id" | "lifeGraphId" | "createdAt" | "updatedAt"
 >;
 
-export type LifeDomainRepository = LifeRepository<LifeDomain, LifeDomainInput>;
+export interface LifeDomainRepository
+  extends LifeRepository<LifeDomain, LifeDomainInput> {
+  /** Único por LifeGraph (`life_domains_life_graph_id_type_idx`) — usado por get-or-create. */
+  getByType(
+    context: LifeGraphContext,
+    type: LifeDomain["type"],
+  ): Promise<LifeDomain | null>;
+}

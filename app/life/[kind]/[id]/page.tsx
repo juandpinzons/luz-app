@@ -3,7 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
+import { DrizzleBeliefRepository, deriveBeliefTrend } from "@/core/belief-engine";
+import { DrizzleConceptRepository } from "@/core/concept-graph";
+import { DrizzleContradictionRepository } from "@/core/contradiction-engine";
 import { db } from "@/core/db/client";
+import { DrizzleImportanceRepository } from "@/core/importance-engine";
 import {
   createEntityId,
   type EntityId,
@@ -13,17 +17,31 @@ import {
   DrizzleProjectRepository,
   DrizzleRelationshipRepository,
   DrizzlePersonRepository,
+  LIFE_DOMAIN_LABEL,
 } from "@/core/life";
+import { DrizzleMemoryRepository, type Memory } from "@/core/memory-engine";
 import { findMemoriesMentioning } from "@/features/life/services/find-memories-mentioning";
 import {
   GOAL_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
   RELATIONSHIP_TYPE_LABELS,
 } from "@/features/life/labels";
-import type { Memory } from "@/core/memory-engine";
 
-const KINDS = ["goals", "projects", "habits", "relationships"] as const;
+const KINDS = ["goals", "projects", "habits", "relationships", "beliefs", "concepts"] as const;
 type Kind = (typeof KINDS)[number];
+
+const BELIEF_STATUS_LABELS: Record<string, string> = {
+  active: "activa",
+  expired: "expirada",
+  retracted: "retractada",
+};
+
+const TREND_LABELS: Record<string, string> = {
+  new: "recién identificada",
+  strengthening: "fortaleciéndose",
+  weakening: "debilitándose",
+  stable: "estable",
+};
 
 const paramsSchema = z.object({
   kind: z.enum(KINDS),
@@ -92,9 +110,24 @@ export default async function LifeDetailPage({
 
   let relatedMemories: Memory[] = [];
   try {
-    relatedMemories = await findMemoriesMentioning(db, lifeGraphContext, {
-      title: entity.searchTerm,
-    });
+    // Beliefs/Concepts citan evidencia real y precisa (`belief_evidence`/
+    // `concept_evidence`) -- nunca la búsqueda difusa por texto que sí
+    // hace falta para Goal/Project/Habit/Relationship (que no llevan
+    // evidencia propia todavía). Mostrar la evidencia real siempre que
+    // exista es más fiel a Principio 3 (explicabilidad) que aproximarla.
+    if (entity.evidenceMemoryIds) {
+      const memoryRepository = new DrizzleMemoryRepository(db);
+      const fetched = await Promise.all(
+        entity.evidenceMemoryIds.map((memoryId) =>
+          memoryRepository.getById(lifeGraphContext, memoryId),
+        ),
+      );
+      relatedMemories = fetched.filter((memory): memory is Memory => memory !== null);
+    } else {
+      relatedMemories = await findMemoriesMentioning(db, lifeGraphContext, {
+        title: entity.searchTerm,
+      });
+    }
   } catch (error) {
     console.error("[life detail] no se pudieron buscar memorias:", error);
   }
@@ -131,7 +164,9 @@ export default async function LifeDetailPage({
 
         <section className="animate-fade-in mt-10" style={{ animationDelay: "80ms" }}>
           <h2 className="text-sm font-medium text-zinc-400">
-            Momentos donde hablamos de &ldquo;{entity.searchTerm}&rdquo;
+            {entity.evidenceMemoryIds
+              ? "Evidencia"
+              : <>Momentos donde hablamos de &ldquo;{entity.searchTerm}&rdquo;</>}
           </h2>
           {relatedMemories.length > 0 ? (
             <ul className="mt-3 space-y-2">
@@ -168,9 +203,11 @@ interface DetailField {
 interface LoadedEntity {
   title: string;
   statusLabel: string | null;
-  /** Término literal para buscar memorias relacionadas — el título para Goal/Project/Habit, el nombre de la otra persona para Relationship. */
+  /** Término literal para buscar memorias relacionadas — el título para Goal/Project/Habit, el nombre de la otra persona para Relationship. Ignorado si `evidenceMemoryIds` está presente. */
   searchTerm: string;
   fields: DetailField[];
+  /** Evidencia real y precisa (Belief/Concept) -- cuando está presente, la página la usa en vez de `searchTerm` (ver docblock más arriba). */
+  evidenceMemoryIds?: EntityId[];
 }
 
 async function loadEntity(
@@ -226,6 +263,94 @@ async function loadEntity(
       statusLabel: habit.active ? "activo" : "pausado",
       searchTerm: habit.title,
       fields,
+    };
+  }
+
+  if (kind === "beliefs") {
+    const beliefRepository = new DrizzleBeliefRepository(db);
+    const belief = await beliefRepository.getById(context, id);
+    if (!belief) return null;
+
+    const [evidence, history, importance, contradictions] = await Promise.all([
+      beliefRepository.getEvidence(context, id),
+      beliefRepository.getHistory(context, id),
+      new DrizzleImportanceRepository(db).getByEntity(context, "belief", id),
+      new DrizzleContradictionRepository(db).listByRef(context, { refType: "belief", refId: id }),
+    ]);
+
+    const fields: DetailField[] = [
+      { label: "Confianza", value: `${belief.confidence.score}/100` },
+      { label: "Tendencia", value: TREND_LABELS[deriveBeliefTrend(history)] },
+    ];
+    if (belief.domain) {
+      fields.push({ label: "Área de vida", value: LIFE_DOMAIN_LABEL[belief.domain] });
+    }
+    fields.push({ label: "Primera vez observada", value: DATE_FORMAT.format(belief.firstObservedAt) });
+    fields.push({ label: "Último refuerzo", value: DATE_FORMAT.format(belief.lastReinforcedAt) });
+    fields.push({ label: "Evidencia", value: `${evidence.length} memoria(s)` });
+    if (importance) {
+      fields.push({ label: "Importancia", value: `${importance.score}/100 — ${importance.reason}` });
+    }
+    for (const contradiction of contradictions) {
+      if (contradiction.status !== "open" && contradiction.status !== "acknowledged") continue;
+      fields.push({ label: "Contradicción abierta", value: contradiction.description });
+    }
+
+    const evidenceMemoryIds = [
+      ...new Set(evidence.map((item) => item.memoryId).filter((id): id is EntityId => Boolean(id))),
+    ];
+
+    return {
+      title: belief.statement,
+      statusLabel: BELIEF_STATUS_LABELS[belief.status] ?? belief.status,
+      searchTerm: belief.statement,
+      fields,
+      evidenceMemoryIds,
+    };
+  }
+
+  if (kind === "concepts") {
+    const conceptRepository = new DrizzleConceptRepository(db);
+    const concept = await conceptRepository.getById(context, id);
+    if (!concept) return null;
+
+    const [evidence, relations, importance] = await Promise.all([
+      conceptRepository.listEvidence(context, id),
+      conceptRepository.listRelations(context, id),
+      new DrizzleImportanceRepository(db).getByEntity(context, "concept", id),
+    ]);
+
+    const fields: DetailField[] = [];
+    if (concept.domain) {
+      fields.push({ label: "Área de vida", value: LIFE_DOMAIN_LABEL[concept.domain] });
+    }
+    if (concept.description) {
+      fields.push({ label: "Descripción", value: concept.description });
+    }
+    fields.push({ label: "Evidencia", value: `${evidence.length} memoria(s)` });
+    if (importance) {
+      fields.push({ label: "Importancia", value: `${importance.score}/100 — ${importance.reason}` });
+    }
+
+    for (const relation of relations) {
+      const otherId = relation.fromConceptId === id ? relation.toConceptId : relation.fromConceptId;
+      const other = await conceptRepository.getById(context, otherId);
+      if (!other) continue;
+      const arrow = relation.fromConceptId === id ? "→" : "←";
+      fields.push({
+        label: "Relación",
+        value: `${arrow} ${relation.relationType} ${arrow} ${other.label}`,
+      });
+    }
+
+    const evidenceMemoryIds = [...new Set(evidence.map((item) => item.memoryId))];
+
+    return {
+      title: concept.label,
+      statusLabel: null,
+      searchTerm: concept.label,
+      fields,
+      evidenceMemoryIds,
     };
   }
 

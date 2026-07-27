@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
+import type { Belief } from "@/core/belief-engine";
+import { DrizzleBeliefRepository } from "@/core/belief-engine";
+import type { Concept } from "@/core/concept-graph";
+import { DrizzleConceptRepository } from "@/core/concept-graph";
 import { db } from "@/core/db/client";
 import type { Goal, Habit, Project } from "@/core/life";
 import { LifeCard } from "@/features/life/components/life-card";
@@ -85,6 +89,8 @@ export default async function LifePage() {
   let relationships: RelationshipWithDisplayName[] = [];
   let timeline: Memory[] = [];
   let insights: InsightExplanation[] = [];
+  let beliefs: Belief[] = [];
+  let concepts: Concept[] = [];
 
   /**
    * `allSettled`, no `all`: si una sola franja falla, las demás no
@@ -99,6 +105,8 @@ export default async function LifePage() {
       relationshipsResult,
       timelineResult,
       insightsResult,
+      beliefsResult,
+      conceptsResult,
     ] = await Promise.allSettled([
       listAllGoals(db, lifeGraphContext),
       listAllProjects(db, lifeGraphContext),
@@ -106,6 +114,8 @@ export default async function LifePage() {
       listAllRelationships(db, lifeGraphContext),
       getLifeTimeline(db, lifeGraphContext),
       listValidatedInsights(db, lifeGraphContext),
+      new DrizzleBeliefRepository(db).list(lifeGraphContext),
+      new DrizzleConceptRepository(db).list(lifeGraphContext),
     ]);
 
     if (goalsResult.status === "fulfilled") {
@@ -186,6 +196,32 @@ export default async function LifePage() {
         ...describeError(insightsResult.reason),
       });
     }
+    if (beliefsResult.status === "fulfilled") {
+      beliefs = beliefsResult.value;
+    } else {
+      logger.log({
+        event: "life.beliefs_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(beliefsResult.reason),
+      });
+    }
+    if (conceptsResult.status === "fulfilled") {
+      concepts = conceptsResult.value;
+    } else {
+      logger.log({
+        event: "life.concepts_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(conceptsResult.reason),
+      });
+    }
   }
 
   const hasAnything =
@@ -201,6 +237,8 @@ export default async function LifePage() {
     relationships,
     timeline,
     insights,
+    beliefs,
+    concepts,
   });
   const firstName = (session.user.name ?? "").trim().split(/\s+/)[0] || "ti";
 

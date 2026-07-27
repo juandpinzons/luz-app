@@ -1,6 +1,7 @@
 import type { EntityId } from "../life/value-objects/entity-id";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
 import type { InsightContextSnapshot } from "./insight-context-snapshot";
+import type { KnowledgeGapsSnapshot } from "./knowledge-gaps-snapshot";
 import type { LifeStateSnapshot } from "./life-state-snapshot";
 import type { MemoryContextSnapshot } from "./memory-context-snapshot";
 
@@ -24,4 +25,6 @@ export interface RealitySnapshot {
   memory: MemoryContextSnapshot;
   insights: InsightContextSnapshot;
   signals: ExternalSignalSnapshot;
+  /** `core/knowledge-gaps` (Knowledge Engine V2) -- qué tan bien entiende LUZ cada área de vida ahora mismo. */
+  knowledgeGaps: KnowledgeGapsSnapshot;
 }
