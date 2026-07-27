@@ -16,22 +16,22 @@ export interface VoiceSignature {
   register: VoiceRegister;
   warmth: VoiceWarmth;
   /**
-   * Límite duro de líneas -- mismo número y mismo criterio que
-   * `FavorBrevityRule` ya impone hoy ("2 a 4 líneas máximo... por
-   * encima de cualquier otra instrucción"), ahora como dato en vez de
-   * una frase fija. `"silence"` (Presence) es la única excepción real:
-   * ahí el límite baja a 1, la expresión más restringida posible de
-   * "casi no interrumpir" dentro de un canal que igual espera alguna
-   * respuesta (ver docblock de `DefaultPresenceEngine`).
+   * Límite duro de líneas -- "2 a 4 líneas máximo... por encima de
+   * cualquier otra instrucción", como dato en vez de una frase fija.
+   * `"silence"` (Presence) es la única excepción real: ahí el límite
+   * baja a 1, la expresión más restringida posible de "casi no
+   * interrumpir" dentro de un canal que igual espera alguna respuesta
+   * (ver docblock de `DefaultPresenceEngine`).
    */
   maxLines: number;
   /**
-   * Patrones de estilo prohibidos para esta respuesta -- el mismo
-   * contenido que hoy vive repartido en `AvoidParaphrasingRule`/
-   * `AvoidUnnecessaryQuestionsRule`/la cláusula de markdown de
-   * `FavorBrevityRule`, consolidado aquí como la única fuente. Texto
-   * legible (para quien lo traduzca a prompt), pero es dato de esta
-   * capa, no prosa ya terminada para el modelo.
+   * Patrones de estilo prohibidos para esta respuesta -- única fuente
+   * de verdad (Fase II: `AvoidParaphrasingRule`/`AvoidUnnecessaryQuestionsRule`/
+   * `FavorBrevityRule`, las Conversation Rules que antes tenían este
+   * contenido repartido, quedaron retiradas cuando este motor se
+   * conectó al pipeline real). Texto legible (para quien lo traduzca a
+   * prompt), pero es dato de esta capa, no prosa ya terminada para el
+   * modelo.
    */
   forbid: string[];
 }

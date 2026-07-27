@@ -200,6 +200,7 @@ async function prepareMessage(
         memoriesCount: builtContext.memories.length,
         contextItemsCount: builtContext.contextItems.length,
         conversationStrategy: builtContext.conversationStrategy.strategy,
+        presenceMode: builtContext.presence.mode,
         rulesApplied: builtContext.conversationRules.length,
         durationMs: Date.now() - contextBuilderStart,
       });

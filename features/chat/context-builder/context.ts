@@ -1,7 +1,9 @@
 import type { ConversationStrategyDirective } from "../../../core/conversation-strategy-engine";
 import type { ContextItem } from "../../../core/context-engine";
+import type { PresenceStance } from "../../../core/presence-engine";
 import type { RealityMemoryItem } from "../../../core/reality";
 import type { RealitySnapshot } from "../../../core/reality";
+import type { VoiceSignature } from "../../../core/voice-engine";
 
 /**
  * Un turno de la conversación ya persistida — forma neutral, no las
@@ -53,12 +55,26 @@ export type ResponseIntent =
  * `conversationStrategy` es la salida de
  * `ConversationStrategyEngine.select()` (`core/conversation-strategy-engine`,
  * Fase II) sobre ese mismo `contextItems` — no qué mostrar, sino cómo
- * conversar: una de ocho posturas (Listen/Clarify/Encourage/Challenge/
- * Celebrate/Remind/Plan/FollowUp), siempre exactamente una, nunca
- * ausente (`ListenStrategyRule` es un catch-all incondicional). El
- * Prompt Builder (`render-context.ts`) la traduce a un bloque de
- * prompt explícito — el modelo recibe la intención ya decidida, nunca
- * la decide él.
+ * conversar: una de diez posturas (Listen/Clarify/Encourage/Challenge/
+ * Celebrate/Remind/Plan/FollowUp/Curiosity/Reflect), siempre exactamente
+ * una, nunca ausente (`ListenStrategyRule` es un catch-all incondicional).
+ * `Reflect` es donde Reasoning (`RealitySnapshot.reasoning`,
+ * `core/knowledge-engine/reasoning`) entra a esta cadena: no como un
+ * campo propio de `Context`, sino ya incorporado al `reason`/
+ * `primaryObjective`/`avoid` de la estrategia cuando una conclusión
+ * validada gana la priorización — un único lugar decide si la
+ * evidencia acumulada importa más que el resto de las señales de este
+ * turno, nunca dos.
+ *
+ * `presence` (`core/presence-engine`, Fase II) decide, a partir de
+ * `conversationStrategy`, CÓMO está presente LUZ en este momento
+ * (acompañar/escuchar/celebrar/desafiar/silencio) — nunca qué decir.
+ * `voice` (`core/voice-engine`) traduce esa postura a CÓMO suena
+ * (registro, calidez, largo máximo, qué evitar) — tampoco genera texto.
+ * Ninguna de las dos sabe que existe un LLM del otro lado; el Prompt
+ * Builder (`render-context.ts`) es el único que lo sabe y las traduce a
+ * mensajes — el modelo recibe la intención, la presencia y el estilo ya
+ * decididos, nunca los decide él.
  */
 export interface Context {
   conversation: ConversationTurn[];
@@ -66,6 +82,8 @@ export interface Context {
   realitySnapshot: RealitySnapshot;
   contextItems: ContextItem[];
   conversationStrategy: ConversationStrategyDirective;
+  presence: PresenceStance;
+  voice: VoiceSignature;
   conversationRules: RuleDirective[];
   responseIntent: ResponseIntent;
 }

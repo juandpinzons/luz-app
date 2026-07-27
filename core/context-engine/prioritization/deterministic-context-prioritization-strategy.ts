@@ -20,7 +20,8 @@ const MAX_CONTEXT_ITEMS = 8;
  * hábito activo) — recortar no distingue "real" de "relleno" (esa
  * distinción ya se resolvió antes de `ContextEngine`), solo decide
  * cuánto de lo real cabe en una respuesta, mismo criterio de brevedad
- * que ya rige el resto del Conversation Manual (`FavorBrevityRule`).
+ * que ya rige el resto de la respuesta (`VoiceSignature.maxLines`,
+ * `core/voice-engine`).
  */
 export class DeterministicContextPrioritizationStrategy
   implements ContextPrioritizationStrategy

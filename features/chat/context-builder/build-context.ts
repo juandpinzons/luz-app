@@ -2,6 +2,8 @@ import { createConversationStrategyEngine } from "../../../core/conversation-str
 import { createContextEngine } from "../../../core/context-engine";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
+import { createPresenceEngine } from "../../../core/presence-engine";
+import { createVoiceEngine } from "../../../core/voice-engine";
 import { assembleRealitySnapshot } from "../services/assemble-reality-snapshot";
 import { CONVERSATION_RULES } from "./conversation-rules";
 import type {
@@ -44,12 +46,22 @@ function determineResponseIntent(
  * cruzando las cuatro fuentes de `RealitySnapshot`, qué merece
  * atención en esta respuesta puntual. `ConversationStrategyEngine.select()`
  * (`core/conversation-strategy-engine`) va un paso más allá: a partir
- * de esa misma decisión, decide CÓMO conversar — una de ocho posturas
- * deterministas (Listen/Clarify/Encourage/Challenge/Celebrate/Remind/
- * Plan/FollowUp), nunca elegida por el modelo. Las reglas del
- * Conversation Manual y el Prompt Builder reciben ambas decisiones ya
- * tomadas (`contextItems`, `conversationStrategy`), nunca las fuentes
- * crudas por separado.
+ * de esa misma decisión — ya informada por Reasoning cuando
+ * `ReflectStrategyRule` gana la priorización — decide QUÉ debe lograr
+ * esta respuesta, una de diez posturas deterministas, nunca elegida
+ * por el modelo.
+ *
+ * `PresenceEngine.decide()` (`core/presence-engine`, Fase II) va un
+ * paso más: a partir de esa misma directiva, decide CÓMO está presente
+ * LUZ (acompañar/escuchar/celebrar/desafiar/silencio) — nunca qué
+ * decir. `VoiceEngine.speak()` (`core/voice-engine`) traduce esa
+ * postura a CÓMO suena (registro, calidez, largo máximo, qué evitar) —
+ * tampoco genera texto. Cuatro decisiones, cuatro capas, cada una
+ * consumiendo solo la salida de la anterior — nunca las fuentes crudas
+ * por separado, y ninguna sabe que existe un LLM del otro lado. Las
+ * reglas del Conversation Manual y el Prompt Builder reciben las cuatro
+ * decisiones ya tomadas (`contextItems`, `conversationStrategy`,
+ * `presence`, `voice`).
  *
  * Requiere `LifeGraphContext` real — igual que `assembleRealitySnapshot`
  * y `MemoryEngine.capture`. El llamador decide qué hacer si no existe
@@ -89,6 +101,13 @@ export async function buildContext(
     isFirstContact,
   });
 
+  // Presence (Fase II): nunca pasa `allowSilence` — el chat es
+  // reactivo (la persona ya escribió, una respuesta es parte del
+  // contrato de esta UI), así que `"silence"` no es una salida
+  // alcanzable desde aquí hoy (ver docblock de `DefaultPresenceEngine`).
+  const presence = createPresenceEngine().decide(conversationStrategy);
+  const voice = createVoiceEngine().speak(presence);
+
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
     (rule) => rule.applies({ conversation, contextItems }),
   ).map((rule) => ({
@@ -104,6 +123,8 @@ export async function buildContext(
     realitySnapshot,
     contextItems,
     conversationStrategy,
+    presence,
+    voice,
     conversationRules,
     responseIntent,
   };

@@ -8,6 +8,7 @@ import {
 import { buildContext } from "../features/chat/context-builder";
 import { createEntityId, type LifeGraphContext } from "../core/life";
 import { rankKnowledgeGaps } from "../core/knowledge-gaps";
+import { PRESENCE_MODES } from "../core/presence-engine";
 import type { RealitySnapshot } from "../core/reality";
 import type { SmokeContext, SmokeFlow } from "./types";
 
@@ -309,5 +310,21 @@ export const conversationStrategyFlow: SmokeFlow = {
       "conversationStrategy.primaryObjective no debería quedar vacío",
     );
     assert(strategy.avoid.length > 0, "conversationStrategy.avoid no debería quedar vacío");
+
+    // D) Presence/Voice (Fase II): mismo pipeline real, un paso más --
+    // buildContext() ya corre PresenceEngine.decide() y VoiceEngine.speak()
+    // sobre la estrategia de arriba, no fabricados aparte.
+    const { presence, voice } = realBuiltContext;
+    assert(
+      PRESENCE_MODES.includes(presence.mode),
+      `buildContext() produjo un PresenceMode fuera del vocabulario válido: '${presence.mode}'`,
+    );
+    assert(presence.rationale.length > 0, "presence.rationale no debería quedar vacío");
+    assert(
+      presence.mode !== "silence",
+      "el chat nunca pasa allowSilence -- 'silence' no debería ser alcanzable desde buildContext()",
+    );
+    assert(voice.maxLines > 0, "voice.maxLines debería ser un límite positivo");
+    assert(voice.forbid.length > 0, "voice.forbid no debería quedar vacío");
   },
 };
