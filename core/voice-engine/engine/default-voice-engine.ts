@@ -9,7 +9,7 @@ import type { VoiceEngine } from "./voice-engine";
  * Rules) quedaron retiradas cuando este motor se conectó al pipeline
  * real (Fase II) -- su contenido vive aquí, no en dos lugares.
  */
-const DEFAULT_MAX_LINES = 4;
+export const DEFAULT_MAX_LINES = 4;
 /** Único caso que se aparta del límite general -- ver docblock de `VoiceSignature.maxLines`. */
 const SILENCE_MAX_LINES = 1;
 

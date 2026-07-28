@@ -2,6 +2,7 @@ import { and, eq, gte } from "drizzle-orm";
 import { db } from "../core/db/client";
 import { conversationMessages, conversations } from "../core/db/schema/conversations";
 import { events } from "../core/db/schema/events";
+import { DEFAULT_MAX_LINES } from "../core/voice-engine";
 import { smokeFetch } from "./utils/http";
 import type { SmokeContext, SmokeFlow } from "./types";
 
@@ -9,6 +10,26 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+/**
+ * Mismos patrones de `BASE_FORBID` (`core/voice-engine/engine/default-voice-engine.ts`)
+ * -- no una segunda lista independiente, solo la forma de detectarlos
+ * en texto ya generado. Si esto necesita crecer, `BASE_FORBID` es
+ * donde crece primero; esto solo lo comprueba.
+ */
+const MARKDOWN_PATTERN = /(\*\*|__|`|^#{1,6}\s|^[-*]\s|^\d+\.\s)/m;
+
+function assertVoiceCompliance(reply: string): void {
+  const nonEmptyLines = reply.split("\n").map((l) => l.trim()).filter(Boolean);
+  assert(
+    nonEmptyLines.length <= DEFAULT_MAX_LINES,
+    `la respuesta real del modelo tiene ${nonEmptyLines.length} líneas, por encima del límite de Voice (${DEFAULT_MAX_LINES}): "${reply}"`,
+  );
+  assert(
+    !MARKDOWN_PATTERN.test(reply),
+    `la respuesta real del modelo usa sintaxis de markdown, prohibida por Voice: "${reply}"`,
+  );
 }
 
 const SMOKE_MESSAGE =
@@ -91,10 +112,21 @@ export const firstMessageFlow: SmokeFlow = {
       messages.some((m) => m.role === "user"),
       "no se persistió el mensaje del usuario en `conversation_messages`",
     );
+    const assistantMessage = messages.find((m) => m.role === "assistant");
     assert(
-      messages.some((m) => m.role === "assistant"),
+      assistantMessage,
       "no se persistió la respuesta de LUZ en `conversation_messages`",
     );
+
+    // Voice (Fase II, core/voice-engine): esto no verifica que el
+    // prompt se ensambló bien -- eso ya lo cubre
+    // conversation-strategy.test.ts contra buildContext(). Esto
+    // verifica que el modelo REAL respeta el contrato de
+    // VoiceSignature que ese prompt le da -- el punto entero de
+    // cablear Presence/Voice al pipeline. Puede fallar de forma
+    // intermitente si el modelo se desvía; eso es señal real de
+    // calidad de respuesta, no un bug de wiring.
+    assertVoiceCompliance(assistantMessage.content);
 
     const title = await pollForTitle(conversationId);
     assert(
