@@ -29,6 +29,17 @@ export function detectDomainCoMovement(
 ): PredictivePatternCandidate[] {
   const sorted = [...movements].sort((a, b) => a.changedAt.getTime() - b.changedAt.getTime());
   const acc = new Map<string, Accumulator>();
+  // Un mismo movimiento (origen o destino) no puede aportar más de una
+  // vez a la misma combinación -- sin esto, dos episodios reales
+  // relativamente cercanos entre sí (p. ej. a los días 0/2 y 10/12,
+  // ambos dentro de los mismos 21 días entre sí) se contaban también
+  // como un tercer "cruce" espurio (día 0 con día 12), inflando
+  // `occurrences` -- y por lo tanto `computePatternConfidence` y el
+  // texto exacto que ve la persona en `describePattern`/
+  // `describePendingPrediction` ("visto N veces") -- por encima de lo
+  // que la evidencia real puede sostener (nunca más confirmaciones
+  // independientes que instancias reales de cada lado).
+  const usedIndicesByKey = new Map<string, Set<number>>();
 
   for (let i = 0; i < sorted.length; i += 1) {
     const from = sorted[i];
@@ -44,6 +55,12 @@ export function detectDomainCoMovement(
       if (from.domain === to.domain) continue;
 
       const key = `${from.domain}|${from.direction}|${to.domain}|${to.direction}`;
+      const usedIndices = usedIndicesByKey.get(key) ?? new Set<number>();
+      if (usedIndices.has(i) || usedIndices.has(j)) continue;
+      usedIndices.add(i);
+      usedIndices.add(j);
+      usedIndicesByKey.set(key, usedIndices);
+
       const existing = acc.get(key);
       if (existing) {
         existing.occurrences += 1;
