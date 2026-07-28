@@ -1,4 +1,5 @@
 import type { EntityId } from "../life/value-objects/entity-id";
+import type { ContradictionContextSnapshot } from "./contradiction-snapshot";
 import type { CuriosityContextSnapshot } from "./curiosity-snapshot";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
 import type { InsightContextSnapshot } from "./insight-context-snapshot";
@@ -33,4 +34,6 @@ export interface RealitySnapshot {
   reasoning: ReasoningContextSnapshot;
   /** `core/curiosity-engine` -- la pregunta concreta que LUZ tiene pendiente ahora mismo, si hay una. */
   curiosity: CuriosityContextSnapshot;
+  /** `core/contradiction-engine` -- una tensión real ya detectada entre lo que la persona dijo y lo que sigue creyendo o persiguiendo, si hay una abierta. */
+  contradictions: ContradictionContextSnapshot;
 }

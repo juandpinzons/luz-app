@@ -5,4 +5,5 @@ export * from "./external-signal-snapshot";
 export * from "./knowledge-gaps-snapshot";
 export * from "./reasoning-snapshot";
 export * from "./curiosity-snapshot";
+export * from "./contradiction-snapshot";
 export * from "./reality-snapshot";

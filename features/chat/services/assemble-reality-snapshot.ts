@@ -1,6 +1,7 @@
 import type { Database } from "../../../core/db/client";
 import { DrizzleBeliefRepository } from "../../../core/belief-engine";
 import { DrizzleConceptRepository } from "../../../core/concept-graph";
+import { DrizzleContradictionRepository } from "../../../core/contradiction-engine";
 import {
   listActiveGoals,
   listActiveHabits,
@@ -42,6 +43,13 @@ const RELEVANT_INSIGHT_LIMIT = 3;
  * observación puntual y genuina (ver `ReflectStrategyRule`).
  */
 const RELEVANT_REASONING_LIMIT = 2;
+/**
+ * Como máximo una a la vez, nunca una lista -- ver docblock de
+ * `ContradictionContextSnapshot`: traer varias tensiones abiertas al
+ * mismo turno se sentiría como una acumulación de cargos, no como
+ * acompañamiento genuino.
+ */
+const RELEVANT_CONTRADICTION_LIMIT = 1;
 
 /**
  * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
@@ -78,6 +86,7 @@ export async function assembleRealitySnapshot(
     concepts,
     reasoningConclusions,
     pendingCuriosityQuestion,
+    contradictions,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -100,6 +109,7 @@ export async function assembleRealitySnapshot(
     new DrizzleConceptRepository(db).list(context),
     new DrizzleReasoningRepository(db).list(context),
     new DrizzleCuriosityQuestionRepository(db).getPending(context),
+    new DrizzleContradictionRepository(db).list(context),
   ]);
 
   const relevantMemories = focusedMemory
@@ -158,6 +168,17 @@ export async function assembleRealitySnapshot(
         : b.updatedAt.getTime() - a.updatedAt.getTime();
     })
     .slice(0, RELEVANT_REASONING_LIMIT);
+
+  // Contradiction Engine -- solo tensiones todavía sin resolver
+  // (`"open"`/`"acknowledged"`, nunca `"resolved"`/`"dismissed"`),
+  // mismo filtro que ya usan `app/life/[kind]/[id]/page.tsx` y
+  // `build-identity-model.ts`. La más reciente primero: si hay más de
+  // una abierta, la que LUZ detectó ahora mismo es más relevante para
+  // esta conversación que una que lleva semanas sin resolverse.
+  const openContradictions = contradictions
+    .filter((item) => item.status === "open" || item.status === "acknowledged")
+    .sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime())
+    .slice(0, RELEVANT_CONTRADICTION_LIMIT);
 
   // Knowledge Gaps (Knowledge Engine V2) -- cuenta señales reales por
   // dominio, nunca inventa una para un dominio sin actividad todavía
@@ -258,6 +279,18 @@ export async function assembleRealitySnapshot(
             question: pendingCuriosityQuestion.question,
           }
         : null,
+    },
+    // Tensión real ya detectada (Contradiction Engine, corre dentro de
+    // `enrichKnowledgeGraph` después de cada memoria) -- hasta ahora
+    // solo visible en `/life`, nunca disponible para la conversación en
+    // vivo. Sin ninguna abierta, `items` queda vacío a propósito, mismo
+    // criterio de ausencia real que el resto de este ensamblador.
+    contradictions: {
+      items: openContradictions.map((item) => ({
+        id: item.id,
+        description: item.description,
+        domain: item.domain,
+      })),
     },
   };
 }

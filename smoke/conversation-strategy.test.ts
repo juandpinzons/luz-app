@@ -42,6 +42,7 @@ function emptySnapshot(): RealitySnapshot {
     knowledgeGaps: { domains: [] },
     reasoning: { items: [] },
     curiosity: { pendingQuestion: null },
+    contradictions: { items: [] },
   };
 }
 
@@ -96,6 +97,28 @@ export const conversationStrategyFlow: SmokeFlow = {
     assert(
       (await selectStrategyFor(challengeSnapshot, false)) === "challenge",
       "un insight de tipo 'pattern' + un goal activo debería producir 'challenge'",
+    );
+
+    const contradictionSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      contradictions: {
+        items: [
+          {
+            id: createEntityId("contradiction-1"),
+            description:
+              "Dice que quiere ahorrar para el viaje, pero acaba de gastar el bono completo en otra cosa.",
+            domain: "finances",
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(contradictionSnapshot, false)) === "challenge",
+      "una contradicción abierta debería producir 'challenge' por sí sola, sin necesitar un insight de tipo 'pattern'",
+    );
+    assert(
+      (await selectStrategyFor(contradictionSnapshot, true)) !== "challenge",
+      "'challenge' por contradicción nunca debería ganar en el primer contacto de una conversación nueva",
     );
 
     const encourageSnapshot: RealitySnapshot = {
