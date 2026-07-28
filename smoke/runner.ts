@@ -14,6 +14,7 @@ import { predictiveEngineFlow } from "./predictive-engine.test";
 import { knowledgeGapsFlow } from "./knowledge-gaps.test";
 import { importanceEngineFlow } from "./importance-engine.test";
 import { temporalEvolutionFlow } from "./temporal-evolution.test";
+import { predictivePendingFlow } from "./predictive-pending.test";
 import { aiProviderRegistryFlow } from "./ai-provider-registry.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
@@ -37,6 +38,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   knowledgeGapsFlow,
   importanceEngineFlow,
   temporalEvolutionFlow,
+  predictivePendingFlow,
   aiProviderRegistryFlow,
 ];
 
