@@ -19,6 +19,18 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().min(1, "OPENAI_API_KEY es obligatorio."),
   OPENAI_MODEL: z.string().min(1, "OPENAI_MODEL es obligatorio."),
 
+  /**
+   * Kimi (Moonshot AI) -- segundo `AIProvider` (`ai/providers/kimi-provider.ts`),
+   * opcional a propósito: a diferencia de OpenAI, ningún consumidor real lo
+   * usa todavía (registrado, sin actividad -- decisión explícita del
+   * Founder), así que el sistema debe seguir arrancando sin estas tres
+   * configuradas. `KIMI_MODEL`/`KIMI_BASE_URL` sí tienen default porque son
+   * inertes sin `KIMI_API_KEY`: no cuesta nada dejarlos listos.
+   */
+  KIMI_API_KEY: z.string().min(1).optional(),
+  KIMI_MODEL: z.string().min(1).default("kimi-k3"),
+  KIMI_BASE_URL: z.string().min(1).default("https://api.moonshot.ai/v1"),
+
   WORKER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),
 
   /**
