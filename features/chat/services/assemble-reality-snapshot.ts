@@ -13,6 +13,7 @@ import { rankKnowledgeGaps, type DomainCoverageSignals } from "../../../core/kno
 import { createMemoryEngine } from "../../../core/memory-engine";
 import { DrizzleMemoryRepository } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
+import { DrizzleCuriosityQuestionRepository } from "../../../core/curiosity-engine";
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { selectContextualMemories } from "./select-contextual-memories";
@@ -76,6 +77,7 @@ export async function assembleRealitySnapshot(
     beliefs,
     concepts,
     reasoningConclusions,
+    pendingCuriosityQuestion,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -97,6 +99,7 @@ export async function assembleRealitySnapshot(
     new DrizzleBeliefRepository(db).list(context),
     new DrizzleConceptRepository(db).list(context),
     new DrizzleReasoningRepository(db).list(context),
+    new DrizzleCuriosityQuestionRepository(db).getPending(context),
   ]);
 
   const relevantMemories = focusedMemory
@@ -241,6 +244,20 @@ export async function assembleRealitySnapshot(
         statement: conclusion.statement,
         confidenceScore: conclusion.confidence.score,
       })),
+    },
+    // Curiosidad genuina (Curiosity Engine) -- una pregunta concreta ya
+    // pensada, no una instrucción vaga que el LLM improvisa cada vez
+    // (ver CuriosityStrategyRule). Sin ninguna pendiente, `null` a
+    // propósito -- mismo criterio de ausencia real que el resto de este
+    // ensamblador.
+    curiosity: {
+      pendingQuestion: pendingCuriosityQuestion
+        ? {
+            id: pendingCuriosityQuestion.id,
+            domain: pendingCuriosityQuestion.domain,
+            question: pendingCuriosityQuestion.question,
+          }
+        : null,
     },
   };
 }

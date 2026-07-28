@@ -1,4 +1,5 @@
 import type { EntityId } from "../life/value-objects/entity-id";
+import type { CuriosityContextSnapshot } from "./curiosity-snapshot";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
 import type { InsightContextSnapshot } from "./insight-context-snapshot";
 import type { KnowledgeGapsSnapshot } from "./knowledge-gaps-snapshot";
@@ -30,4 +31,6 @@ export interface RealitySnapshot {
   knowledgeGaps: KnowledgeGapsSnapshot;
   /** `core/knowledge-engine/reasoning` -- conclusiones razonadas ya validadas, para que Conversation Strategy pueda apoyarse en comprensión real, no solo en contexto inmediato. */
   reasoning: ReasoningContextSnapshot;
+  /** `core/curiosity-engine` -- la pregunta concreta que LUZ tiene pendiente ahora mismo, si hay una. */
+  curiosity: CuriosityContextSnapshot;
 }

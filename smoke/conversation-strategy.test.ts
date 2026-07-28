@@ -41,6 +41,7 @@ function emptySnapshot(): RealitySnapshot {
     signals: { signals: [] },
     knowledgeGaps: { domains: [] },
     reasoning: { items: [] },
+    curiosity: { pendingQuestion: null },
   };
 }
 

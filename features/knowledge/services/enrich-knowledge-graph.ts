@@ -17,6 +17,12 @@ import {
   type ContradictionCandidate,
 } from "../../../core/contradiction-engine";
 import { createContextEngine, type Context } from "../../../core/context-engine";
+import {
+  AICuriosityQuestionGenerationStrategy,
+  DrizzleCuriosityQuestionRepository,
+  generateCuriosityQuestion,
+  resolveStaleCuriosityQuestions,
+} from "../../../core/curiosity-engine";
 import { DrizzleImportanceRepository, updateImportance } from "../../../core/importance-engine";
 import {
   createReasoningEngine,
@@ -27,6 +33,7 @@ import {
 import type { Insight } from "../../../core/knowledge-engine/entities/insight";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import type { EntityId } from "../../../core/life/value-objects/entity-id";
+import { LIFE_DOMAIN_LABEL } from "../../../core/life/value-objects/life-domain-label";
 import { logger } from "../../../core/observability/logger";
 import type { RealitySnapshot } from "../../../core/reality/reality-snapshot";
 import { detectPredictivePatterns } from "./detect-predictive-patterns";
@@ -108,6 +115,7 @@ export async function enrichKnowledgeGraph(
     await decayStaleBeliefs(beliefRepository, context);
     await detectPredictivePatterns(db, context);
     await runReasoning();
+    await runCuriosity();
 
     async function enrichOneInsight(insight: Insight): Promise<void> {
       const evidence = await insightRepository.getEvidence(context, insight.id);
@@ -234,6 +242,53 @@ export async function enrichKnowledgeGraph(
           },
         );
       }
+    }
+
+    /**
+     * Curiosity Engine (`core/curiosity-engine`) -- corre una vez por
+     * job, igual que Reasoning: primero revisa si la pregunta
+     * `pending` actual (si hay una) sigue siendo el vacío real más
+     * urgente, después genera una nueva solo si no quedó ninguna
+     * pendiente (a lo sumo una a la vez, ver docblock del schema).
+     * `knownAboutPerson` usa lo mismo que ya se le muestra al chat
+     * (insights/reasoning validados de este snapshot) -- nunca una
+     * consulta nueva, ancla la pregunta a la persona real sin inventar
+     * contexto.
+     */
+    async function runCuriosity(): Promise<void> {
+      const curiosityRepository = new DrizzleCuriosityQuestionRepository(db);
+
+      await resolveStaleCuriosityQuestions(
+        curiosityRepository,
+        context,
+        snapshot.knowledgeGaps.domains,
+      );
+
+      const weakest = [...snapshot.knowledgeGaps.domains].sort(
+        (a, b) => a.coverageScore - b.coverageScore,
+      )[0];
+      if (!weakest) {
+        return;
+      }
+
+      const knownAboutPerson = [
+        ...snapshot.insights.items.map((item) => item.description),
+        ...snapshot.reasoning.items.map((item) => item.statement),
+      ].slice(0, 5);
+
+      await generateCuriosityQuestion(
+        curiosityRepository,
+        new AICuriosityQuestionGenerationStrategy(),
+        context,
+        {
+          weakestDomain: {
+            domain: weakest.domain,
+            label: LIFE_DOMAIN_LABEL[weakest.domain],
+            coverageScore: weakest.coverageScore,
+          },
+          knownAboutPerson,
+        },
+      );
     }
   } catch (error) {
     logger.log({

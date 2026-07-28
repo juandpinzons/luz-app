@@ -37,19 +37,31 @@ function leastCoveredDomain(
   }, undefined);
 }
 
+const AVOID =
+  "Forzar el tema si no conecta con lo que la persona está diciendo ahora mismo, encadenar varias preguntas, o que se sienta como una entrevista en vez de una conversación real.";
+
 /**
  * Curiosidad genuina por una parte de la vida de esta persona que LUZ
  * todavía entiende poco (`RealitySnapshot.knowledgeGaps`,
  * `core/knowledge-gaps` -- Goal/Project/Habit.domain, Beliefs y
- * Concepts ya clasificados, dato real, nunca inventado aquí). Prioridad
- * deliberadamente baja: un riesgo, un patrón de postergación, un plan
- * concreto o un recordatorio pendiente siempre le ganan a la curiosidad
- * exploratoria (`ChallengeStrategyRule`/`EncourageStrategyRule`/
- * `PlanStrategyRule`/`RemindStrategyRule`, todas con prioridad mayor) —
- * pero por encima de `ClarifyStrategyRule` (35) y del catch-all
- * `ListenStrategyRule` (5): "hay una parte entera de su vida sin
- * explorar" es una señal más específica y útil que "nada domina" o "un
- * empate ambiguo".
+ * Concepts ya clasificados, dato real, nunca inventado aquí). Cuando
+ * `RealitySnapshot.curiosity.pendingQuestion` existe (Curiosity Engine
+ * ya pensó una pregunta concreta para ese vacío, ver
+ * `core/curiosity-engine`), se usa esa -- nunca una instrucción vaga
+ * que el LLM tiene que improvisar en el momento. Sin ninguna pendiente
+ * todavía (p. ej. el cron de generación no ha corrido para este
+ * LifeGraph), se degrada al criterio anterior: detectar el vacío en el
+ * momento y pedirle al LLM que muestre curiosidad genérica por esa
+ * área.
+ *
+ * Prioridad deliberadamente baja: un riesgo, un patrón de
+ * postergación, un plan concreto o un recordatorio pendiente siempre le
+ * ganan a la curiosidad exploratoria
+ * (`ChallengeStrategyRule`/`EncourageStrategyRule`/`PlanStrategyRule`/
+ * `RemindStrategyRule`, todas con prioridad mayor) — pero por encima de
+ * `ClarifyStrategyRule` (35) y del catch-all `ListenStrategyRule` (5):
+ * "hay una parte entera de su vida sin explorar" es una señal más
+ * específica y útil que "nada domina" o "un empate ambiguo".
  */
 export class CuriosityStrategyRule implements ConversationStrategyRule {
   readonly id: ConversationStrategyType = "curiosity";
@@ -58,6 +70,10 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
   appliesTo(input: ConversationStrategyRuleInput): boolean {
     if (input.isFirstContact) {
       return false;
+    }
+
+    if (input.realitySnapshot.curiosity.pendingQuestion) {
+      return true;
     }
 
     const { domains } = input.realitySnapshot.knowledgeGaps;
@@ -71,6 +87,17 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
   }
 
   explain(input: ConversationStrategyRuleInput): ConversationStrategyDirective {
+    const pending = input.realitySnapshot.curiosity.pendingQuestion;
+    if (pending) {
+      const label = LIFE_DOMAIN_LABEL[pending.domain];
+      return {
+        strategy: this.id,
+        reason: `LUZ todavía entiende poco sobre ${label} y ya tiene una pregunta concreta pensada para eso.`,
+        primaryObjective: `Si surge una oportunidad natural en lo que dice, puedes preguntarle esto, adaptado al momento (no la repitas textual si no encaja): "${pending.question}"`,
+        avoid: AVOID,
+      };
+    }
+
     const weakest = leastCoveredDomain(input.realitySnapshot.knowledgeGaps.domains);
 
     if (!weakest) {
@@ -86,8 +113,7 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
       reason: `LUZ todavía entiende poco sobre ${label} -- ningún objetivo, proyecto, hábito o creencia consolidada ahí todavía.`,
       primaryObjective:
         `Si surge una oportunidad natural en lo que dice, muestra curiosidad genuina por ${label} -- una pregunta concreta y específica sobre su vida real, nunca genérica.`,
-      avoid:
-        "Forzar el tema si no conecta con lo que la persona está diciendo ahora mismo, encadenar varias preguntas, o que se sienta como una entrevista en vez de una conversación real.",
+      avoid: AVOID,
     };
   }
 }
