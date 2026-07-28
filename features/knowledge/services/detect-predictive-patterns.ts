@@ -1,4 +1,4 @@
-import { DrizzleBeliefRepository, type BeliefRepository } from "../../../core/belief-engine";
+import { DrizzleBeliefRepository } from "../../../core/belief-engine";
 import type { Database } from "../../../core/db/client";
 import { DrizzleImportanceRepository, updateImportance } from "../../../core/importance-engine";
 import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
@@ -10,8 +10,8 @@ import {
   computePatternConfidence,
   describePattern,
   detectDomainCoMovement,
-  type DomainMovement,
 } from "../../../core/predictive-engine";
+import { collectDomainMovements } from "./collect-domain-movements";
 
 /**
  * No vuelve a crear el mismo patrón cada vez que corre -- un patrón ya
@@ -41,33 +41,6 @@ async function alreadyKnown(
       insight.description.includes(fromLabel) &&
       insight.description.includes(toLabel),
   );
-}
-
-async function collectDomainMovements(
-  beliefRepository: BeliefRepository,
-  context: LifeGraphContext,
-): Promise<DomainMovement[]> {
-  const beliefs = await beliefRepository.list(context);
-  const movements: DomainMovement[] = [];
-
-  for (const belief of beliefs) {
-    if (!belief.domain) continue;
-
-    const history = await beliefRepository.getHistory(context, belief.id);
-    for (const entry of history) {
-      if (entry.previousConfidence === undefined) continue;
-      if (entry.newConfidence === entry.previousConfidence) continue;
-
-      movements.push({
-        beliefId: belief.id,
-        domain: belief.domain,
-        direction: entry.newConfidence > entry.previousConfidence ? "strengthening" : "weakening",
-        changedAt: entry.changedAt,
-      });
-    }
-  }
-
-  return movements;
 }
 
 /**

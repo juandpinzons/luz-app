@@ -11,8 +11,15 @@ import { DrizzleReasoningRepository, type ReasoningConclusion } from "../../../c
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { LIFE_DOMAIN_LABEL } from "../../../core/life/value-objects/life-domain-label";
 import type { LifeDomainType } from "../../../core/life/value-objects/life-domain-type";
+import {
+  computePatternConfidence,
+  derivePendingPredictions,
+  describePendingPrediction,
+  detectDomainCoMovement,
+} from "../../../core/predictive-engine";
 import type { EvolutionSummary } from "../../../core/temporal-evolution";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
+import { collectDomainMovements } from "../../knowledge/services/collect-domain-movements";
 import { describeEvolution } from "./describe-evolution";
 
 const TOP_BELIEFS_LIMIT = 8;
@@ -25,6 +32,20 @@ export interface DomainUnderstanding {
   label: string;
   coverageScore: number;
   beliefs: Belief[];
+}
+
+/**
+ * Un patrón ya confirmado (`core/predictive-engine`) cuyo gatillo se
+ * repitió hace poco sin que la consecuencia se haya visto todavía --
+ * `description` ya viene formateada (`describePendingPrediction`,
+ * determinista, sin IA) porque, igual que `DomainUnderstanding.label`,
+ * es texto para mostrar, no un dato para reinterpretar en la capa de
+ * presentación.
+ */
+export interface PendingPredictionSummary {
+  description: string;
+  confidence: number;
+  triggeredAt: Date;
 }
 
 /**
@@ -52,6 +73,8 @@ export interface PersonIdentityModel {
   recentEvolution: EvolutionSummary;
   /** `core/knowledge-engine/reasoning` -- síntesis sobre varios Beliefs/Insights a la vez, no una interpretación puntual. */
   topReasoningConclusions: ReasoningConclusion[];
+  /** `core/predictive-engine` -- patrones ya confirmados cuyo gatillo se repitió hace poco, ver `PendingPredictionSummary`. */
+  pendingPredictions: PendingPredictionSummary[];
 }
 
 function rankByImportance<T extends { id: string }>(
@@ -88,16 +111,35 @@ export async function buildIdentityModel(
   const importanceRepository = new DrizzleImportanceRepository(db);
   const reasoningRepository = new DrizzleReasoningRepository(db);
 
-  const [snapshot, beliefs, concepts, contradictions, importanceScores, evolution, reasoningConclusions] =
-    await Promise.all([
-      assembleRealitySnapshot(db, context),
-      beliefRepository.list(context),
-      conceptRepository.list(context),
-      contradictionRepository.list(context),
-      importanceRepository.list(context),
-      describeEvolution(db, context, RECENT_EVOLUTION_WINDOW_DAYS),
-      reasoningRepository.list(context),
-    ]);
+  const [
+    snapshot,
+    beliefs,
+    concepts,
+    contradictions,
+    importanceScores,
+    evolution,
+    reasoningConclusions,
+    domainMovements,
+  ] = await Promise.all([
+    assembleRealitySnapshot(db, context),
+    beliefRepository.list(context),
+    conceptRepository.list(context),
+    contradictionRepository.list(context),
+    importanceRepository.list(context),
+    describeEvolution(db, context, RECENT_EVOLUTION_WINDOW_DAYS),
+    reasoningRepository.list(context),
+    collectDomainMovements(beliefRepository, context),
+  ]);
+
+  const patternCandidates = detectDomainCoMovement(domainMovements);
+  const pendingPredictions: PendingPredictionSummary[] = derivePendingPredictions(
+    patternCandidates,
+    domainMovements,
+  ).map((prediction) => ({
+    description: describePendingPrediction(prediction),
+    confidence: computePatternConfidence(prediction.occurrences),
+    triggeredAt: prediction.triggeredAt,
+  }));
 
   const activeBeliefs = beliefs.filter((belief) => belief.status === "active");
   const openContradictions = contradictions.filter(
@@ -146,5 +188,6 @@ export async function buildIdentityModel(
       (conclusion) => conclusion.confidence.score,
       TOP_REASONING_CONCLUSIONS_LIMIT,
     ),
+    pendingPredictions,
   };
 }

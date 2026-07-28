@@ -86,7 +86,8 @@ export default async function LifeIdentityPage() {
       model.topBeliefs.length > 0 ||
       model.topConcepts.length > 0 ||
       model.openContradictions.length > 0 ||
-      model.topReasoningConclusions.length > 0);
+      model.topReasoningConclusions.length > 0 ||
+      model.pendingPredictions.length > 0);
 
   const improvedLine = model
     ? domainMovementLine("Mejorando", model.recentEvolution.improvedDomains)
@@ -161,6 +162,22 @@ export default async function LifeIdentityPage() {
                 </p>
               )}
             </div>
+          </section>
+        )}
+
+        {model && model.pendingPredictions.length > 0 && (
+          <section className="animate-fade-in mt-8" style={{ animationDelay: "140ms" }}>
+            <h2 className="text-sm font-medium text-zinc-400">Podría venir</h2>
+            <ul className="mt-3 space-y-2">
+              {model.pendingPredictions.map((prediction, index) => (
+                <li
+                  key={`${prediction.triggeredAt.getTime()}-${index}`}
+                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
+                >
+                  {prediction.description}
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
