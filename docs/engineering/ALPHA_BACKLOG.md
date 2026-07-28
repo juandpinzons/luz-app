@@ -198,10 +198,11 @@ patrón de deslogueo inesperado.
 Pausado explícitamente por el Founder hasta que el Founder Acceptance
 Test se sienta sólido. Ver `docs/engineering/BETA_ROADMAP_V1.md`.
 
-### P3-2. Sistema de feedback dentro de la app
-Parte del Alpha-4 original (onboarding, estados vacíos, feedback
-in-app) — no construido, no urgente mientras el pilotaje es pequeño y
-directo con el Founder.
+### P3-2. Sistema de feedback dentro de la app — ✅ Resuelto
+Desplegado (commit `0969afc`): `/feedback`, `/api/feedback`,
+`features/feedback/`, tabla `feedback_responses` (migración
+`0010_lively_bug.sql`, aplicada en cada deploy vía `drizzle-kit
+migrate` en `package.json`'s `build`). `/admin` la consume.
 
 ### P3-3. Analítica más profunda (tracing distribuido, latencia por
 etapa de DB individual)
