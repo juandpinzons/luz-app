@@ -6,6 +6,7 @@ import { firstMessageFlow } from "./first-message.test";
 import { dashboardFlow } from "./dashboard.test";
 import { conversationStrategyFlow } from "./conversation-strategy.test";
 import { reasoningEngineFlow } from "./reasoning-engine.test";
+import { contradictionEngineFlow } from "./contradiction-engine.test";
 import { aiProviderRegistryFlow } from "./ai-provider-registry.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
@@ -21,6 +22,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   dashboardFlow,
   conversationStrategyFlow,
   reasoningEngineFlow,
+  contradictionEngineFlow,
   aiProviderRegistryFlow,
 ];
 
