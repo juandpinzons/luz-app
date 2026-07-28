@@ -79,6 +79,10 @@ governance, not engineering — see
 [`docs/governance/DOCUMENT_CLASSIFICATION.md`](governance/DOCUMENT_CLASSIFICATION.md)
 for how these layers stay independent.
 
+Includes who LUZ is currently built for and the question used to
+prioritize what gets built next:
+[`docs/vision/TARGET_MARKET_HYPOTHESIS.md`](vision/TARGET_MARKET_HYPOTHESIS.md).
+
 Changes are extremely rare.
 
 ------------------------------------------------------------------------
