@@ -1,4 +1,5 @@
 import { KimiProvider } from "./providers/kimi-provider";
+import { LoggingAIProvider } from "./providers/logging-ai-provider";
 import { OpenAIProvider } from "./providers/openai-provider";
 import type { AIProvider } from "./provider";
 
@@ -10,9 +11,16 @@ import type { AIProvider } from "./provider";
 export const AI_PROVIDER_NAMES = ["openai", "kimi"] as const;
 export type AIProviderName = (typeof AI_PROVIDER_NAMES)[number];
 
+/**
+ * Cada proveedor se envuelve una sola vez en `LoggingAIProvider`
+ * (Composition over Coupling) -- así todo proveedor, presente o
+ * futuro, entrega observabilidad uniforme (proveedor, método,
+ * duración, éxito/fallo) sin que su propia implementación tenga que
+ * saber de logging, y sin tocar ninguno de los call sites reales.
+ */
 const factories: Record<AIProviderName, () => AIProvider> = {
-  openai: () => new OpenAIProvider(),
-  kimi: () => new KimiProvider(),
+  openai: () => new LoggingAIProvider(new OpenAIProvider()),
+  kimi: () => new LoggingAIProvider(new KimiProvider()),
 };
 
 const cache = new Map<AIProviderName, AIProvider>();
