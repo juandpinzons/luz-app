@@ -34,7 +34,9 @@ import type { Insight } from "../../../core/knowledge-engine/entities/insight";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import type { EntityId } from "../../../core/life/value-objects/entity-id";
 import { LIFE_DOMAIN_LABEL } from "../../../core/life/value-objects/life-domain-label";
+import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
+import { recordEvent } from "../../../core/observability/record-event";
 import type { RealitySnapshot } from "../../../core/reality/reality-snapshot";
 import { detectPredictivePatterns } from "./detect-predictive-patterns";
 
@@ -78,12 +80,12 @@ function daysSince(date: Date, now: Date): number {
  * validar y, para cada uno, extiende el grafo de conocimiento: Concept
  * Graph, Belief Engine, Contradiction Detection, Importance Engine.
  *
- * Best-effort de principio a fin: cualquier error se loguea y se
- * traga, nunca se propaga -- una falla aquí no debe convertir un
- * insight ya persistido correctamente en un job fallido (Principio de
- * estabilidad del War Room: cero crashes). "Knowledge Engine V2" es
- * una capacidad que evoluciona sobre datos ya sólidos, no una que
- * pueda arriesgarlos.
+ * Best-effort de principio a fin: cualquier error se loguea, se
+ * persiste (`recordEvent`, consultable desde /admin) y se traga, nunca
+ * se propaga -- una falla aquí no debe convertir un insight ya
+ * persistido correctamente en un job fallido (Principio de estabilidad
+ * del War Room: cero crashes). "Knowledge Engine V2" es una capacidad
+ * que evoluciona sobre datos ya sólidos, no una que pueda arriesgarlos.
  */
 export async function enrichKnowledgeGraph(
   db: Database,
@@ -291,11 +293,31 @@ export async function enrichKnowledgeGraph(
       );
     }
   } catch (error) {
+    // Mismo criterio que `life-capture-service.ts` (auditoría
+    // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo
+    // (`errorStack`/`errorQuery`/`errorParameters`) solo a consola vía
+    // `describeError`, nunca a `events.metadata`. Antes de esto, un
+    // fallo acá (todo Knowledge Engine V2: Concept/Belief/Contradiction/
+    // Importance/Reasoning/Curiosity/Predictive) solo existía en logs
+    // efímeros de Vercel -- invisible desde /admin, que lee `events`.
+    const detail = describeError(error);
     logger.log({
       event: "knowledge_graph.enrichment_failed",
       severity: "warn",
       lifeGraphId: context.lifeGraphId,
-      errorMessage: error instanceof Error ? error.message : String(error),
+      memoryId,
+      ...detail,
+    });
+    await recordEvent(db, {
+      type: "error",
+      route: "background.knowledge_graph_enrichment",
+      message: error instanceof Error ? error.message : String(error),
+      metadata: {
+        lifeGraphId: context.lifeGraphId,
+        memoryId,
+        errorName: detail.errorName,
+        errorCode: detail.errorCode,
+      },
     });
   }
 }
