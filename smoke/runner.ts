@@ -11,6 +11,7 @@ import { curiosityEngineFlow } from "./curiosity-engine.test";
 import { beliefEngineFlow } from "./belief-engine.test";
 import { conceptGraphFlow } from "./concept-graph.test";
 import { predictiveEngineFlow } from "./predictive-engine.test";
+import { knowledgeGapsFlow } from "./knowledge-gaps.test";
 import { aiProviderRegistryFlow } from "./ai-provider-registry.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
@@ -31,6 +32,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   beliefEngineFlow,
   conceptGraphFlow,
   predictiveEngineFlow,
+  knowledgeGapsFlow,
   aiProviderRegistryFlow,
 ];
 
