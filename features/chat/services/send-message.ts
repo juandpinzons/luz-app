@@ -9,6 +9,7 @@ import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
+import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
@@ -237,17 +238,34 @@ async function prepareMessage(
         occurredAt: userMessage.createdAt,
       });
     } catch (error) {
-      // Mismo criterio que `generate-title.ts`: `console.error` plano es
-      // invisible a cualquier consulta -- `recordEvent` loguea Y persiste
-      // en `events`. Un fallo de captura aquí es más grave que uno de
-      // título (nada río abajo -- Knowledge Worker, RealitySnapshot, todo
-      // el pipeline -- ve este mensaje si Memory Engine no lo capturó).
+      // Mismo criterio que `life-capture-service.ts` (auditoría
+      // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo
+      // (`errorStack`/`errorQuery`/`errorParameters`) solo a consola vía
+      // `describeError` -- nunca a `events.metadata`, que persiste y es
+      // consultable desde /admin (cardinalidad no acotada + puede traer
+      // contenido real del usuario). Un fallo de captura aquí es más
+      // grave que uno de título (nada río abajo -- Knowledge Worker,
+      // RealitySnapshot, todo el pipeline -- ve este mensaje si Memory
+      // Engine no lo capturó).
+      const detail = describeError(error);
+      logger.log({
+        event: "background.memory_capture.failed",
+        severity: "error",
+        requestId,
+        conversationId,
+        ...detail,
+      });
       await recordEvent(db, {
         type: "error",
         userId: context.userId,
         route: "background.memory_capture",
         message: error instanceof Error ? error.message : String(error),
-        metadata: { conversationId, requestId },
+        metadata: {
+          conversationId,
+          requestId,
+          errorName: detail.errorName,
+          errorCode: detail.errorCode,
+        },
       });
     }
   }

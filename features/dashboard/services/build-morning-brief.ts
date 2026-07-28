@@ -7,6 +7,8 @@ import {
   type ConversationStrategyType,
 } from "../../../core/conversation-strategy-engine";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
+import { describeError } from "../../../core/observability/describe-error";
+import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 
@@ -175,14 +177,25 @@ export async function buildMorningBrief(
       continuityLine = await buildStrategicContinuityLine(directive);
     }
   } catch (error) {
-    // Mismo criterio que `generate-title.ts`/`send-message.ts`:
-    // `console.error` plano es invisible a cualquier consulta --
-    // `recordEvent` loguea Y persiste en `events`.
+    // Mismo criterio que `life-capture-service.ts` (auditoría
+    // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo solo a
+    // consola vía `describeError`, nunca a `events.metadata`.
+    const detail = describeError(error);
+    logger.log({
+      event: "background.morning_brief.failed",
+      severity: "error",
+      lifeGraphId: lifeGraphContext.lifeGraphId,
+      ...detail,
+    });
     await recordEvent(db, {
       type: "error",
       route: "background.morning_brief",
       message: error instanceof Error ? error.message : String(error),
-      metadata: { lifeGraphId: lifeGraphContext.lifeGraphId },
+      metadata: {
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        errorName: detail.errorName,
+        errorCode: detail.errorCode,
+      },
     });
     continuityLine = null;
   }
