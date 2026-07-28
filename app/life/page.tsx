@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
@@ -353,9 +354,17 @@ export default async function LifePage() {
   return (
     <main className="min-h-full px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
-        <h1 className="text-xl font-light tracking-[0.25em] text-white">
-          VIDA
-        </h1>
+        <div className="flex items-baseline justify-between gap-4">
+          <h1 className="text-xl font-light tracking-[0.25em] text-white">
+            VIDA
+          </h1>
+          <Link
+            href="/life/identity"
+            className="rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+          >
+            Quién eres para LUZ →
+          </Link>
+        </div>
 
         <div className="mt-6">
           <LifeGraphView personName={firstName} summary={summary} listView={listView} />
