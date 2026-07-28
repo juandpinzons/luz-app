@@ -237,7 +237,18 @@ async function prepareMessage(
         occurredAt: userMessage.createdAt,
       });
     } catch (error) {
-      console.error("[send-message] no se pudo capturar Memory:", error);
+      // Mismo criterio que `generate-title.ts`: `console.error` plano es
+      // invisible a cualquier consulta -- `recordEvent` loguea Y persiste
+      // en `events`. Un fallo de captura aquí es más grave que uno de
+      // título (nada río abajo -- Knowledge Worker, RealitySnapshot, todo
+      // el pipeline -- ve este mensaje si Memory Engine no lo capturó).
+      await recordEvent(db, {
+        type: "error",
+        userId: context.userId,
+        route: "background.memory_capture",
+        message: error instanceof Error ? error.message : String(error),
+        metadata: { conversationId, requestId },
+      });
     }
   }
 
