@@ -151,17 +151,15 @@ proveedores de login en el futuro.
 
 ## P2 — Mejoras
 
-### P2-1. Sin streaming de respuestas de IA
-**Descripción**: `AIProvider.generateReply()` espera la respuesta
-completa antes de devolver nada — el usuario ve "LUZ está
-escribiendo…" fijo durante toda la generación.
-**Impacto**: latencia percibida más alta de lo necesario, incluso
-después del fix de brevedad.
-**Prioridad**: P2.
-**Solución sugerida**: extender (no romper) `AIProvider` con streaming
-opcional, mostrar texto progresivo en el cliente.
-**Complejidad estimada**: Media (toca un contrato deliberadamente
-estable desde B2 — requiere aprobación explícita antes de tocarlo).
+### P2-1. Sin streaming de respuestas de IA — ✅ Resuelto
+**Descripción original**: `AIProvider.generateReply()` esperaba la
+respuesta completa antes de devolver nada.
+**Hecho**: `AIProvider.generateReplyStream()` real
+(`ai/providers/openai-provider.ts`), consumido por `sendMessageStream`
+(`features/chat/services/send-message.ts:494`) y expuesto vía SSE en
+`app/api/chat/route.ts` (`handleStreamRequest`, activado por
+`?stream=1` o el header equivalente que use el cliente). Verificado
+leyendo el código real, no solo el commit — sin TODOs en el camino.
 
 ### P2-2. `DefaultConnectStage.connect()` no escala por persona
 **Descripción**: trae TODAS las memorias del LifeGraph en cada mensaje
