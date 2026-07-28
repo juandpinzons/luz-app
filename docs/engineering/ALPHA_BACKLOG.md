@@ -24,29 +24,34 @@ abajo y ADR-0017 (amendment 2026-07-24).
 
 ## P1 — Alto
 
-### P1-1. Knowledge Engine desconectado — 🟡 Gate resuelto, wiring pendiente (2026-07-19)
-**Descripción**: `core/knowledge/` (conectado al worker y a la cola
-`knowledge_jobs`) son etapas stub que fallan a propósito.
-`core/knowledge-engine/` (M3, real) tiene 4/6 etapas construidas pero
-le faltan Extract y Generate (ambas requieren IA), y no está conectado
-a nada. La cola crece sin procesar con cada mensaje.
-**Impacto**: LUZ no "sigue pensando" en segundo plano como se pidió —
-ninguna funcionalidad visible rota hoy, pero es una promesa de producto
-sin cumplir, y la tabla `knowledge_jobs` crece indefinidamente.
-**Hecho**: la decisión bloqueante que `BETA_ROADMAP_V1.md` marcaba
-como prerrequisito — cómo `ExtractStage`/`InsightGenerationStrategy`
-obtienen salida estructurada de `AIProvider` — está resuelta (ver
-ADR-0016, `generateStructured<T>()`, verificado contra la API real de
-OpenAI). Alcance de esta sesión, aprobado explícitamente por el
-Founder: solo la extensión del contrato, no construir las etapas.
-**Pendiente, sin construir todavía**: `ExtractStage`, `InsightGenerationStrategy`,
-el ensamblaje de `DefaultKnowledgeEngine`, y conectarlo vía un cron de
-Vercel — cada uno su propio PR (B2's PR-8/9/10 en
-`BETA_ROADMAP_V1.md`), el último de ellos flaggeado ahí mismo como
-un cutover que necesita su propia confirmación, no una continuación
-automática de esta.
-**Complejidad restante**: Media (ya no Media-Alta — el gate más grande
-del sprint completo original ya no bloquea).
+### P1-1. Knowledge Engine desconectado — ✅ Resuelto (2026-07-25)
+**Descripción original**: `core/knowledge/` (conectado al worker y a
+la cola `knowledge_jobs`) eran etapas stub que fallaban a propósito.
+`core/knowledge-engine/` (M3, real) tenía 4/6 etapas construidas pero
+le faltaban Extract y Generate (ambas requieren IA), y no estaba
+conectado a nada. La cola crecía sin procesar con cada mensaje.
+**Hecho**: las seis etapas están construidas y ensambladas en
+`DefaultKnowledgeEngine` (`core/knowledge-engine/engine/default-knowledge-engine.ts`)
+— `DefaultExtractStage` real, `AIInsightGenerationStrategy` llamando
+`generateStructured()` de verdad. Conectado vía un cron real de Vercel
+(`app/api/cron/knowledge-worker/route.ts`, `0 5 * * *`, límite de plan
+Hobby) que drena `knowledge_jobs` con `SELECT ... FOR UPDATE SKIP
+LOCKED` — antes de esto, 146 jobs pendientes, 0 insights generados,
+siempre. Además, un **Reasoning Engine** distinto
+(`core/knowledge-engine/reasoning/`) corre en la misma pasada del
+worker (`enrichKnowledgeGraph`), produce `ReasoningConclusion[]`
+persistidas, y `ReflectStrategyRule` en
+`core/conversation-strategy-engine` las consume para que la
+conversación reaccione a patrones ya razonados (no solo a memorias
+sueltas). Todo el pipeline de chat (Context → Conversation Strategy →
+Reasoning → Presence → Voice → LLM) quedó cableado end-to-end el mismo
+sprint (commit `e426771`). Verificado leyendo cada stage real (sin
+TODOs/stubs en el camino), pendiente de una verificación contra
+producción en vivo (cron corrió por primera vez el 2026-07-25 según el
+docblock de la ruta).
+**Complejidad restante**: Ninguna — cerrado. Ver ADR-0018 (Architecture
+V1 Frozen): no se agregan más engines a partir de acá sin validación
+de usuario real.
 
 ### P1-2. Sin rate limiting en `/api/chat` — ✅ Resuelto (2026-07-19)
 **Descripción**: cualquier usuario autenticado (o cuenta comprometida)
