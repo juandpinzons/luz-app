@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@/core/db/client";
+import { users } from "@/core/db/schema";
+import { submitFeedback } from "@/features/feedback/services/submit-feedback";
 
 /**
  * TEMPORAL -- root-causing el bug de "¿Cómo vamos?" (feedback) contra
@@ -170,4 +172,46 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   return NextResponse.json(steps);
+}
+
+/**
+ * Prueba extremo a extremo con la función real de la aplicación
+ * (no SQL a mano): toma un usuario real existente, llama a
+ * `submitFeedback` -- el mismo código que corre `POST /api/feedback`
+ * -- y confirma que la fila queda visible con la misma consulta que
+ * usa `app/admin/page.tsx`. Se limpia con DELETE inmediatamente
+ * después de verificar.
+ */
+export async function PUT(request: Request): Promise<Response> {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
+  const [someUser] = await db.select({ id: users.id }).from(users).limit(1);
+  if (!someUser) {
+    return NextResponse.json({ error: "No hay usuarios reales para probar." }, { status: 400 });
+  }
+
+  const result = await submitFeedback(
+    { userId: someUser.id },
+    { helpfulness: 5, remembersMe: "yes", comment: "__internal_diag_e2e_probe__" },
+  );
+
+  const visibleRow = await db.execute(
+    sql`select id, helpfulness, remembers_me, comment, created_at from feedback_responses where id = ${result.id}`,
+  );
+
+  return NextResponse.json({ inserted: result, visibleViaAdminQuery: visibleRow });
+}
+
+export async function DELETE(request: Request): Promise<Response> {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
+  const deleted = await db.execute(
+    sql`delete from feedback_responses where comment = '__internal_diag_e2e_probe__' returning id`,
+  );
+
+  return NextResponse.json({ deleted });
 }
