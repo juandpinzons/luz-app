@@ -80,12 +80,21 @@ function daysSince(date: Date, now: Date): number {
  * validar y, para cada uno, extiende el grafo de conocimiento: Concept
  * Graph, Belief Engine, Contradiction Detection, Importance Engine.
  *
- * Best-effort de principio a fin: cualquier error se loguea, se
- * persiste (`recordEvent`, consultable desde /admin) y se traga, nunca
- * se propaga -- una falla aquí no debe convertir un insight ya
- * persistido correctamente en un job fallido (Principio de estabilidad
- * del War Room: cero crashes). "Knowledge Engine V2" es una capacidad
- * que evoluciona sobre datos ya sólidos, no una que pueda arriesgarlos.
+ * Best-effort POR ETAPA, no solo de principio a fin: cada insight y
+ * cada capacidad de cierre (`decayStaleBeliefs`/`detectPredictivePatterns`/
+ * `runReasoning`/`runCuriosity`) corre dentro de `runStage`, con su
+ * propio try/catch -- nunca un único catch envolviendo las siete
+ * (auditoría LEOS: antes, un fallo de IA en la primera etapa -- p.ej.
+ * concept extraction del primer insight -- abortaba silenciosamente
+ * decay/predictive/reasoning/curiosity para todo el turno, y el log
+ * único no distinguía cuál etapa había fallado). Cada error se loguea
+ * y se persiste (`recordEvent`, consultable desde /admin) con su
+ * `stage`, y se traga, nunca se propaga -- una falla aquí no debe
+ * convertir un insight ya persistido correctamente en un job fallido
+ * (Principio de estabilidad del War Room: cero crashes), y ahora
+ * tampoco debe arrastrar capacidades hermanas que no dependen de ella.
+ * "Knowledge Engine V2" es una capacidad que evoluciona sobre datos ya
+ * sólidos, no una que pueda arriesgarlos.
  */
 export async function enrichKnowledgeGraph(
   db: Database,
@@ -93,17 +102,52 @@ export async function enrichKnowledgeGraph(
   context: LifeGraphContext,
   memoryId: EntityId,
 ): Promise<void> {
+  const insightRepository = new DrizzleInsightRepository(db);
+  const conceptRepository = new DrizzleConceptRepository(db);
+  const beliefRepository = new DrizzleBeliefRepository(db);
+  const contradictionRepository = new DrizzleContradictionRepository(db);
+  const importanceRepository = new DrizzleImportanceRepository(db);
+
+  const conceptStrategy = new AIConceptExtractionStrategy();
+  const beliefStrategy = new AIBeliefConsolidationStrategy();
+  const contradictionStrategy = new AIContradictionDetectionStrategy();
+
+  /**
+   * Frontera de aislamiento por etapa (ver docblock de arriba): un
+   * fallo dentro de `fn` nunca impide que corran las demás llamadas a
+   * `runStage` en este job. `stage` viaja en el log y en
+   * `events.metadata` para que /admin pueda distinguir "falló concept
+   * extraction del insight X" de "falló curiosity" sin adivinar.
+   */
+  async function runStage(stage: string, fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+    } catch (error) {
+      const detail = describeError(error);
+      logger.log({
+        event: "knowledge_graph.enrichment_failed",
+        severity: "warn",
+        stage,
+        lifeGraphId: context.lifeGraphId,
+        memoryId,
+        ...detail,
+      });
+      await recordEvent(db, {
+        type: "error",
+        route: "background.knowledge_graph_enrichment",
+        message: error instanceof Error ? error.message : String(error),
+        metadata: {
+          stage,
+          lifeGraphId: context.lifeGraphId,
+          memoryId,
+          errorName: detail.errorName,
+          errorCode: detail.errorCode,
+        },
+      });
+    }
+  }
+
   try {
-    const insightRepository = new DrizzleInsightRepository(db);
-    const conceptRepository = new DrizzleConceptRepository(db);
-    const beliefRepository = new DrizzleBeliefRepository(db);
-    const contradictionRepository = new DrizzleContradictionRepository(db);
-    const importanceRepository = new DrizzleImportanceRepository(db);
-
-    const conceptStrategy = new AIConceptExtractionStrategy();
-    const beliefStrategy = new AIBeliefConsolidationStrategy();
-    const contradictionStrategy = new AIContradictionDetectionStrategy();
-
     const memoryById = new Map(snapshot.memory.items.map((item) => [item.id, item]));
     const triggeredInsights = await insightRepository.listByEvidenceMemoryId(
       context,
@@ -111,13 +155,13 @@ export async function enrichKnowledgeGraph(
     );
 
     for (const insight of triggeredInsights) {
-      await enrichOneInsight(insight);
+      await runStage(`insight:${insight.id}`, () => enrichOneInsight(insight));
     }
 
-    await decayStaleBeliefs(beliefRepository, context);
-    await detectPredictivePatterns(db, context);
-    await runReasoning();
-    await runCuriosity();
+    await runStage("decayStaleBeliefs", () => decayStaleBeliefs(beliefRepository, context));
+    await runStage("detectPredictivePatterns", () => detectPredictivePatterns(db, context));
+    await runStage("runReasoning", runReasoning);
+    await runStage("runCuriosity", runCuriosity);
 
     async function enrichOneInsight(insight: Insight): Promise<void> {
       const evidence = await insightRepository.getEvidence(context, insight.id);
@@ -293,17 +337,19 @@ export async function enrichKnowledgeGraph(
       );
     }
   } catch (error) {
-    // Mismo criterio que `life-capture-service.ts` (auditoría
-    // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo
+    // Red de seguridad externa, no la ruta principal de errores (esa es
+    // `runStage` arriba) -- solo atrapa lo que pasa ANTES de que haya
+    // etapas que aislar: construir los repositorios/estrategias o
+    // resolver `triggeredInsights` (`listByEvidenceMemoryId`). Mismo
+    // criterio que `life-capture-service.ts` (auditoría 2026-07-25,
+    // OBSERVABILITY_PLAN.md): detalle completo
     // (`errorStack`/`errorQuery`/`errorParameters`) solo a consola vía
-    // `describeError`, nunca a `events.metadata`. Antes de esto, un
-    // fallo acá (todo Knowledge Engine V2: Concept/Belief/Contradiction/
-    // Importance/Reasoning/Curiosity/Predictive) solo existía en logs
-    // efímeros de Vercel -- invisible desde /admin, que lee `events`.
+    // `describeError`, nunca a `events.metadata`.
     const detail = describeError(error);
     logger.log({
       event: "knowledge_graph.enrichment_failed",
       severity: "warn",
+      stage: "setup",
       lifeGraphId: context.lifeGraphId,
       memoryId,
       ...detail,
@@ -313,6 +359,7 @@ export async function enrichKnowledgeGraph(
       route: "background.knowledge_graph_enrichment",
       message: error instanceof Error ? error.message : String(error),
       metadata: {
+        stage: "setup",
         lifeGraphId: context.lifeGraphId,
         memoryId,
         errorName: detail.errorName,
