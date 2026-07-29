@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Database } from "../../db/client";
+import type { Database, Transaction } from "../../db/client";
 import { type GoalRow, lifeGoals } from "../../db/schema";
 import type { Goal } from "../entities/goal";
 import type { LifeGraphContext } from "../life-graph-context";
@@ -22,7 +22,7 @@ function toGoal(row: GoalRow): Goal {
 
 /** CRUD escopado por LifeGraphContext para `Goal` (mismo patrón que DrizzlePersonRepository). */
 export class DrizzleGoalRepository implements GoalRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database | Transaction) {}
 
   async getById(context: LifeGraphContext, id: EntityId): Promise<Goal | null> {
     const rows = await this.db

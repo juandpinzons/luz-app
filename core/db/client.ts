@@ -20,3 +20,20 @@ const queryClient = postgres(env.DATABASE_URL, { prepare: false });
 export const db = drizzle(queryClient, { schema });
 
 export type Database = typeof db;
+
+/**
+ * El `tx` que recibe el callback de `db.transaction(async (tx) => ...)`
+ * — mismo query builder que `Database` (select/insert/update/delete),
+ * pero sin `$client` (no expone la conexión cruda, correcto: nadie
+ * dentro de una transacción debe abrir su propia conexión aparte).
+ * Repositorios que necesiten poder ejecutarse tanto sueltos como dentro
+ * de una transacción del llamador (War Room 2026-07-29, ver
+ * `find-or-create-goal.ts`) aceptan `Database | Transaction`, nunca
+ * solo uno de los dos -- ningún repositorio debe forzar a su llamador
+ * a decidir eso por él.
+ */
+export type Transaction = Parameters<Database["transaction"]>[0] extends (
+  tx: infer Tx,
+) => unknown
+  ? Tx
+  : never;

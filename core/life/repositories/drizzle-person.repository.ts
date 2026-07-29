@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Database } from "../../db/client";
+import type { Database, Transaction } from "../../db/client";
 import { type PersonRow, persons } from "../../db/schema";
 import type { Person } from "../entities/person";
 import type { LifeGraphContext } from "../life-graph-context";
@@ -27,7 +27,7 @@ function toPerson(row: PersonRow): Person {
  * distintos, no algo a unificar aquí.
  */
 export class DrizzlePersonRepository implements PersonRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database | Transaction) {}
 
   async getById(
     context: LifeGraphContext,

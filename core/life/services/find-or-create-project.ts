@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import type { Project } from "../entities/project";
 import type { LifeDomainType } from "../value-objects/life-domain-type";
@@ -16,29 +17,38 @@ export interface FindOrCreateProjectInput {
  * Un Project creado por esta vía siempre nace en estado `"planning"`, sin
  * vincular a ningún Goal (esa vinculación es una decisión de producto
  * aparte, no algo que la extracción automática deba inferir).
+ *
+ * War Room 2026-07-29: mismo hallazgo de concurrencia y misma solución
+ * que `find-or-create-goal.ts` -- ver ese docblock.
  */
 export async function findOrCreateProject(
   db: Database,
   context: LifeGraphContext,
   input: FindOrCreateProjectInput,
 ): Promise<Project> {
-  const repository = new DrizzleProjectRepository(db);
-  const existingProjects = await repository.list(context);
-  const match = existingProjects.find((project) =>
-    titlesLikelyMatch(project.title, input.title),
-  );
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${context.lifeGraphId} || ':project'))`,
+    );
 
-  if (match) {
-    return match;
-  }
+    const repository = new DrizzleProjectRepository(tx);
+    const existingProjects = await repository.list(context);
+    const match = existingProjects.find((project) =>
+      titlesLikelyMatch(project.title, input.title),
+    );
 
-  return repository.create(context, {
-    goalId: undefined,
-    title: input.title,
-    description: undefined,
-    status: "planning",
-    domain: input.domain,
-    startDate: undefined,
-    dueDate: undefined,
+    if (match) {
+      return match;
+    }
+
+    return repository.create(context, {
+      goalId: undefined,
+      title: input.title,
+      description: undefined,
+      status: "planning",
+      domain: input.domain,
+      startDate: undefined,
+      dueDate: undefined,
+    });
   });
 }

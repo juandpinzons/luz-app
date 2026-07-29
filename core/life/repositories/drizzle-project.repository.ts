@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Database } from "../../db/client";
+import type { Database, Transaction } from "../../db/client";
 import { type ProjectRow, lifeProjects } from "../../db/schema";
 import type { Project } from "../entities/project";
 import type { LifeGraphContext } from "../life-graph-context";
@@ -24,7 +24,7 @@ function toProject(row: ProjectRow): Project {
 
 /** CRUD escopado por LifeGraphContext para `Project` (mismo patrón que DrizzlePersonRepository). */
 export class DrizzleProjectRepository implements ProjectRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database | Transaction) {}
 
   async getById(
     context: LifeGraphContext,

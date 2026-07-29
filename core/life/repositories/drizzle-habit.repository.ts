@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Database } from "../../db/client";
+import type { Database, Transaction } from "../../db/client";
 import { type HabitRow, lifeHabits } from "../../db/schema";
 import type { Habit } from "../entities/habit";
 import type { LifeGraphContext } from "../life-graph-context";
@@ -22,7 +22,7 @@ function toHabit(row: HabitRow): Habit {
 
 /** CRUD escopado por LifeGraphContext para `Habit` (mismo patrón que DrizzlePersonRepository). */
 export class DrizzleHabitRepository implements HabitRepository {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database | Transaction) {}
 
   async getById(
     context: LifeGraphContext,

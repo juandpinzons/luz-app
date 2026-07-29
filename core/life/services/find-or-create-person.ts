@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import type { Person } from "../entities/person";
 import type { LifeGraphContext } from "../life-graph-context";
@@ -13,24 +14,33 @@ export interface FindOrCreatePersonInput {
  * segunda entidad si la persona ya existe en este LifeGraph.
  * Usado por `find-or-create-relationship.ts`: `Relationship` conecta
  * dos `Person`, nunca un nombre suelto.
+ *
+ * War Room 2026-07-29: mismo hallazgo de concurrencia y misma solución
+ * que `find-or-create-goal.ts` -- ver ese docblock.
  */
 export async function findOrCreatePerson(
   db: Database,
   context: LifeGraphContext,
   input: FindOrCreatePersonInput,
 ): Promise<Person> {
-  const repository = new DrizzlePersonRepository(db);
-  const existingPeople = await repository.list(context);
-  const match = existingPeople.find((person) =>
-    titlesLikelyMatch(person.name, input.name),
-  );
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${context.lifeGraphId} || ':person'))`,
+    );
 
-  if (match) {
-    return match;
-  }
+    const repository = new DrizzlePersonRepository(tx);
+    const existingPeople = await repository.list(context);
+    const match = existingPeople.find((person) =>
+      titlesLikelyMatch(person.name, input.name),
+    );
 
-  return repository.create(context, {
-    name: input.name,
-    notes: undefined,
+    if (match) {
+      return match;
+    }
+
+    return repository.create(context, {
+      name: input.name,
+      notes: undefined,
+    });
   });
 }
