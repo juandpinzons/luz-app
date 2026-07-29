@@ -263,6 +263,18 @@ async function handleStreamRequest(
 
   const encoder = new TextEncoder();
 
+  // Bandera propia, nunca `controller.desiredSize` -- se probó que
+  // `desiredSize` no refleja la desconexión a tiempo (el transporte
+  // HTTP subyacente ya está muerto antes de que el `ReadableStream` lo
+  // sepa), así que revisarlo seguía dejando pasar el mismo "Invalid
+  // state: Controller is already closed" desde un `pull()` que ya
+  // estaba en vuelo (auditoría War Room 2026-07-29, reproducido con un
+  // cliente real que aborta a mitad del stream). Esta bandera es
+  // nuestra, se pone en `cancel()` y se lee tanto antes de intentar
+  // `enqueue`/`close` como dentro del catch -- determinista sin
+  // importar el timing exacto del runtime.
+  let clientDisconnected = false;
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(
@@ -270,8 +282,16 @@ async function handleStreamRequest(
       );
     },
     async pull(controller) {
+      if (clientDisconnected) {
+        return;
+      }
+
       try {
         const { value, done } = await textStream.next();
+
+        if (clientDisconnected) {
+          return;
+        }
 
         if (done) {
           controller.close();
@@ -289,6 +309,23 @@ async function handleStreamRequest(
 
         controller.enqueue(encoder.encode(sseMessage("chunk", value)));
       } catch (error) {
+        // Este `pull()` ya estaba en vuelo (esperando `textStream.next()`)
+        // cuando `cancel()` marcó `clientDisconnected` -- las guardas de
+        // arriba no alcanzan a atajarlo. Un cliente ya desconectado, no
+        // un fallo real de generación (ese ya se loguea dentro de
+        // `generate()` como `openai.request_failed` antes de relanzarlo).
+        if (clientDisconnected) {
+          logger.log({
+            event: "api.client_disconnected",
+            requestId,
+            route,
+            userId: context.userId,
+            conversationId,
+            durationMs: Date.now() - startedAt,
+          });
+          return;
+        }
+
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.log({
           event: "api.request_failed",
@@ -309,6 +346,52 @@ async function handleStreamRequest(
         });
         controller.error(error);
       }
+    },
+    /**
+     * Cliente desconectado a mitad del stream (cerró la pestaña,
+     * perdió la red, navegó a otra página) -- antes esto dejaba
+     * `textStream` suspendido para siempre: `finalizeReply` nunca
+     * corría, así que ni la respuesta que la IA ya generó (costo ya
+     * pagado) se persistía, ni el título, ni Life Capture, ni el job
+     * de Knowledge Engine se encolaban. Reproducido con un cliente
+     * real que aborta tras 2 chunks (auditoría War Room 2026-07-29):
+     * cero rastro en `conversation_messages`/`conversations.title`/
+     * `knowledge_jobs` sin este handler.
+     *
+     * Drenar el generador en segundo plano deja que el mismo camino de
+     * éxito/error que ya existe en `generate()`
+     * (`features/chat/services/send-message.ts`) resuelva
+     * `backgroundTasksReady` con normalidad -- el `after()` de arriba,
+     * que ya está esperándola, sigue funcionando sin ningún cambio: es
+     * exactamente el mecanismo que Next.js ya usa para mantener viva
+     * la función después de que la respuesta terminó.
+     */
+    cancel(reason) {
+      clientDisconnected = true;
+      logger.log({
+        event: "api.client_disconnected",
+        requestId,
+        route,
+        userId: context.userId,
+        conversationId,
+        reason: String(reason),
+        durationMs: Date.now() - startedAt,
+      });
+
+      void (async () => {
+        try {
+          while (!(await textStream.next()).done) {
+            // Sigue drenando -- el contenido ya no se envía a nadie,
+            // solo se deja que `generate()` termine su propio
+            // try/catch (persistir, encolar, resolver
+            // `backgroundTasksReady`).
+          }
+        } catch {
+          // Un error real de IA durante el drenaje ya lo loguea
+          // `generate()` internamente (`openai.request_failed`) antes
+          // de relanzarlo -- nada más que hacer acá.
+        }
+      })();
     },
   });
 
