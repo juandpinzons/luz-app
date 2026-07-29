@@ -2,17 +2,49 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getUserContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
-import { listConversations } from "@/features/conversations/services/list-conversations";
+import type { ConversationCategory } from "@/core/db/schema/conversations";
+import {
+  CONVERSATION_CATEGORY_LABELS,
+  CONVERSATION_CATEGORY_ORDER,
+} from "@/features/conversations/labels";
+import {
+  listConversations,
+  type ConversationListItem,
+} from "@/features/conversations/services/list-conversations";
 
-const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-  timeZone: "America/Bogota",
-});
+/** Cajón para lo que el primer intercambio todavía no clasificó (o cuya clasificación falló) -- nunca se mezcla con `"general"`, que sí es una clasificación real. */
+const UNCLASSIFIED_KEY = "__unclassified__";
 
-function formatDate(date: Date): string {
-  return DATE_FORMAT.format(date);
+function groupByCategory(
+  conversations: ConversationListItem[],
+): { key: string; label: string; items: ConversationListItem[] }[] {
+  const byCategory = new Map<string, ConversationListItem[]>();
+
+  for (const conversation of conversations) {
+    const key = conversation.category ?? UNCLASSIFIED_KEY;
+    const bucket = byCategory.get(key);
+    if (bucket) {
+      bucket.push(conversation);
+    } else {
+      byCategory.set(key, [conversation]);
+    }
+  }
+
+  const orderedKeys: string[] = [...CONVERSATION_CATEGORY_ORDER, UNCLASSIFIED_KEY];
+
+  return orderedKeys
+    .filter((key) => byCategory.has(key))
+    .map((key) => ({
+      key,
+      label:
+        key === UNCLASSIFIED_KEY
+          ? "Por clasificar"
+          : CONVERSATION_CATEGORY_LABELS[key as ConversationCategory],
+      // `listConversations` ya entrega en orden de última actividad --
+      // agrupar preserva ese orden dentro de cada categoría, nunca lo
+      // recalcula.
+      items: byCategory.get(key) ?? [],
+    }));
 }
 
 function formatRelativeTime(date: Date): string {
@@ -113,30 +145,38 @@ export default async function ConversationsPage({
             </p>
           </div>
         ) : (
-          <div className="mt-8 space-y-3">
-            {conversations.map((conversation, index) => (
-              <Link
-                key={conversation.id}
-                href={`/conversations/${conversation.id}`}
-                className="animate-fade-in block rounded-lg border border-zinc-800 px-5 py-4 transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-                style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
-              >
-                <p className="text-sm text-zinc-300">
-                  {conversation.title ?? conversation.previewText}
-                </p>
-                {conversation.title && (
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {conversation.previewText}
-                  </p>
-                )}
-                <p className="mt-2 text-xs text-zinc-500">
-                  {formatDate(conversation.createdAt)} ·{" "}
-                  {conversation.messageCount}{" "}
-                  {conversation.messageCount === 1 ? "mensaje" : "mensajes"} ·
-                  última actividad{" "}
-                  {formatRelativeTime(conversation.lastMessageAt)}
-                </p>
-              </Link>
+          <div className="mt-8 space-y-10">
+            {groupByCategory(conversations).map((group) => (
+              <section key={group.key}>
+                <h2 className="text-xs tracking-[0.2em] text-zinc-500 uppercase">
+                  {group.label}
+                </h2>
+                <div className="mt-3 space-y-3">
+                  {group.items.map((conversation, index) => (
+                    <Link
+                      key={conversation.id}
+                      href={`/conversations/${conversation.id}`}
+                      className="animate-fade-in block rounded-lg border border-zinc-800 px-5 py-4 transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                      style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
+                    >
+                      <p className="text-sm text-zinc-300">
+                        {conversation.title ?? conversation.previewText}
+                      </p>
+                      {conversation.title && (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {conversation.previewText}
+                        </p>
+                      )}
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {conversation.messageCount}{" "}
+                        {conversation.messageCount === 1 ? "mensaje" : "mensajes"} ·
+                        última actividad{" "}
+                        {formatRelativeTime(conversation.lastMessageAt)}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         )}
