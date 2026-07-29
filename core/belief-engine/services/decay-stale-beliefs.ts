@@ -43,21 +43,30 @@ export async function decayStaleBeliefs(
     const newConfidence = Math.max(0, belief.confidence.score - DECAY_STEP);
     const nextStatus = newConfidence <= EXPIRE_THRESHOLD ? "expired" : "active";
 
-    await repository.save(context, {
-      ...belief,
-      status: nextStatus,
-      confidence: { score: newConfidence, assignedAt: now },
-      updatedAt: now,
-    });
-
-    await repository.appendHistory(context, {
-      id: createEntityId(crypto.randomUUID()),
-      lifeGraphId: context.lifeGraphId,
-      beliefId: belief.id,
-      previousConfidence: belief.confidence.score,
-      newConfidence,
-      changeReason: `Sin refuerzo en ${DECAY_WINDOW_DAYS}+ días`,
-      changedAt: now,
-    });
+    // `saveWithHistory` (no `save()` + `appendHistory()` por separado):
+    // ambas escrituras deben quedar en la misma transacción, o un
+    // crash entre ellas (auditoría War Room 2026-07-29, bloque 5) deja
+    // un Belief ya decayido sin ninguna fila de historial que lo
+    // explique -- y el guard de `MIN_RECHECK_DAYS` de arriba, basado en
+    // `confidence.assignedAt`, nunca reintentaría ese decay para
+    // completar el historial faltante.
+    await repository.saveWithHistory(
+      context,
+      {
+        ...belief,
+        status: nextStatus,
+        confidence: { score: newConfidence, assignedAt: now },
+        updatedAt: now,
+      },
+      {
+        id: createEntityId(crypto.randomUUID()),
+        lifeGraphId: context.lifeGraphId,
+        beliefId: belief.id,
+        previousConfidence: belief.confidence.score,
+        newConfidence,
+        changeReason: `Sin refuerzo en ${DECAY_WINDOW_DAYS}+ días`,
+        changedAt: now,
+      },
+    );
   }
 }

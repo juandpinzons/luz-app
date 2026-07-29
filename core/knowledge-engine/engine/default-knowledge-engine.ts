@@ -43,7 +43,7 @@ export function createKnowledgeEngine(db: Database): KnowledgeEngine {
   const insightRepository = new DrizzleInsightRepository(db);
 
   return new DefaultKnowledgeEngine({
-    extract: new DefaultExtractStage(),
+    extract: new DefaultExtractStage(insightRepository),
     classify: new DeterministicClassifyStage(),
     relate: new StructuralInsightRelationshipStrategy(),
     generate: new AIInsightGenerationStrategy(),

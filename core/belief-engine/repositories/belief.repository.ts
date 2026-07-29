@@ -30,4 +30,19 @@ export interface BeliefRepository {
     context: LifeGraphContext,
     entry: BeliefHistoryEntry,
   ): Promise<BeliefHistoryEntry>;
+
+  /**
+   * Igual que llamar `save()` seguido de `appendHistory()`, pero en una
+   * sola transacción -- ver `decay-stale-beliefs.ts`: sin esto, una
+   * caída entre ambas escrituras deja un Belief con confianza ya
+   * decayida pero ninguna fila de historial que lo explique (Principio
+   * 3, explicabilidad). Cualquier cambio de confianza que deba quedar
+   * auditado en el mismo instante en que se aplica usa este método, no
+   * las dos llamadas por separado.
+   */
+  saveWithHistory(
+    context: LifeGraphContext,
+    belief: Belief,
+    entry: BeliefHistoryEntry,
+  ): Promise<Belief>;
 }

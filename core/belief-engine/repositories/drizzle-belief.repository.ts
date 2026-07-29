@@ -226,4 +226,78 @@ export class DrizzleBeliefRepository implements BeliefRepository {
 
     return toBeliefHistoryEntry(row);
   }
+
+  async saveWithHistory(
+    context: LifeGraphContext,
+    belief: Belief,
+    entry: BeliefHistoryEntry,
+  ): Promise<Belief> {
+    if (belief.lifeGraphId !== context.lifeGraphId) {
+      throw new Error(
+        `DrizzleBeliefRepository.saveWithHistory: belief.lifeGraphId (${belief.lifeGraphId}) no coincide con context.lifeGraphId (${context.lifeGraphId}).`,
+      );
+    }
+    if (entry.lifeGraphId !== context.lifeGraphId) {
+      throw new Error(
+        `DrizzleBeliefRepository.saveWithHistory: entry.lifeGraphId (${entry.lifeGraphId}) no coincide con context.lifeGraphId (${context.lifeGraphId}).`,
+      );
+    }
+
+    return this.db.transaction(async (tx) => {
+      const [beliefRow] = await tx
+        .insert(beliefs)
+        .values({
+          id: belief.id,
+          lifeGraphId: belief.lifeGraphId,
+          subjectPersonId: belief.subjectPersonId,
+          statement: belief.statement,
+          domain: belief.domain ?? null,
+          category: belief.category,
+          status: belief.status,
+          confidenceScore: belief.confidence.score,
+          confidenceAssignedAt: belief.confidence.assignedAt,
+          firstObservedAt: belief.firstObservedAt,
+          lastReinforcedAt: belief.lastReinforcedAt,
+          createdAt: belief.createdAt,
+          updatedAt: belief.updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: beliefs.id,
+          set: {
+            statement: belief.statement,
+            domain: belief.domain ?? null,
+            category: belief.category,
+            status: belief.status,
+            confidenceScore: belief.confidence.score,
+            confidenceAssignedAt: belief.confidence.assignedAt,
+            lastReinforcedAt: belief.lastReinforcedAt,
+            updatedAt: belief.updatedAt,
+          },
+        })
+        .returning();
+
+      if (!beliefRow) {
+        throw new Error("DrizzleBeliefRepository.saveWithHistory: no se pudo persistir el belief.");
+      }
+
+      const [historyRow] = await tx
+        .insert(beliefHistory)
+        .values({
+          id: entry.id,
+          lifeGraphId: entry.lifeGraphId,
+          beliefId: entry.beliefId,
+          previousConfidence: entry.previousConfidence ?? null,
+          newConfidence: entry.newConfidence,
+          changeReason: entry.changeReason,
+          changedAt: entry.changedAt,
+        })
+        .returning();
+
+      if (!historyRow) {
+        throw new Error("DrizzleBeliefRepository.saveWithHistory: no se pudo persistir el historial.");
+      }
+
+      return toBelief(beliefRow);
+    });
+  }
 }
