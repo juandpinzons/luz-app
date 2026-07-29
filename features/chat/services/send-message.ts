@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { after } from "next/server";
 import { getAIProvider } from "../../../ai";
 import type { AIMessage } from "../../../ai/provider";
@@ -19,6 +19,29 @@ import {
 } from "../context-builder";
 import type { ConversationTurn } from "../context-builder";
 import { captureLifeEntityFromMemory } from "../../life/services/life-capture-service";
+
+/**
+ * Ventana máxima de `conversation_messages` crudos que se leen de una
+ * conversación para construir `aiMessages` (auditoría War Room
+ * 2026-07-29): sin límite, una conversación larga reenvía TODO su
+ * historial en cada turno -- reproducido contra Postgres/OpenAI reales
+ * con 1200 mensajes sintéticos: ~105k tokens solo de historial, antes
+ * de identidad/reglas/memorias/estrategia, y ese costo crece sin techo
+ * con cada mensaje nuevo hasta, eventualmente, exceder la ventana de
+ * contexto real del modelo -- un fallo permanente para esa
+ * conversación, porque cualquier reintento reenvía el mismo historial
+ * (o uno más grande) y falla igual.
+ *
+ * 60 mensajes (~30 turnos ida y vuelta) es generoso para coherencia
+ * conversacional inmediata -- "¿qué acabamos de hablar?" -- sin
+ * competir con la comprensión de largo plazo, que nunca depende de
+ * esto: esa vive en Memory Engine/RealitySnapshot (ADR-0013),
+ * consultados aparte y ya acotados. Ningún callback lo pasa hoy en 10
+ * mensajes, así que esta ventana no cambia el comportamiento de
+ * ninguna conversación real todavía -- solo pone un techo real al caso
+ * patológico.
+ */
+const MAX_HISTORY_MESSAGES = 60;
 
 export interface SendMessageInput {
   context: UserContext;
@@ -151,11 +174,20 @@ async function prepareMessage(
     throw new Error("No se pudo guardar el mensaje del usuario.");
   }
 
-  const history = await db
+  // Los `MAX_HISTORY_MESSAGES` más recientes, no los primeros -- una
+  // conversación larga debe recordar lo último que se dijo, nunca
+  // truncar por el principio. Se pide en orden descendente (más
+  // reciente primero) para que `LIMIT` recorte el extremo correcto, y
+  // se revierte después: todo lo que consume `history` de aquí en
+  // adelante (`conversation`, Context Builder, `renderContextToMessages`)
+  // espera orden cronológico.
+  const recentHistory = await db
     .select()
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, conversationId))
-    .orderBy(asc(conversationMessages.createdAt));
+    .orderBy(desc(conversationMessages.createdAt))
+    .limit(MAX_HISTORY_MESSAGES);
+  const history = recentHistory.reverse();
   logger.log({
     event: "db.query",
     requestId,
