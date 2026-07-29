@@ -27,6 +27,20 @@ function prefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * Todo lo que el ritual necesita para pintar el orbe como una
+ * presencia real, no decorativa -- ver
+ * `features/chat/services/generate-welcome.ts` (`OrbVisualSignature`),
+ * la única fuente de estos valores. Nunca se define un segundo lugar
+ * que decida calidez/ritmo/madurez por su cuenta.
+ */
+export interface RitualOrbSignature {
+  maturityStage: "spark" | "steady" | "radiant";
+  warmth: number;
+  rhythmMs: number;
+  anticipation: boolean;
+}
+
 export interface ConversationOpeningRitualProps {
   children: React.ReactNode;
   /**
@@ -41,6 +55,15 @@ export interface ConversationOpeningRitualProps {
    * por completo.
    */
   ready?: boolean;
+  /**
+   * Trazo corto (1-3 palabras) que reemplaza el "Welcome" fijo
+   * original -- generado fresco cada vez (ver `generate-welcome.ts`).
+   * `undefined` mientras la bienvenida real todavía no llegó: el
+   * orbe respira igual, sin texto, nunca con un placeholder genérico.
+   */
+  cue?: string;
+  /** Ver `RitualOrbSignature`. `undefined` usa una presencia neutral (mismo look de siempre) -- nunca bloquea el ritual. */
+  orb?: RitualOrbSignature;
   /**
    * Clases del contenedor real de `children` -- este componente no
    * conoce el layout interno de quien lo use (`flex flex-col`, grid,
@@ -83,6 +106,8 @@ export interface ConversationOpeningRitualProps {
 export function ConversationOpeningRitual({
   children,
   ready = true,
+  cue,
+  orb,
   contentClassName = "flex h-full flex-col",
 }: ConversationOpeningRitualProps) {
   // Inicializador perezoso, no un efecto: se resuelve durante el primer
@@ -120,14 +145,45 @@ export function ConversationOpeningRitual({
 
   return (
     <div className="relative h-full">
-      {showSphere && <WelcomeSphere pulsing={isPulsing} />}
+      {showSphere && <WelcomeSphere pulsing={isPulsing} cue={cue} orb={orb} />}
 
       <div className={`${contentClassName} ${contentAnimationClass}`}>{children}</div>
     </div>
   );
 }
 
-function WelcomeSphere({ pulsing }: { pulsing: boolean }) {
+/** Presencia neutral cuando todavía no hay una `RitualOrbSignature` real (p. ej. mientras `/api/chat/welcome` sigue en vuelo) -- mismo look que el orbe siempre tuvo, nunca un estado roto. */
+const NEUTRAL_ORB: RitualOrbSignature = {
+  maturityStage: "steady",
+  warmth: 0.45,
+  rhythmMs: 4200,
+  anticipation: false,
+};
+
+function WelcomeSphere({
+  pulsing,
+  cue,
+  orb = NEUTRAL_ORB,
+}: {
+  pulsing: boolean;
+  cue?: string;
+  orb?: RitualOrbSignature;
+}) {
+  // Tamaño real, no solo un multiplicador cosmético -- una relación
+  // más asentada literalmente ocupa más espacio. `radiant` gana además
+  // una segunda capa de luz interior (ver abajo), nunca solo más
+  // grande.
+  const sizeClass =
+    orb.maturityStage === "spark"
+      ? "h-20 w-20 sm:h-24 sm:w-24"
+      : orb.maturityStage === "radiant"
+        ? "h-32 w-32 sm:h-36 sm:w-36"
+        : "h-28 w-28 sm:h-32 sm:w-32";
+
+  const glowAlpha = 0.18 + orb.warmth * 0.22;
+  const glowSpread = orb.anticipation ? 24 : 18;
+  const coreStop = orb.anticipation ? 60 : 55;
+
   return (
     <div
       aria-hidden="true"
@@ -135,22 +191,35 @@ function WelcomeSphere({ pulsing }: { pulsing: boolean }) {
         pulsing ? "animate-veil-dissolve" : ""
       }`}
     >
-      <div
-        className={`h-28 w-28 flex-shrink-0 rounded-full sm:h-32 sm:w-32 ${
-          pulsing ? "animate-light-pulse" : "animate-sphere-breathe"
-        }`}
-        style={{
-          background:
-            "radial-gradient(circle at 35% 30%, #ffffff 0%, var(--color-luz) 55%, rgba(227, 177, 104, 0.15) 100%)",
-          boxShadow: "0 0 70px 18px rgba(227, 177, 104, 0.25)",
-        }}
-      />
-      <span
-        className="animate-script-reveal font-script text-4xl text-white/80 sm:text-5xl"
-        style={{ animationDelay: `${BREATHE_BEFORE_TEXT_MS}ms` }}
-      >
-        Welcome
-      </span>
+      <div className="relative flex items-center justify-center">
+        {orb.maturityStage === "radiant" && (
+          <div
+            className={`absolute rounded-full ${sizeClass} scale-125 ${pulsing ? "" : "animate-sphere-breathe"}`}
+            style={{
+              background: `radial-gradient(circle at 50% 50%, rgba(227, 177, 104, ${glowAlpha * 0.5}) 0%, transparent 70%)`,
+              animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
+            }}
+          />
+        )}
+        <div
+          className={`flex-shrink-0 rounded-full ${sizeClass} ${
+            pulsing ? "animate-light-pulse" : "animate-sphere-breathe"
+          }`}
+          style={{
+            background: `radial-gradient(circle at 35% 30%, #ffffff 0%, var(--color-luz) ${coreStop}%, rgba(227, 177, 104, 0.15) 100%)`,
+            boxShadow: `0 0 ${60 + orb.warmth * 20}px ${glowSpread}px rgba(227, 177, 104, ${glowAlpha})`,
+            animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
+          }}
+        />
+      </div>
+      {cue && (
+        <span
+          className="animate-script-reveal font-script text-4xl text-white/80 sm:text-5xl"
+          style={{ animationDelay: `${BREATHE_BEFORE_TEXT_MS}ms` }}
+        >
+          {cue}
+        </span>
+      )}
     </div>
   );
 }

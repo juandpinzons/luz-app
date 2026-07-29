@@ -4,12 +4,19 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
-import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
+import {
+  ConversationOpeningRitual,
+  type RitualOrbSignature,
+} from "@/features/chat/components/conversation-opening-ritual";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
+import type { GetWelcomeResponse } from "@/app/api/chat/welcome/route";
 import type {
   GetLatestConversationResponse,
   SendMessageErrorResponse,
 } from "@/features/chat/types";
+
+/** Sin llamada de red -- se usa solo al reanudar una conversación histórica puntual, donde el gesto es "volver a algo", nunca la bienvenida completa generada por IA (esa es solo para empezar de cero). */
+const RESUME_CUE = "De vuelta";
 
 type Message = {
   role: "user" | "assistant";
@@ -155,6 +162,9 @@ function ChatPageContent() {
   const [isHistoricalConversation, setIsHistoricalConversation] =
     useState(false);
   const [historicalLabel, setHistoricalLabel] = useState<string | null>(null);
+  const [welcomeCue, setWelcomeCue] = useState<string | undefined>();
+  const [welcomeGreeting, setWelcomeGreeting] = useState<string | null>(null);
+  const [orbSignature, setOrbSignature] = useState<RitualOrbSignature | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
@@ -259,6 +269,14 @@ function ChatPageContent() {
 
       try {
         if (conversationIdParam) {
+          // Reanudar un hilo puntual es un gesto distinto de "empezar
+          // de cero" -- nunca dispara la bienvenida generada por IA
+          // (eso costaría una llamada real sin aportar nada: ya se
+          // sabe exactamente a qué se está volviendo). Solo un trazo
+          // corto y fijo para el ritual de apertura.
+          setWelcomeCue(RESUME_CUE);
+          setWelcomeGreeting(null);
+          setOrbSignature(undefined);
           // Se piden en paralelo la conversación solicitada Y la
           // realmente más reciente (GET /api/chat, sin parámetros, sin
           // tocar nada del backend) — comparar sus ids es el único
@@ -301,30 +319,26 @@ function ChatPageContent() {
             );
           }
         } else {
-          const response = await fetch("/api/chat");
+          // Abrir LUZ ya no reabre el historial completo de la
+          // conversación más reciente -- cada visita empieza en blanco
+          // (Priority 3: "no cargar automáticamente todo el
+          // historial"). Las conversaciones anteriores siguen enteras
+          // en /conversations; esto solo decide qué aparece al entrar.
+          // `conversationId` se queda `undefined` a propósito: el
+          // primer mensaje real crea una conversación nueva
+          // (`getOrCreateConversation`).
+          setIsHistoricalConversation(false);
+          setHistoricalLabel(null);
 
-          if (!response.ok) {
-            throw new Error("No se pudo recuperar la conversación.");
-          }
+          const response = await fetch("/api/chat/welcome");
+          const data: GetWelcomeResponse | null = response.ok
+            ? await response.json()
+            : null;
 
-          const data: GetLatestConversationResponse | null =
-            await response.json();
-
-          if (!cancelled) {
-            if (data) {
-              // Si el usuario ya empezó a escribir (mensaje optimista ya
-              // en pantalla) antes de que esta petición terminara, esta
-              // respuesta ya está desactualizada — nunca debe
-              // sobreescribir una conversación en curso, o el mensaje
-              // que se acaba de mandar "desaparece" y el estado local
-              // queda desincronizado del conversationId real que el
-              // servidor usó para guardarlo.
-              setConversationId((prev) => prev ?? data.conversationId);
-              setMessages((prev) => (prev.length === 0 ? data.messages : prev));
-              resolvedConversationId = data.conversationId;
-            }
-            setIsHistoricalConversation(false);
-            setHistoricalLabel(null);
+          if (!cancelled && data) {
+            setWelcomeCue(data.cue);
+            setWelcomeGreeting(data.greeting);
+            setOrbSignature(data.orb);
           }
         }
       } catch (error) {
@@ -359,6 +373,27 @@ function ChatPageContent() {
     setHistoricalLabel(null);
     router.replace("/chat");
     inputRef.current?.focus();
+
+    // La misma bienvenida generada fresca que ya recibe una visita
+    // normal a /chat -- "nueva conversación" es exactamente eso, un
+    // nuevo inicio, nunca un texto reciclado del hilo que se acaba de
+    // dejar atrás. Se limpia primero para que nunca se muestre un
+    // saludo que en realidad pertenecía al hilo anterior.
+    setWelcomeCue(undefined);
+    setWelcomeGreeting(null);
+    setOrbSignature(undefined);
+    fetch("/api/chat/welcome")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: GetWelcomeResponse | null) => {
+        if (!data) return;
+        setWelcomeCue(data.cue);
+        setWelcomeGreeting(data.greeting);
+        setOrbSignature(data.orb);
+      })
+      .catch(() => {
+        // Silencioso a propósito: el estado vacío ya tiene un texto de
+        // respaldo (ver el render) si esto nunca llega a resolver.
+      });
   }
 
   async function sendMessage() {
@@ -507,7 +542,7 @@ function ChatPageContent() {
 
   return (
     <main className="h-full bg-black text-white">
-      <ConversationOpeningRitual ready={!isLoadingHistory}>
+      <ConversationOpeningRitual ready={!isLoadingHistory} cue={welcomeCue} orb={orbSignature}>
         {/* Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
           header solo aporta lo específico de /chat: retomar/empezar de nuevo. */}
         {!isLoadingHistory && isHistoricalConversation && (
@@ -551,10 +586,8 @@ function ChatPageContent() {
                 </div>
               ) : messages.length === 0 ? (
                 <div className="animate-fade-in mt-32 text-center">
-                  <h2 className="text-4xl font-light">¿Cómo te sientes hoy?</h2>
-
-                  <p className="mt-5 text-lg text-zinc-400">
-                    Estoy aquí para escucharte.
+                  <p className="text-2xl leading-relaxed font-light text-white sm:text-3xl">
+                    {welcomeGreeting ?? "Aquí estoy."}
                   </p>
                 </div>
               ) : (
