@@ -388,7 +388,11 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <DashboardActivitySummary user={session.user} summary={summary} />
+      <DashboardActivitySummary
+        user={session.user}
+        summary={summary}
+        hasUpcomingDeadline={upcomingDeadlines.length > 0}
+      />
     </>
   );
 

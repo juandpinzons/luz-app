@@ -15,9 +15,14 @@ import { assembleRealitySnapshot } from "./assemble-reality-snapshot";
  * historia real detrás -- "radiant" (pleno, con una segunda capa de
  * luz). Umbrales sobre mensajes reales, nunca inventados: el mismo
  * conteo que ya usa `app/admin/page.tsx` para "Mensajes".
+ *
+ * Exportados (Auditoría de Experiencia V1, hallazgo H4): el Dashboard
+ * reutiliza estos mismos cortes para su propio indicador de presencia
+ * -- nunca un segundo umbral inventado aparte, para que "spark" o
+ * "radiant" signifique exactamente lo mismo en cualquier pantalla.
  */
-const STEADY_THRESHOLD = 15;
-const RADIANT_THRESHOLD = 100;
+export const STEADY_THRESHOLD = 15;
+export const RADIANT_THRESHOLD = 100;
 /** Ventana para considerar una fecha límite "próxima" -- ni tan corta que casi nunca aplique, ni tan larga que deje de sentirse inminente. */
 const UPCOMING_DEADLINE_DAYS = 3;
 

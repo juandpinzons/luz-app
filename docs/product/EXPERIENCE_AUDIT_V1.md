@@ -128,7 +128,7 @@ pasadas independientes por el código llegan a la misma conclusión.
 **Impacto:** alto. **Esfuerzo:** bajo. **Riesgo:** ninguno — es
 navegación, cero arquitectura.
 
-### H4 — El crecimiento de la relación es invisible fuera de `/chat`
+### H4 — El crecimiento de la relación es invisible fuera de `/chat` (RESUELTO)
 
 `deriveOrbSignature` (`generate-welcome.ts:110-141`) ya calcula, con
 datos 100% reales (mensajes totales, creencias en formación, pregunta
@@ -147,12 +147,76 @@ a un clic, dentro de `/chat`, y solo dura los ~2 segundos del ritual de
 apertura.
 
 **Impacto:** alto (es la prueba visual más directa de "esto no es un
-chatbot"). **Esfuerzo:** medio — requiere exponer `deriveOrbSignature`
-fuera de `generate-welcome.ts` y decidir dónde mostrarlo sin volverlo
-ruido visual en una pantalla de datos como el Dashboard. **Riesgo:**
-bajo, pero merece su propio bloque de diseño (no es "pequeño" en el
-sentido que pediste para hacerlo ahora mismo) — queda priorizado para
-el siguiente bloque, no implementado en este documento.
+chatbot"). **Esfuerzo:** medio. **Riesgo:** bajo.
+
+**Resuelto — diseño y justificación (bloque dedicado, mandato de Juan
+2026-07-29):**
+
+*Objetivo:* que la persona perciba, con la vista y no solo leyendo, que
+LUZ evoluciona y recuerda con el tiempo — en la pantalla que ve en
+*cada* visita (`/dashboard`), no solo la primera vez que abre el chat.
+
+**Decisión 1 — dónde vive.** `dashboard-activity-summary.tsx`, junto a
+la frase que ya existe ("Nos conocemos desde... Hemos hablado N
+veces..."). No un lugar nuevo: es exactamente donde el producto ya
+narra el crecimiento en texto — juntar el indicador visual ahí en vez
+de esparcirlo en otra sección evita convertirlo en un segundo widget
+compitiendo por atención (`PRESENCE_PRINCIPLES.md` #6, cuidado sin
+dependencia: nada que empuje a mirar una sección nueva).
+
+**Decisión 2 — qué se ve.** Una esfera pequeña, en línea con el texto
+(`components/ui/presence-orb.tsx`), nunca el ritual completo de
+`/chat` (esfera + texto que se escribe + pulso). Repetir ese ritual en
+*cada* visita al Dashboard —a diferencia de abrir `/chat`, un gesto
+deliberado— se habría vuelto exactamente el tipo de fricción repetitiva
+que `PRESENCE_PRINCIPLES.md` pide evitar. Mismo lenguaje visual
+(gradiente ámbar, `--color-luz`, `animate-sphere-breathe`) para que se
+lea como la misma presencia, nunca un elemento decorativo nuevo.
+
+**Decisión 3 — de dónde sale el dato, y por qué NO se llama a
+`deriveOrbSignature` directo.** Esa función necesita un
+`RealitySnapshot` completo, que el Dashboard no ensambla hoy (solo
+`buildMorningBrief` lo hace, para `continuityLine`) — pedirlo aquí
+también habría sido una consulta nueva pagada solo por un matiz menor
+de calidez, y la meta explícita era reutilizar datos existentes, no
+agregar costo. En cambio: mismos umbrales exportados
+(`STEADY_THRESHOLD`/`RADIANT_THRESHOLD` desde `generate-welcome.ts` —
+nunca un segundo número inventado, para que "radiant" signifique lo
+mismo en cualquier pantalla) sobre datos que `DashboardSummary` YA
+trae sin costo adicional: `messagesSent` (equivalente directo a
+`totalMessageCount`) y `memoriesStored` (mismo espíritu que el
+`understandingWarmth` de `deriveOrbSignature` — "LUZ ya guardó algo
+real tuyo" es una señal de comprensión tan legítima como el estilo de
+comunicación). El ritmo de respiración usa `hasUpcomingDeadline`, que
+`app/dashboard/page.tsx` ya calculaba para "Lo que se acerca" — cero
+consulta nueva en ningún punto de este diseño.
+
+**Decisión 4 — por qué un componente nuevo y no un refactor de
+`WelcomeSphere`.** `WelcomeSphere` (dentro de
+`conversation-opening-ritual.tsx`) ya está en producción, validada,
+parte del camino que M4 y el chat dependen de que siga funcionando
+igual. Generalizarla para este segundo uso arriesgaba ese camino ya
+probado por una ganancia mínima — se aceptó duplicar ~10 líneas de
+gradiente en `presence-orb.tsx` en vez de tocarla. Respeta
+`prefers-reduced-motion` gratis, vía la misma regla global ya existente
+en `app/globals.css` (`.animate-sphere-breathe` ya está cubierta ahí).
+
+**Qué NO hace (respeta las restricciones):** no toca
+`core/presence-engine`, `core/belief-engine`, `core/knowledge-engine`
+ni ningún otro motor; no agrega tablas ni migraciones; no modifica
+`RealitySnapshot` ni ningún contrato de `core/`; no cambia navegación
+(vive dentro de una sección que ya existía); `MorningBrief` y
+`DashboardSummary` no se tocaron — solo se agregó un prop nuevo
+(`hasUpcomingDeadline`) a un componente ya presentacional.
+
+**Validado:** typecheck limpio, lint limpio (repo completo), build de
+producción limpio, verificación visual con datos simulados en las tres
+etapas (spark/steady/radiant, con y sin deadline próximo) — progresión
+clara y honesta. Smoke suite (`npm run smoke`) intentado y **no
+ejecutable en este entorno**: falla con `ECONNREFUSED` al no existir un
+Postgres real accesible aquí — limitación de infraestructura local, no
+del código; queda pendiente de correr contra un entorno con DB real
+antes de considerarse E2E-verificado.
 
 ### H5 — `buildReturningLine` se repite, palabra por palabra (RESUELTO)
 
@@ -246,9 +310,9 @@ UX antes que más arquitectura) y el ciclo de vida de
 
 ## Beta (cuando haya señal real de uso, no solo lectura de código)
 
-4. **H4 — crecimiento de la relación visible fuera de `/chat`.** El de
-   mayor impacto simbólico, pero merece su propio diseño (dónde vive,
-   cómo evita volverse ruido) antes de implementarse.
+4. ~~H4 — crecimiento de la relación visible fuera de `/chat`.~~
+   Resuelto en su propio bloque de diseño (ver justificación completa
+   arriba).
 5. ~~H6 — distinguir "en formación" de "asentada" en `/life/identity`.~~
    Resuelto en este mismo documento de trabajo.
 6. **H7 — diseñar la paginación de `/conversations` por categoría.**
