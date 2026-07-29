@@ -33,7 +33,7 @@ export default async function LoginPage({
       >
         {callbackUrl
           ? "Tu sesión se refrescó. No perdiste nada — solo toca el botón para continuar donde estabas."
-          : "Inicia sesión para continuar."}
+          : "Un paso más, y estoy aquí."}
       </p>
 
       <form

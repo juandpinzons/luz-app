@@ -21,6 +21,20 @@ import {
 } from "@/features/life/services/get-upcoming-deadlines";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
+import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
+
+/**
+ * Mismo ritual de apertura que `/chat` (la esfera respira, el trazo se
+ * escribe, un pulso del que el contenido emerge) -- el propio componente
+ * se documenta como reutilizable para exactamente este caso ("cualquier
+ * otra pantalla que quiera el mismo ritual de apertura, sin duplicar
+ * esta lógica"). Solo en la primera visita: repetirlo en cada entrada al
+ * Dashboard sería justo el tipo de fricción que `PRESENCE_PRINCIPLES.md`
+ * pide nunca introducir. Sin `orb`: no hay todavía ninguna señal real
+ * (`totalMessageCount` es 0 por definición de `isFirstVisit`) -- usa la
+ * misma presencia neutral de siempre en vez de fabricar una.
+ */
+const FIRST_VISIT_CUE = "Hola";
 
 const ROUTE = "/dashboard";
 
@@ -233,135 +247,145 @@ export default async function DashboardPage() {
       ? daysSinceLastMessage
       : null;
 
-  return (
-    <main className="flex min-h-full flex-col items-center px-6 py-16 text-white">
-      <div className="w-full max-w-xl">
-        {/*
-          El saludo es lo primero que LUZ "dice" en cada visita — antes
-          tenía el mismo peso tipográfico que cualquier otra línea de
-          la página (`text-lg font-light` para saludo y fecha por
-          igual). Ahora es la línea más grande de todo el Dashboard;
-          la fecha queda deliberadamente más chica y muted, como una
-          acotación, no como parte del saludo.
-        */}
-        <div className="animate-fade-in space-y-1">
-          {brief ? (
-            <>
-              <p className="text-2xl font-light text-zinc-100">{brief.greetingLine}</p>
-              <p className="text-sm text-zinc-500">{brief.dateLine}</p>
-            </>
-          ) : (
-            <p className="text-2xl font-light text-zinc-100">
-              {timeOfDayGreeting(new Date())}.
-            </p>
-          )}
-        </div>
+  const pageContent = (
+    <>
+      {/*
+        El saludo es lo primero que LUZ "dice" en cada visita — antes
+        tenía el mismo peso tipográfico que cualquier otra línea de
+        la página (`text-lg font-light` para saludo y fecha por
+        igual). Ahora es la línea más grande de todo el Dashboard;
+        la fecha queda deliberadamente más chica y muted, como una
+        acotación, no como parte del saludo.
+      */}
+      <div className="animate-fade-in space-y-1">
+        {brief ? (
+          <>
+            <p className="text-2xl font-light text-zinc-100">{brief.greetingLine}</p>
+            <p className="text-sm text-zinc-500">{brief.dateLine}</p>
+          </>
+        ) : (
+          <p className="text-2xl font-light text-zinc-100">
+            {timeOfDayGreeting(new Date())}.
+          </p>
+        )}
+      </div>
 
-        {/*
-          Borde con el acento `luz` en vez de `zinc-800` genérico —
-          esta caja es la voz de LUZ dirigiéndose a la persona
-          (bienvenida o continuidad), no un dato mostrado sobre su
-          vida; antes usaba exactamente el mismo lenguaje visual que
-          "Próximos a vencer"/"Objetivos activos" más abajo y se
-          perdía entre ellos.
-        */}
-        {isFirstVisit ? (
-          <div
-            className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-5 text-zinc-200"
-            style={{ animationDelay: "100ms" }}
-          >
-            <p>
-              LUZ es un espacio para pensar en voz alta, sin que nadie
-              juzgue ni presione. Cuanto más hables con ella, mejor te
-              va a entender — hoy es el primer día.
-            </p>
-            <p className="mt-3 text-sm text-zinc-400">
-              No hay una forma correcta de empezar. Puedes contarle
-              qué tienes en mente ahora mismo.
-            </p>
-          </div>
-        ) : brief?.continuityLine ? (
+      {/*
+        Borde con el acento `luz` en vez de `zinc-800` genérico —
+        esta caja es la voz de LUZ dirigiéndose a la persona
+        (bienvenida o continuidad), no un dato mostrado sobre su
+        vida; antes usaba exactamente el mismo lenguaje visual que
+        "Próximos a vencer"/"Objetivos activos" más abajo y se
+        perdía entre ellos.
+      */}
+      {isFirstVisit ? (
+        <div
+          className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-5 text-zinc-200"
+          style={{ animationDelay: "100ms" }}
+        >
+          <p>
+            LUZ es un espacio para pensar en voz alta, sin que nadie
+            juzgue ni presione. Cuanto más hables con ella, mejor te
+            va a entender — hoy es el primer día.
+          </p>
+          <p className="mt-3 text-sm text-zinc-400">
+            No hay una forma correcta de empezar. Puedes contarle
+            qué tienes en mente ahora mismo.
+          </p>
+        </div>
+      ) : brief?.continuityLine ? (
+        <div
+          className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
+          style={{ animationDelay: "100ms" }}
+        >
+          {brief.continuityLine}
+        </div>
+      ) : (
+        returningGapDays !== null && (
           <div
             className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
             style={{ animationDelay: "100ms" }}
           >
-            {brief.continuityLine}
+            {buildReturningLine(returningGapDays)}
           </div>
-        ) : (
-          returningGapDays !== null && (
-            <div
-              className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
-              style={{ animationDelay: "100ms" }}
-            >
-              {buildReturningLine(returningGapDays)}
-            </div>
-          )
-        )}
+        )
+      )}
 
-        {upcomingDeadlines.length > 0 && (
-          <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
-            <h2 className="text-sm font-medium text-zinc-400">
-              Lo que se acerca
-            </h2>
-            <ul className="mt-3 space-y-2">
-              {upcomingDeadlines.map((item, index) => (
-                <li
-                  key={item.id}
-                  className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
-                  style={{ animationDelay: `${200 + index * 40}ms` }}
-                >
-                  <span className="text-zinc-300">
-                    {item.kind === "goal" ? "Objetivo" : "Proyecto"} &ldquo;
-                    {item.title}&rdquo;
-                  </span>
-                  <span className="text-zinc-500">
-                    {" "}
-                    — en {daysUntil(item.dueAt)}{" "}
-                    {daysUntil(item.dueAt) === 1 ? "día" : "días"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+      {upcomingDeadlines.length > 0 && (
+        <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
+          <h2 className="text-sm font-medium text-zinc-400">
+            Lo que se acerca
+          </h2>
+          <ul className="mt-3 space-y-2">
+            {upcomingDeadlines.map((item, index) => (
+              <li
+                key={item.id}
+                className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+                style={{ animationDelay: `${200 + index * 40}ms` }}
+              >
+                <span className="text-zinc-300">
+                  {item.kind === "goal" ? "Objetivo" : "Proyecto"} &ldquo;
+                  {item.title}&rdquo;
+                </span>
+                <span className="text-zinc-500">
+                  {" "}
+                  — en {daysUntil(item.dueAt)}{" "}
+                  {daysUntil(item.dueAt) === 1 ? "día" : "días"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-        {activeLifeItems.length > 0 && (
-          <section className="animate-fade-in mt-8" style={{ animationDelay: "200ms" }}>
-            <h2 className="text-sm font-medium text-zinc-400">
-              Objetivos activos
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-3">
-              {activeLifeItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  className="animate-fade-in rounded-xl border border-zinc-800 px-4 py-3"
-                  style={{ animationDelay: `${240 + index * 40}ms` }}
-                >
-                  <p className="text-sm text-zinc-200">{item.title}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+      {activeLifeItems.length > 0 && (
+        <section className="animate-fade-in mt-8" style={{ animationDelay: "200ms" }}>
+          <h2 className="text-sm font-medium text-zinc-400">
+            Objetivos activos
+          </h2>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {activeLifeItems.map((item, index) => (
+              <div
+                key={item.id}
+                className="animate-fade-in rounded-xl border border-zinc-800 px-4 py-3"
+                style={{ animationDelay: `${240 + index * 40}ms` }}
+              >
+                <p className="text-sm text-zinc-200">{item.title}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
+      <Link
+        href="/chat"
+        className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+      >
+        Hablar con LUZ
+      </Link>
+
+      <div>
         <Link
-          href="/chat"
-          className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+          href="/feedback"
+          className="mt-6 inline-block rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
         >
-          Hablar con LUZ
+          ¿Cómo vamos? Cuéntame
         </Link>
-
-        <div>
-          <Link
-            href="/feedback"
-            className="mt-6 inline-block rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-          >
-            ¿Cómo vamos? Cuéntame
-          </Link>
-        </div>
-
-        <DashboardActivitySummary user={session.user} summary={summary} />
       </div>
+
+      <DashboardActivitySummary user={session.user} summary={summary} />
+    </>
+  );
+
+  return (
+    <main className="flex min-h-full flex-col items-center px-6 py-16 text-white">
+      {isFirstVisit ? (
+        <ConversationOpeningRitual cue={FIRST_VISIT_CUE} contentClassName="w-full max-w-xl">
+          {pageContent}
+        </ConversationOpeningRitual>
+      ) : (
+        <div className="w-full max-w-xl">{pageContent}</div>
+      )}
     </main>
   );
 }
