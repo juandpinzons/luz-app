@@ -66,3 +66,108 @@ export async function GET(request: Request): Promise<Response> {
 
   return NextResponse.json(report);
 }
+
+/**
+ * Aplica manualmente la migración 0010 (feedback_responses), huérfana
+ * en prod porque el `migrate` de drizzle avanza un cursor por
+ * timestamp: al forzar 0011 fuera de orden el 2026-07-24, el cursor
+ * quedó por delante del `when` de 0010, así que todo `drizzle-kit
+ * migrate` futuro la salta para siempre. Idempotente a propósito
+ * (puede llamarse más de una vez sin romper nada).
+ */
+export async function POST(request: Request): Promise<Response> {
+  if (!isAuthorized(request)) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
+  const steps: Record<string, string> = {};
+
+  try {
+    await db.execute(sql`
+      do $$
+      begin
+        if not exists (select 1 from pg_type where typname = 'feedback_remembers_me') then
+          create type "public"."feedback_remembers_me" as enum('yes', 'no', 'unsure');
+        end if;
+      end
+      $$;
+    `);
+    steps.enum = "ok";
+  } catch (e) {
+    steps.enum = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  try {
+    await db.execute(sql`
+      create table if not exists "feedback_responses" (
+        "id" uuid primary key default gen_random_uuid() not null,
+        "user_id" uuid not null,
+        "helpfulness" integer not null,
+        "remembers_me" "feedback_remembers_me" not null,
+        "comment" text,
+        "created_at" timestamp with time zone default now() not null
+      );
+    `);
+    steps.table = "ok";
+  } catch (e) {
+    steps.table = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  try {
+    await db.execute(sql`
+      do $$
+      begin
+        if not exists (
+          select 1 from information_schema.table_constraints
+          where constraint_name = 'feedback_responses_user_id_users_id_fk'
+        ) then
+          alter table "feedback_responses"
+            add constraint "feedback_responses_user_id_users_id_fk"
+            foreign key ("user_id") references "public"."users"("id")
+            on delete cascade on update no action;
+        end if;
+      end
+      $$;
+    `);
+    steps.fk = "ok";
+  } catch (e) {
+    steps.fk = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  try {
+    await db.execute(
+      sql`create index if not exists "feedback_responses_user_id_idx" on "feedback_responses" using btree ("user_id")`,
+    );
+    await db.execute(
+      sql`create index if not exists "feedback_responses_created_at_idx" on "feedback_responses" using btree ("created_at")`,
+    );
+    steps.indexes = "ok";
+  } catch (e) {
+    steps.indexes = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  try {
+    await db.execute(sql`
+      insert into drizzle.__drizzle_migrations (hash, created_at)
+      values (
+        'eafe11549cf908021357532364f7f3e0f790d8e8d2fc2cacea5e92710f1a378c',
+        1784489467988
+      )
+      on conflict do nothing;
+    `);
+    steps.bookkeeping = "ok";
+  } catch (e) {
+    steps.bookkeeping = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  try {
+    const check = await db.execute(
+      sql`select to_regclass('public.feedback_responses') as t`,
+    );
+    steps.verify = JSON.stringify(check);
+  } catch (e) {
+    steps.verify = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  return NextResponse.json(steps);
+}
