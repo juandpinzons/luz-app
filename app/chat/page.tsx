@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
@@ -543,22 +544,45 @@ function ChatPageContent() {
   return (
     <main className="h-full bg-black text-white">
       <ConversationOpeningRitual ready={!isLoadingHistory} cue={welcomeCue} orb={orbSignature}>
-        {/* Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1); este
-          header solo aporta lo específico de /chat: retomar/empezar de nuevo. */}
-        {!isLoadingHistory && isHistoricalConversation && (
+        {/*
+          Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1);
+          este header solo aporta lo específico de /chat: retomar/empezar de
+          nuevo, y (Auditoría de Experiencia V1, hallazgo H3) un camino de
+          vuelta al historial. Antes, "Historial" solo existía condicionado
+          a `isHistoricalConversation` -- una visita normal a /chat no tenía
+          NINGÚN enlace hacia `/conversations` en ningún lado de la pantalla,
+          y el nav global (`app-shell.tsx`) tampoco lo tiene. Siempre visible
+          ahora, nunca solo en el caso histórico -- es la única prueba de que
+          "lo anterior sigue intacto" es real y no solo una promesa en un
+          comentario de código.
+        */}
+        {!isLoadingHistory && (
           <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
-            <div className="flex items-center justify-end">
-              <button
-                onClick={startNewConversation}
-                className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-              >
-                Nueva conversación
-              </button>
-            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                {historicalLabel && (
+                  <p className="text-sm text-zinc-500">{historicalLabel}</p>
+                )}
+              </div>
 
-            {historicalLabel && (
-              <p className="mt-1 text-sm text-zinc-500">{historicalLabel}</p>
-            )}
+              <div className="flex flex-shrink-0 items-center gap-3">
+                {isHistoricalConversation && (
+                  <button
+                    onClick={startNewConversation}
+                    className="rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                  >
+                    Nueva conversación
+                  </button>
+                )}
+
+                <Link
+                  href="/conversations"
+                  className="rounded-full px-3 py-1.5 text-sm text-zinc-500 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                >
+                  Historial
+                </Link>
+              </div>
+            </div>
           </header>
         )}
 
