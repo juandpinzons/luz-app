@@ -37,10 +37,21 @@ export async function describeEvolution(
     insightRepository.list(context),
   ]);
 
+  // War Room 2026-07-29: antes, un `await` por Belief dentro de un
+  // `for` -- round-trips estrictamente secuenciales a Postgres, nunca
+  // paralelizados (a diferencia del `Promise.all` de arriba). Con
+  // decenas de Beliefs acumulados (nada los archiva ni los borra
+  // todavía) esto añadía segundos de latencia solo para reconstruir el
+  // historial de confianza. Mismo llamador, mismo método público de
+  // `BeliefRepository` (`getHistory`, sin tocar su contrato) -- solo se
+  // invoca en paralelo en vez de uno por uno.
+  const beliefHistories = await Promise.all(
+    beliefs.map((belief) => beliefRepository.getHistory(context, belief.id)),
+  );
+
   const beliefChanges: BeliefChangeInput[] = [];
-  for (const belief of beliefs) {
-    const history = await beliefRepository.getHistory(context, belief.id);
-    for (const entry of history) {
+  beliefs.forEach((belief, index) => {
+    for (const entry of beliefHistories[index]) {
       beliefChanges.push({
         beliefId: belief.id,
         statement: belief.statement,
@@ -50,7 +61,7 @@ export async function describeEvolution(
         changedAt: entry.changedAt,
       });
     }
-  }
+  });
 
   const insightDiscoveries: InsightDiscoveryInput[] = insights
     .filter((insight) => insight.status === "validated" && insight.validatedAt)
