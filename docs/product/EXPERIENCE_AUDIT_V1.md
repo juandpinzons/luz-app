@@ -178,7 +178,7 @@ después) — más preciso, no una frase nueva por capricho, y esa
 precisión es lo que evita la repetición. Validado: typecheck, lint,
 build y verificación visual en la caja de continuidad real.
 
-### H6 — "Creencia en formación" vs "ya asentada" no se distingue en la UI
+### H6 — "Creencia en formación" vs "ya asentada" no se distingue en la UI (RESUELTO)
 
 `/life/identity` (`build-identity-model.ts:167-173`) muestra las
 creencias con más confianza sin importar su categoría — una creencia
@@ -193,6 +193,14 @@ conclusión con más seguridad de la que realmente tiene).
 
 **Impacto:** medio. **Esfuerzo:** bajo (es copy/etiqueta condicional
 sobre un dato que ya existe). **Riesgo:** ninguno.
+
+**Resuelto:** `/life/identity` ahora muestra una etiqueta discreta "en
+formación" junto al número de confianza cuando `belief.confidence.score
+<= GROWING_BELIEF_MAX_CONFIDENCE` (54) — se exportó esa misma constante
+de `assemble-reality-snapshot.ts` en vez de inventar un segundo umbral,
+el mismo corte que ya usa `growingBeliefs` para el prompt de IA.
+Validado: typecheck, lint, build, verificación visual con datos de
+distintas confianzas.
 
 ### H7 — `/conversations` sin paginación
 
@@ -224,7 +232,8 @@ UX antes que más arquitectura) y el ciclo de vida de
 4. **H4 — crecimiento de la relación visible fuera de `/chat`.** El de
    mayor impacto simbólico, pero merece su propio diseño (dónde vive,
    cómo evita volverse ruido) antes de implementarse.
-5. **H6 — distinguir "en formación" de "asentada" en `/life/identity`.**
+5. ~~H6 — distinguir "en formación" de "asentada" en `/life/identity`.~~
+   Resuelto en este mismo documento de trabajo.
 6. **H7 — paginación de `/conversations`.**
 7. Cualquier instrumentación pre-auth necesaria para reemplazar lectura
    de código por datos reales de abandono (fuera de este documento —

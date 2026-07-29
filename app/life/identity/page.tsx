@@ -6,6 +6,7 @@ import { db } from "@/core/db/client";
 import { LIFE_DOMAIN_LABEL } from "@/core/life";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
+import { GROWING_BELIEF_MAX_CONFIDENCE } from "@/features/chat/services/assemble-reality-snapshot";
 import {
   buildIdentityModel,
   type PersonIdentityModel,
@@ -184,6 +185,15 @@ export default async function LifeIdentityPage() {
         {model && model.topBeliefs.length > 0 && (
           <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
             <h2 className="text-sm font-medium text-zinc-400">Lo que más creo saber de ti</h2>
+            {/*
+              Auditoría de Experiencia V1 (hallazgo H6): antes, el número
+              de confianza era la única señal -- una creencia todavía en
+              formación (misma banda que `growingBeliefs`, nunca afirmada
+              como hecho en el prompt de IA) se veía igual que una ya
+              asentada. La persona debe reconocerse en lo que LUZ refleja
+              (Principio 7, Evolución compartida), no recibir más
+              seguridad de la que LUZ realmente tiene todavía.
+            */}
             <ul className="mt-3 space-y-2">
               {model.topBeliefs.map((belief) => (
                 <li key={belief.id}>
@@ -192,7 +202,12 @@ export default async function LifeIdentityPage() {
                     className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 px-4 py-3 text-sm transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
                   >
                     <span className="text-zinc-200">{belief.statement}</span>
-                    <span className="flex-shrink-0 text-xs text-zinc-500">
+                    <span className="flex flex-shrink-0 items-center gap-2 text-xs text-zinc-500">
+                      {belief.confidence.score <= GROWING_BELIEF_MAX_CONFIDENCE && (
+                        <span className="rounded-full border border-zinc-700 px-2 py-0.5">
+                          en formación
+                        </span>
+                      )}
                       {belief.confidence.score}/100
                     </span>
                   </Link>

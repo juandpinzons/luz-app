@@ -63,7 +63,16 @@ const RELEVANT_GROWING_BELIEF_LIMIT = 1;
  * como algo por confirmar.
  */
 const GROWING_BELIEF_MIN_CONFIDENCE = 30;
-const GROWING_BELIEF_MAX_CONFIDENCE = 54;
+/**
+ * Exportada (Auditoría de Experiencia V1, hallazgo H6): `/life/identity`
+ * reutiliza este mismo corte para distinguir, en la propia interfaz, una
+ * creencia todavía en formación de una ya asentada -- antes esa
+ * distinción solo vivía en el prompt de IA (que nunca afirma una
+ * creencia en formación como hecho); la persona veía un número de
+ * confianza sin ninguna palabra que dijera qué tan sólido es. Un solo
+ * corte, nunca un segundo umbral inventado aparte.
+ */
+export const GROWING_BELIEF_MAX_CONFIDENCE = 54;
 
 /**
  * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
