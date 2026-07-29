@@ -58,12 +58,27 @@ function daysSince(date: Date, now: Date): number {
  * bastante fuerte para que `continuityLine` (IA) dijera algo.
  * Determinista a propósito, no una llamada a IA más: la pausa en sí
  * ya es la señal, no hace falta interpretarla.
+ *
+ * Auditoría de Experiencia V1 (hallazgo H5): antes, exactamente dos
+ * strings fijos para todo el rango de 3 a 13 días y todo lo que fuera
+ * de 14 en adelante -- alguien que vuelve cada pocos días de forma
+ * irregular podía ver la frase idéntica dos veces. `daysAway` ya es un
+ * número real y específico; usarlo directo (mismos cortes que
+ * `describeGap` en `generate-welcome.ts`: días exactos bajo una
+ * semana, semanas bajo un mes, "bastante tiempo" después) es más
+ * preciso, no una frase nueva por capricho -- y esa precisión es
+ * justo lo que hace que cada regreso se sienta distinto en vez de
+ * reciclado.
  */
 function buildReturningLine(daysAway: number): string {
-  if (daysAway >= 14) {
-    return "Ha pasado bastante tiempo. Me alegra que hayas vuelto.";
+  if (daysAway < 7) {
+    return `Han pasado ${daysAway} días. Qué bueno verte de nuevo.`;
   }
-  return "Ha pasado un tiempo desde la última vez que hablamos. Qué bueno verte de nuevo.";
+  if (daysAway < 30) {
+    const weeks = Math.round(daysAway / 7);
+    return `Ha pasado ${weeks === 1 ? "una semana" : `${weeks} semanas`}. Me alegra que hayas vuelto.`;
+  }
+  return "Ha pasado bastante tiempo. Me alegra que hayas vuelto.";
 }
 
 /**

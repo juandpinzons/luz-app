@@ -154,7 +154,7 @@ bajo, pero merece su propio bloque de diseño (no es "pequeño" en el
 sentido que pediste para hacerlo ahora mismo) — queda priorizado para
 el siguiente bloque, no implementado en este documento.
 
-### H5 — `buildReturningLine` se repite, palabra por palabra
+### H5 — `buildReturningLine` se repite, palabra por palabra (RESUELTO)
 
 `app/dashboard/page.tsx:48-53`: exactamente dos strings posibles, sin
 ninguna variación, a diferencia de `generate-welcome.ts` (línea 63),
@@ -170,6 +170,13 @@ forma distinta.
 **Impacto:** medio (afecta un patrón de uso específico, no a todos).
 **Esfuerzo:** trivial — es una función que devuelve un string.
 **Riesgo:** ninguno.
+
+**Resuelto:** en vez de dos strings fijos, ahora usa el número real de
+días (mismos cortes que `describeGap` en `generate-welcome.ts`: días
+exactos bajo una semana, semanas bajo un mes, "bastante tiempo"
+después) — más preciso, no una frase nueva por capricho, y esa
+precisión es lo que evita la repetición. Validado: typecheck, lint,
+build y verificación visual en la caja de continuidad real.
 
 ### H6 — "Creencia en formación" vs "ya asentada" no se distingue en la UI
 
@@ -206,8 +213,8 @@ UX antes que más arquitectura) y el ciclo de vida de
 1. **H3 — hacer descubrible el historial desde `/chat`.** Implementado
    en este mismo bloque de trabajo (ver más abajo) — es exactamente el
    caso que autorizaste: pequeño, alto impacto, sin tocar arquitectura.
-2. **H5 — variar `buildReturningLine`.** Trivial, seguro, listo para
-   el próximo bloque.
+2. **H5 — variar `buildReturningLine`.** Resuelto en este mismo
+   documento de trabajo.
 3. **H1 — placeholder de `/chat` con más intención.** Requiere cuidado
    de tono (no convertirlo en una lista de sugerencias tipo plantilla),
    por eso no entra en el fix inmediato.
