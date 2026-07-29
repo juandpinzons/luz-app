@@ -202,11 +202,28 @@ el mismo corte que ya usa `growingBeliefs` para el prompt de IA.
 Validado: typecheck, lint, build, verificación visual con datos de
 distintas confianzas.
 
-### H7 — `/conversations` sin paginación
+### H7 — `/conversations` sin paginación (PARCIALMENTE RESUELTO)
 
 `features/conversations/services/list-conversations.ts:117-132` no
-tiene `.limit()`. A los 30 días probablemente no es un problema real
-todavía; a los 90-180 podría serlo. Flagueado para Beta, no urgente.
+tenía `.limit()`. A los 30 días probablemente no es un problema real
+todavía; a los 90-180 podría serlo.
+
+**Actualización:** el mismo día de esta auditoría, M4 rediseñó
+`/conversations` para agrupar por categoría en vez de fecha
+(`feat(conversations): identidad por categoría en vez de fechas`). Eso
+cambia la pregunta: un número de página ya no es la forma correcta de
+resolver esto — partiría un grupo de categoría de forma arbitraria a
+mitad de página. Diseñar bien esa paginación (¿por categoría? ¿"ver
+más" al fondo de cada grupo? ¿un límite global con aviso?) es una
+decisión de producto propia, no un quick win — queda para Beta, igual
+que antes, pero ahora con esta nota.
+
+**Resuelto (la mitad de seguridad, no la de UX):** la consulta ahora
+tiene un tope (`CONVERSATION_LIST_LIMIT = 200`) que hoy no le cambia
+nada a ningún usuario real de Alpha, pero evita que crezca sin límite
+con el tiempo — y la subconsulta de previews se acotó a las mismas
+conversaciones que de verdad se van a mostrar, en vez de escanear todo
+el historial de mensajes del usuario. Validado: typecheck, lint, build.
 
 ------------------------------------------------------------------------
 
@@ -234,7 +251,8 @@ UX antes que más arquitectura) y el ciclo de vida de
    cómo evita volverse ruido) antes de implementarse.
 5. ~~H6 — distinguir "en formación" de "asentada" en `/life/identity`.~~
    Resuelto en este mismo documento de trabajo.
-6. **H7 — paginación de `/conversations`.**
+6. **H7 — diseñar la paginación de `/conversations` por categoría.**
+   (La red de seguridad de escala ya se resolvió; falta la UX.)
 7. Cualquier instrumentación pre-auth necesaria para reemplazar lectura
    de código por datos reales de abandono (fuera de este documento —
    Observabilidad).

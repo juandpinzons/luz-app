@@ -5,6 +5,22 @@ import type { ConversationCategory } from "../../../core/db/schema/conversations
 import type { UserContext } from "../../../core/identity/user-context";
 
 const PREVIEW_MAX_LENGTH = 80;
+/**
+ * Auditoría de Experiencia V1 (hallazgo H7): esta consulta no tenía
+ * ningún límite -- alguien con meses de uso diario podría, en teoría,
+ * traer cientos de filas en una sola carga de `/conversations`. Un
+ * número de página no es la forma correcta de resolverlo ahora que la
+ * página agrupa por categoría (partiría un grupo de forma arbitraria a
+ * mitad de página) -- eso queda para un diseño propio. Esto es solo la
+ * red de seguridad de escala: un tope generoso que hoy no le cambia
+ * nada a ningún usuario real (el más activo de Alpha está lejísimos de
+ * esta cifra), pero evita que la consulta crezca sin límite con el
+ * tiempo. `firstMessages` se acota a las mismas conversaciones ya
+ * traídas por `stats` -- nunca escanea el historial completo de
+ * mensajes del usuario para armar el preview de conversaciones que ni
+ * siquiera se van a mostrar.
+ */
+const CONVERSATION_LIST_LIMIT = 200;
 
 export interface ConversationListItem {
   id: string;
@@ -133,19 +149,26 @@ export async function listConversations(
     )
     .where(conversationsFilter)
     .groupBy(conversations.id)
-    .orderBy(desc(max(conversationMessages.createdAt)));
+    .orderBy(desc(max(conversationMessages.createdAt)))
+    .limit(CONVERSATION_LIST_LIMIT);
 
-  const firstMessages = await db
-    .selectDistinctOn([conversationMessages.conversationId], {
-      conversationId: conversationMessages.conversationId,
-      content: conversationMessages.content,
-    })
-    .from(conversationMessages)
-    .where(messagesFilter)
-    .orderBy(
-      conversationMessages.conversationId,
-      asc(conversationMessages.createdAt),
-    );
+  const conversationIds = stats.map((row) => row.id);
+
+  const firstMessages = conversationIds.length === 0
+    ? []
+    : await db
+        .selectDistinctOn([conversationMessages.conversationId], {
+          conversationId: conversationMessages.conversationId,
+          content: conversationMessages.content,
+        })
+        .from(conversationMessages)
+        .where(
+          and(messagesFilter, inArray(conversationMessages.conversationId, conversationIds)),
+        )
+        .orderBy(
+          conversationMessages.conversationId,
+          asc(conversationMessages.createdAt),
+        );
 
   const previewByConversationId = new Map(
     firstMessages.map((message) => [message.conversationId, message.content]),
