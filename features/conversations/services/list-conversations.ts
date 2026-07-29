@@ -1,6 +1,7 @@
 import { and, asc, count, desc, eq, ilike, inArray, max } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
+import type { ConversationCategory } from "../../../core/db/schema/conversations";
 import type { UserContext } from "../../../core/identity/user-context";
 
 const PREVIEW_MAX_LENGTH = 80;
@@ -13,6 +14,8 @@ export interface ConversationListItem {
   previewText: string;
   /** `null` hasta que el título automático corre (primer intercambio) o si falló — ver `generate-title.ts`. `previewText` sigue siendo el respaldo. */
   title: string | null;
+  /** `null` en la misma ventana que `title` -- se clasifica en la misma llamada de IA, nunca por separado. */
+  category: ConversationCategory | null;
 }
 
 export interface ListConversationsOptions {
@@ -119,6 +122,7 @@ export async function listConversations(
       id: conversations.id,
       createdAt: conversations.createdAt,
       title: conversations.title,
+      category: conversations.category,
       lastMessageAt: max(conversationMessages.createdAt),
       messageCount: count(conversationMessages.id),
     })
@@ -151,6 +155,7 @@ export async function listConversations(
     id: row.id,
     createdAt: row.createdAt,
     title: row.title,
+    category: row.category,
     // `innerJoin` + `groupBy` garantiza al menos un mensaje por fila, así que
     // el máximo nunca es null aquí — el tipo de `max()` sigue siendo nullable.
     lastMessageAt: row.lastMessageAt ?? row.createdAt,

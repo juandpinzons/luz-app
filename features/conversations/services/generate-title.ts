@@ -3,10 +3,23 @@ import { z } from "zod";
 import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import { conversations } from "../../../core/db/schema";
+import { LIFE_DOMAIN_TYPES } from "../../../core/life";
 import { recordEvent } from "../../../core/observability/record-event";
+
+/**
+ * Mismo vocabulario que ya agrupa Goal/Project/Habit en `/life`
+ * (`LIFE_DOMAIN_TYPES`), más `"general"` para lo que de verdad no cae
+ * en ninguna área de vida -- ver el docblock de `ConversationCategory`
+ * en `core/db/schema/conversations.ts`, la fuente de verdad de este
+ * tipo (no se importa desde ahí para no crear un ciclo schema→feature;
+ * el valor válido real es el mismo, verificado por este mismo schema
+ * de Zod).
+ */
+const CONVERSATION_CATEGORIES = [...LIFE_DOMAIN_TYPES, "general"] as const;
 
 const titleSchema = z.object({
   title: z.string().min(1).max(60),
+  category: z.enum(CONVERSATION_CATEGORIES),
 });
 
 export interface GenerateConversationTitleInput {
@@ -32,12 +45,14 @@ export async function generateConversationTitle(
 ): Promise<void> {
   try {
     const aiProvider = getAIProvider();
-    const { title } = await aiProvider.generateStructured(
+    const { title, category } = await aiProvider.generateStructured(
       [
         {
           role: "system",
           content:
-            "Devuelve un título corto (máximo 6 palabras, sin comillas ni punto final) que resuma de qué trata esta conversación.",
+            `Devuelve dos cosas sobre esta conversación:\n` +
+            `- "title": un título corto (máximo 6 palabras, sin comillas ni punto final) que resuma de qué trata.\n` +
+            `- "category": el área de vida a la que pertenece de verdad -- una de: ${CONVERSATION_CATEGORIES.join(", ")}. Usa "general" solo si de verdad no encaja en ninguna otra (charla casual, preguntas sobre LUZ misma, etc.) -- nunca por defecto.`,
         },
         { role: "user", content: input.userMessage },
         { role: "assistant", content: input.assistantReply },
@@ -47,7 +62,7 @@ export async function generateConversationTitle(
 
     await db
       .update(conversations)
-      .set({ title: title.trim() })
+      .set({ title: title.trim(), category })
       .where(eq(conversations.id, input.conversationId));
   } catch (error) {
     // Antes: console.error plano, invisible a cualquier consulta.
