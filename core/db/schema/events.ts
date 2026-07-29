@@ -34,6 +34,22 @@ export const events = pgTable(
   (table) => [
     index("events_type_idx").on(table.type),
     index("events_created_at_idx").on(table.createdAt),
+    /**
+     * `reserveRateLimitSlot` (`features/chat/services/check-rate-limit.ts`)
+     * filtra exactamente por estas tres columnas en CADA mensaje enviado
+     * -- sin este índice compuesto, esa consulta hace Seq Scan sobre toda
+     * la tabla (confirmado con EXPLAIN ANALYZE, auditoría Staff Engineer
+     * 2026-07-28: barato hoy con pocas filas, pero `events` no tiene
+     * retención/poda y crece sin límite -- ese Seq Scan corre dentro de
+     * la transacción que sostiene el advisory lock por usuario, así que
+     * su costo se vuelve latencia real en el camino crítico de cada
+     * mensaje a medida que la tabla crece).
+     */
+    index("events_user_type_created_at_idx").on(
+      table.userId,
+      table.type,
+      table.createdAt,
+    ),
   ],
 );
 

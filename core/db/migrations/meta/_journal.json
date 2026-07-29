@@ -127,6 +127,13 @@
       "when": 1785291139512,
       "tag": "0017_add_conversation_category",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785294984794,
+      "tag": "0018_nifty_talos",
+      "breakpoints": true
     }
   ]
 }
