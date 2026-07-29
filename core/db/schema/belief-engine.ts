@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { lifeGraphs } from "./life-graph";
 import type { LifeDomainType } from "../../life/value-objects/life-domain-type";
+import type { BeliefCategory } from "../../belief-engine/entities/belief";
 
 /**
  * `core/belief-engine` — un `Belief` es una creencia sobre la persona
@@ -50,6 +51,14 @@ export const beliefs = pgTable(
     subjectPersonId: uuid("subject_person_id").notNull(),
     statement: text("statement").notNull(),
     domain: text("domain").$type<LifeDomainType>(),
+    /**
+     * Mismo criterio de tipado que `domain` (texto app-level, no un
+     * pgEnum) -- default `'life_domain'` para que cada fila ya
+     * existente (todas creencias sobre un área de vida, el único caso
+     * hasta esta migración) se reclasifique correctamente sin
+     * intervención manual, nunca `NULL` a partir de aquí en adelante.
+     */
+    category: text("category").$type<BeliefCategory>().notNull().default("life_domain"),
     status: beliefStatusEnum("status").notNull().default("active"),
     confidenceScore: integer("confidence_score").notNull(),
     confidenceAssignedAt: timestamp("confidence_assigned_at", {

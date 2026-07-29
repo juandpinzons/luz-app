@@ -22,6 +22,7 @@ function toBelief(row: BeliefRow): Belief {
     subjectPersonId: createEntityId(row.subjectPersonId),
     statement: row.statement,
     domain: row.domain ?? undefined,
+    category: row.category,
     status: row.status,
     confidence: {
       score: row.confidenceScore,
@@ -94,6 +95,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
         subjectPersonId: belief.subjectPersonId,
         statement: belief.statement,
         domain: belief.domain ?? null,
+        category: belief.category,
         status: belief.status,
         confidenceScore: belief.confidence.score,
         confidenceAssignedAt: belief.confidence.assignedAt,
@@ -107,6 +109,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
         set: {
           statement: belief.statement,
           domain: belief.domain ?? null,
+          category: belief.category,
           status: belief.status,
           confidenceScore: belief.confidence.score,
           confidenceAssignedAt: belief.confidence.assignedAt,

@@ -5,6 +5,7 @@ import { PlanStrategyRule } from "./plan-strategy-rule";
 import { RemindStrategyRule } from "./remind-strategy-rule";
 import { FollowUpStrategyRule } from "./follow-up-strategy-rule";
 import { CelebrateStrategyRule } from "./celebrate-strategy-rule";
+import { ConfirmStrategyRule } from "./confirm-strategy-rule";
 import { CuriosityStrategyRule } from "./curiosity-strategy-rule";
 import { ReflectStrategyRule } from "./reflect-strategy-rule";
 import { ClarifyStrategyRule } from "./clarify-strategy-rule";
@@ -17,6 +18,7 @@ export { PlanStrategyRule } from "./plan-strategy-rule";
 export { RemindStrategyRule } from "./remind-strategy-rule";
 export { FollowUpStrategyRule } from "./follow-up-strategy-rule";
 export { CelebrateStrategyRule } from "./celebrate-strategy-rule";
+export { ConfirmStrategyRule } from "./confirm-strategy-rule";
 export { CuriosityStrategyRule } from "./curiosity-strategy-rule";
 export { ReflectStrategyRule } from "./reflect-strategy-rule";
 export { ClarifyStrategyRule } from "./clarify-strategy-rule";
@@ -39,6 +41,7 @@ export const CONVERSATION_STRATEGY_RULES: readonly ConversationStrategyRule[] = 
   new RemindStrategyRule(),
   new FollowUpStrategyRule(),
   new CelebrateStrategyRule(),
+  new ConfirmStrategyRule(),
   new CuriosityStrategyRule(),
   new ReflectStrategyRule(),
   new ClarifyStrategyRule(),

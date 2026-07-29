@@ -1,10 +1,19 @@
 import type { LifeDomainType } from "../../life/value-objects/life-domain-type";
+import type { BeliefCategory } from "../entities/belief";
 import type { Insight } from "../../knowledge-engine/entities/insight";
 
 export interface ProposedBeliefStatement {
   /** Frase sobre la persona, ej. "Juan es una persona disciplinada con su salud". */
   statement: string;
   domain?: LifeDomainType;
+  /**
+   * `undefined` -> `"life_domain"` (`consolidate-belief-from-insight.ts`
+   * decide el default, nunca esta interfaz) -- la mayoría de las
+   * propuestas siguen siendo sobre un área de vida, así que no vale la
+   * pena exigir que cada estrategia lo declare explícitamente para el
+   * caso común.
+   */
+  category?: BeliefCategory;
   /** 0-100, propuesta por la estrategia -- LUZ decide el umbral (`consolidate-belief-from-insight.ts`). */
   confidence: number;
 }

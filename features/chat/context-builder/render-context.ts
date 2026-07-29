@@ -27,6 +27,7 @@ const STRATEGY_LABEL: Record<ConversationStrategyType, string> = {
   follow_up: "FollowUp",
   curiosity: "Curiosity",
   reflect: "Reflect",
+  confirm: "Confirm",
 };
 
 /**
@@ -86,13 +87,22 @@ function renderPresence(stance: PresenceStance): string {
  * decidido, nunca inventa una regla de estilo nueva por su cuenta.
  */
 function renderVoice(voice: VoiceSignature): string {
-  return [
+  const lines = [
     "Voice:",
     `Register: ${voice.register}. Warmth: ${voice.warmth}.`,
     `Hard limit, above any other instruction: ${voice.maxLines} líneas máximo — como un mensaje de texto real, no un documento.`,
-    "Avoid:",
-    ...voice.forbid.map((item) => `- ${item}`),
-  ].join("\n");
+  ];
+
+  if (voice.userPreferenceNotes.length > 0) {
+    lines.push(
+      "Esta persona ya mostró señales reales sobre cómo prefiere que le hables -- tenlo presente, con naturalidad, nunca lo menciones como una regla que estás siguiendo:",
+      ...voice.userPreferenceNotes.map((note) => `- ${note}`),
+    );
+  }
+
+  lines.push("Avoid:", ...voice.forbid.map((item) => `- ${item}`));
+
+  return lines.join("\n");
 }
 
 /**

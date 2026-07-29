@@ -15,8 +15,9 @@ import type { PresenceEngine, PresenceEngineOptions } from "./presence-engine";
  * `reflect` son formas distintas de UNA misma presencia -- sostener a
  * la persona en lo que ya está viviendo (Principio 6, Care Without
  * Dependency: acompañar su vida, no dirigirla). `listen`/`clarify`/
- * `curiosity` son formas de escuchar activamente antes que de aportar
- * (Principio 1, Active Listening) -- ninguna resuelve nada todavía.
+ * `curiosity`/`confirm` son formas de escuchar activamente antes que de
+ * aportar (Principio 1, Active Listening) -- ninguna resuelve nada
+ * todavía; `confirm` en particular está verificando, no afirmando.
  */
 const STRATEGY_TO_PRESENCE: Record<ConversationStrategyType, PresenceMode> = {
   challenge: "challenge",
@@ -29,6 +30,7 @@ const STRATEGY_TO_PRESENCE: Record<ConversationStrategyType, PresenceMode> = {
   listen: "listen",
   clarify: "listen",
   curiosity: "listen",
+  confirm: "listen",
 };
 
 const RATIONALE_BY_MODE: Record<PresenceMode, string> = {

@@ -6,6 +6,22 @@ export const BELIEF_STATUSES = ["active", "expired", "retracted"] as const;
 export type BeliefStatus = (typeof BELIEF_STATUSES)[number];
 
 /**
+ * `life_domain` -- una creencia sobre un área de la vida de la persona
+ * (el caso original, único hasta ahora). `communication_style` --
+ * cómo prefiere que LUZ le hable (registro, extensión, nivel técnico),
+ * nunca un área de vida -- `domain` (Wheel of Life) no tiene ningún
+ * valor que le quede bien, así que necesita su propio eje de
+ * clasificación en vez de sobrecargar "domain: undefined" como señal
+ * (otras creencias sin domain claro por razones distintas también
+ * quedarían undefined, ambiguo). Decidido por
+ * `BeliefConsolidationStrategy` en el momento de la propuesta, la
+ * misma fuente que ya decide `domain` -- nunca inferido después por
+ * ausencia de otro campo.
+ */
+export const BELIEF_CATEGORIES = ["life_domain", "communication_style"] as const;
+export type BeliefCategory = (typeof BELIEF_CATEGORIES)[number];
+
+/**
  * Creencia consolidada sobre una persona ("Juan es muy curioso"),
  * síntesis de varios `Insight`s a través del tiempo -- no un Insight en
  * sí. Propio aggregate (igual que `Insight`/`Concept`): opera sobre un
@@ -19,6 +35,7 @@ export interface Belief {
   subjectPersonId: EntityId;
   statement: string;
   domain?: LifeDomainType;
+  category: BeliefCategory;
   status: BeliefStatus;
   confidence: Confidence;
   firstObservedAt: Date;

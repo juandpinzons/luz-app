@@ -1,0 +1,1 @@
+ALTER TABLE "beliefs" ADD COLUMN "category" text DEFAULT 'life_domain' NOT NULL;

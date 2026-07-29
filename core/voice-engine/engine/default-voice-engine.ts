@@ -1,6 +1,9 @@
 import type { PresenceMode, PresenceStance } from "../../presence-engine";
+import type { CommunicationPreferenceSnapshot } from "../../reality";
 import type { VoiceRegister, VoiceSignature, VoiceWarmth } from "../entities/voice-signature";
 import type { VoiceEngine } from "./voice-engine";
+
+const NO_COMMUNICATION_STYLE: CommunicationPreferenceSnapshot = { items: [] };
 
 /**
  * Límite duro -- "2 a 4 líneas máximo, por encima de cualquier otra
@@ -56,12 +59,16 @@ const WARMTH_BY_MODE: Record<PresenceMode, VoiceWarmth> = {
  * mantener dos copias del mismo razonamiento.
  */
 export class DefaultVoiceEngine implements VoiceEngine {
-  speak(stance: PresenceStance): VoiceSignature {
+  speak(
+    stance: PresenceStance,
+    communicationStyle: CommunicationPreferenceSnapshot = NO_COMMUNICATION_STYLE,
+  ): VoiceSignature {
     return {
       register: REGISTER_BY_MODE[stance.mode],
       warmth: WARMTH_BY_MODE[stance.mode],
       maxLines: stance.mode === "silence" ? SILENCE_MAX_LINES : DEFAULT_MAX_LINES,
       forbid: [...BASE_FORBID],
+      userPreferenceNotes: communicationStyle.items.map((item) => item.statement),
     };
   }
 }

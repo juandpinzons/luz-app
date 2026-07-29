@@ -50,6 +50,20 @@ const RELEVANT_REASONING_LIMIT = 2;
  * acompañamiento genuino.
  */
 const RELEVANT_CONTRADICTION_LIMIT = 1;
+/** Ver docblock de `CommunicationPreferenceSnapshot`: un par de facetas estables, nunca una lista larga de instrucciones. */
+const RELEVANT_COMMUNICATION_PREFERENCE_LIMIT = 2;
+/** Ver docblock de `GrowingBeliefSnapshot`: como máximo una hipótesis en formación a la vez. */
+const RELEVANT_GROWING_BELIEF_LIMIT = 1;
+/**
+ * Banda de confianza "en formación" -- por debajo de esto es apenas
+ * una mención aislada (ruido, no vale la pena mencionar ni para
+ * confirmar); en o por encima de `BELIEF_CONFIDENCE_THRESHOLD` (55,
+ * `consolidate-belief-from-insight.ts`) ya es lo bastante sólida para
+ * `ReflectStrategyRule`, que la comparte como comprensión asentada, no
+ * como algo por confirmar.
+ */
+const GROWING_BELIEF_MIN_CONFIDENCE = 30;
+const GROWING_BELIEF_MAX_CONFIDENCE = 54;
 
 /**
  * `core/reality` es kernel compartido: nunca importa el tipo `Goal`/
@@ -180,6 +194,30 @@ export async function assembleRealitySnapshot(
     .sort((a, b) => b.detectedAt.getTime() - a.detectedAt.getTime())
     .slice(0, RELEVANT_CONTRADICTION_LIMIT);
 
+  // Fast User Understanding -- reutiliza el mismo `beliefs` ya
+  // obtenido arriba (para knowledgeGaps), nunca una segunda consulta.
+  // Comunicación: solo `category: "communication_style"`, activas,
+  // ordenadas por confianza -- las facetas más sólidas primero si hay
+  // más de `RELEVANT_COMMUNICATION_PREFERENCE_LIMIT`.
+  const communicationPreferences = beliefs
+    .filter((belief) => belief.category === "communication_style" && belief.status === "active")
+    .sort((a, b) => b.confidence.score - a.confidence.score)
+    .slice(0, RELEVANT_COMMUNICATION_PREFERENCE_LIMIT);
+
+  // Hipótesis en formación (cualquier categoría) -- la más reciente en
+  // reforzarse primero, como proxy real de "sigue vigente en la vida
+  // de la persona ahora mismo" (no hay ranking de Context Engine
+  // todavía en este punto del ensamblador).
+  const growingBeliefs = beliefs
+    .filter(
+      (belief) =>
+        belief.status === "active" &&
+        belief.confidence.score >= GROWING_BELIEF_MIN_CONFIDENCE &&
+        belief.confidence.score <= GROWING_BELIEF_MAX_CONFIDENCE,
+    )
+    .sort((a, b) => b.lastReinforcedAt.getTime() - a.lastReinforcedAt.getTime())
+    .slice(0, RELEVANT_GROWING_BELIEF_LIMIT);
+
   // Knowledge Gaps (Knowledge Engine V2) -- cuenta señales reales por
   // dominio, nunca inventa una para un dominio sin actividad todavía
   // (`rankKnowledgeGaps` ya representa eso como coverage 0). Beliefs
@@ -290,6 +328,28 @@ export async function assembleRealitySnapshot(
         id: item.id,
         description: item.description,
         domain: item.domain,
+      })),
+    },
+    // Cómo prefiere esta persona que LUZ le hable (Fast User
+    // Understanding) -- creencias reales, nunca inventadas, sobre
+    // registro/extensión/nivel técnico preferido. Sin ninguna, `items`
+    // queda vacío a propósito, mismo criterio de ausencia real que el
+    // resto de este ensamblador.
+    communicationStyle: {
+      items: communicationPreferences.map((belief) => ({
+        statement: belief.statement,
+        confidence: belief.confidence.score,
+      })),
+    },
+    // Una hipótesis sobre la persona todavía en formación (Fast User
+    // Understanding) -- candidata a confirmarse de forma orgánica
+    // (`ConfirmStrategyRule`), nunca a asumirse como hecho. Sin
+    // ninguna en la banda de confianza real, `items` queda vacío.
+    growingBeliefs: {
+      items: growingBeliefs.map((belief) => ({
+        id: belief.id,
+        statement: belief.statement,
+        confidence: belief.confidence.score,
       })),
     },
   };

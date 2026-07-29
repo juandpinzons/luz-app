@@ -21,3 +21,4 @@ ADR-0016 AIProvider Structured Output
 ADR-0017 AIProvider Streaming
 ADR-0018 Architecture V1 Frozen
 ADR-0019 AIProvider Registry
+ADR-0020 Fast User Understanding

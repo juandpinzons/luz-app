@@ -121,6 +121,10 @@ export const beliefEngineFlow: SmokeFlow = {
     assert(created.action === "created", `action incorrecta: ${created?.action}`);
     assert(created.belief.status === "active", `status incorrecto: ${created?.belief.status}`);
     assert(created.belief.confidence.score === 70, `confianza incorrecta: ${created?.belief.confidence.score}`);
+    assert(
+      created.belief.category === "life_domain",
+      `sin category propuesto explícitamente, debe recaer en 'life_domain' por defecto, fue '${created?.belief.category}'`,
+    );
 
     const historyAfterCreate = await repository.getHistory(context, created.belief.id);
     assert(historyAfterCreate.length === 1, `se esperaba 1 entrada de historial tras crear, hubo ${historyAfterCreate.length}`);
@@ -163,5 +167,58 @@ export const beliefEngineFlow: SmokeFlow = {
     const reinforceEntry = historyAfterReinforce.find((entry) => entry.previousConfidence === 70);
     assert(reinforceEntry !== undefined, "el historial debe registrar previousConfidence=70 (la confianza antes del refuerzo)");
     assert(reinforceEntry?.newConfidence === 83, `newConfidence incorrecto en el historial: ${reinforceEntry?.newConfidence}`);
+
+    // Fixture 6 (Fast User Understanding): una propuesta con
+    // category: "communication_style" debe persistirse con esa
+    // categoría y sin domain -- y, más importante, un texto IDÉNTICO
+    // propuesto después con category "life_domain" (default) NUNCA
+    // debe fusionarse con ella solo porque el texto coincide
+    // (findMatchingBelief exige category igual, no solo texto/domain
+    // -- el bug real que este cambio previene: una preferencia de
+    // comunicación fusionándose por accidente con una creencia de área
+    // de vida no relacionada).
+    const styleStatement = `Smoke ${crypto.randomUUID()}: prefiere respuestas cortas y directas, sin rodeos`;
+    const styleStrategy = new FakeBeliefConsolidationStrategy({
+      statement: styleStatement,
+      category: "communication_style",
+      confidence: 75,
+    });
+    const styleInsight = buildInsight("preference", "Smoke: pidió respuestas más cortas explícitamente");
+    const styleResult = await consolidateBeliefFromInsight(
+      repository,
+      styleStrategy,
+      context,
+      styleInsight,
+      evidence,
+    );
+    assert(styleResult !== null, "una propuesta de estilo de comunicación válida debería persistirse");
+    assert(
+      styleResult.belief.category === "communication_style",
+      `category incorrecta: ${styleResult?.belief.category}`,
+    );
+    assert(styleResult.belief.domain === undefined, "una creencia de estilo de comunicación nunca debería tener domain");
+
+    const crossCategoryStrategy = new FakeBeliefConsolidationStrategy({
+      statement: styleStatement, // mismo texto exacto a propósito
+      category: "life_domain",
+      confidence: 75,
+    });
+    const crossCategoryInsight = buildInsight("preference", "Smoke: insight distinto, mismo texto de creencia");
+    const crossCategoryResult = await consolidateBeliefFromInsight(
+      repository,
+      crossCategoryStrategy,
+      context,
+      crossCategoryInsight,
+      evidence,
+    );
+    assert(crossCategoryResult !== null, "la segunda propuesta también debería persistirse (como creación nueva)");
+    assert(
+      crossCategoryResult.action === "created",
+      `un texto idéntico pero con category distinta NUNCA debe fusionarse (findMatchingBelief debe exigir category igual) -- se esperaba 'created', fue '${crossCategoryResult?.action}'`,
+    );
+    assert(
+      crossCategoryResult.belief.id !== styleResult.belief.id,
+      "las dos creencias deben ser filas distintas -- una de comunicación, una de vida, nunca la misma",
+    );
   },
 };

@@ -1,7 +1,9 @@
 import type { EntityId } from "../life/value-objects/entity-id";
+import type { CommunicationPreferenceSnapshot } from "./communication-preference-snapshot";
 import type { ContradictionContextSnapshot } from "./contradiction-snapshot";
 import type { CuriosityContextSnapshot } from "./curiosity-snapshot";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
+import type { GrowingBeliefSnapshot } from "./growing-belief-snapshot";
 import type { InsightContextSnapshot } from "./insight-context-snapshot";
 import type { KnowledgeGapsSnapshot } from "./knowledge-gaps-snapshot";
 import type { LifeStateSnapshot } from "./life-state-snapshot";
@@ -36,4 +38,8 @@ export interface RealitySnapshot {
   curiosity: CuriosityContextSnapshot;
   /** `core/contradiction-engine` -- una tensión real ya detectada entre lo que la persona dijo y lo que sigue creyendo o persiguiendo, si hay una abierta. */
   contradictions: ContradictionContextSnapshot;
+  /** `core/belief-engine` (`category: "communication_style"`) -- cómo prefiere esta persona que LUZ le hable, si ya hay señal real. */
+  communicationStyle: CommunicationPreferenceSnapshot;
+  /** `core/belief-engine` -- una hipótesis sobre la persona todavía en formación (confianza 30-54), candidata a confirmarse de forma orgánica, si hay una. */
+  growingBeliefs: GrowingBeliefSnapshot;
 }

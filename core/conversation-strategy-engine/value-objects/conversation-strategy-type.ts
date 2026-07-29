@@ -6,9 +6,11 @@
  * dominio (`ContextItemSource`, `ResponseIntent`); la presentación
  * (`FollowUp`) es responsabilidad de quien renderiza el prompt, no de
  * este value object (`features/chat`, no `core/`). `reflect`
- * (Knowledge Engine V2, Reasoning Engine) es la más reciente: compartir
- * una `ReasoningConclusion` ya validada, no solo reaccionar al mensaje
- * inmediato.
+ * (Knowledge Engine V2, Reasoning Engine) comparte una
+ * `ReasoningConclusion` ya sólida (confianza >=55); `confirm` (Fast
+ * User Understanding) es su contraparte para una hipótesis todavía en
+ * formación (confianza 30-54) -- nunca se comparte como hecho, se
+ * ofrece a confirmar de forma orgánica.
  */
 export const CONVERSATION_STRATEGY_TYPES = [
   "listen",
@@ -21,6 +23,7 @@ export const CONVERSATION_STRATEGY_TYPES = [
   "follow_up",
   "curiosity",
   "reflect",
+  "confirm",
 ] as const;
 
 export type ConversationStrategyType = (typeof CONVERSATION_STRATEGY_TYPES)[number];

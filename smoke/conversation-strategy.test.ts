@@ -43,6 +43,8 @@ function emptySnapshot(): RealitySnapshot {
     reasoning: { items: [] },
     curiosity: { pendingQuestion: null },
     contradictions: { items: [] },
+    communicationStyle: { items: [] },
+    growingBeliefs: { items: [] },
   };
 }
 
@@ -213,6 +215,27 @@ export const conversationStrategyFlow: SmokeFlow = {
     assert(
       (await selectStrategyFor(curiositySnapshot, false)) === "curiosity",
       "un dominio de vida (health) sin ningún goal/project/habit clasificado ahí, con otro dominio (career) ya cubierto, debería producir 'curiosity'",
+    );
+
+    const confirmSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      growingBeliefs: {
+        items: [
+          {
+            id: createEntityId("growing-belief-1"),
+            statement: "Le está dedicando gran parte de su energía a un proyecto nuevo",
+            confidence: 42,
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(confirmSnapshot, false)) === "confirm",
+      "una hipótesis en formación (growingBeliefs) debería producir 'confirm'",
+    );
+    assert(
+      (await selectStrategyFor(confirmSnapshot, true)) !== "confirm",
+      "'confirm' nunca debería ganar en el primer contacto, sin importar qué hipótesis existan",
     );
 
     const followUpSnapshot: RealitySnapshot = {

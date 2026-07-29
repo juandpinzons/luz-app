@@ -34,4 +34,15 @@ export interface VoiceSignature {
    * modelo.
    */
   forbid: string[];
+  /**
+   * Frases reales, ya validadas como `Belief`
+   * (`category: "communication_style"`, `core/belief-engine`), sobre
+   * cómo esta persona prefiere que le hablen -- nunca generadas aquí,
+   * nunca reinterpretadas: mismo criterio que `ReflectStrategyRule`
+   * comparte una `ReasoningConclusion`, tal cual, sin traducir su
+   * significado. Vacío por defecto (`speak()` sin segundo argumento) --
+   * la mayoría de las respuestas todavía no tienen ninguna señal real
+   * sobre esto.
+   */
+  userPreferenceNotes: string[];
 }

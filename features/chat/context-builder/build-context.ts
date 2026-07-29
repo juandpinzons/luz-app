@@ -106,7 +106,11 @@ export async function buildContext(
   // contrato de esta UI), así que `"silence"` no es una salida
   // alcanzable desde aquí hoy (ver docblock de `DefaultPresenceEngine`).
   const presence = createPresenceEngine().decide(conversationStrategy);
-  const voice = createVoiceEngine().speak(presence);
+  // Fast User Understanding: `communicationStyle` viaja directo de
+  // RealitySnapshot a Voice -- no es una decisión de Conversation
+  // Strategy (QUÉ lograr) ni de Presence (CÓMO estar presente), es
+  // puramente CÓMO suena, la responsabilidad exclusiva de Voice.
+  const voice = createVoiceEngine().speak(presence, realitySnapshot.communicationStyle);
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
     (rule) => rule.applies({ conversation, contextItems }),

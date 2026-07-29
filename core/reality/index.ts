@@ -6,4 +6,6 @@ export * from "./knowledge-gaps-snapshot";
 export * from "./reasoning-snapshot";
 export * from "./curiosity-snapshot";
 export * from "./contradiction-snapshot";
+export * from "./communication-preference-snapshot";
+export * from "./growing-belief-snapshot";
 export * from "./reality-snapshot";

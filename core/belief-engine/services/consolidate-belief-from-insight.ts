@@ -4,7 +4,7 @@ import { createEntityId, type EntityId } from "../../life/value-objects/entity-i
 import type { Insight } from "../../knowledge-engine/entities/insight";
 import type { InsightType } from "../../knowledge-engine/value-objects/insight-type";
 import type { BeliefConsolidationStrategy } from "../consolidation/belief-consolidation-strategy";
-import type { Belief } from "../entities/belief";
+import type { Belief, BeliefCategory } from "../entities/belief";
 import type { BeliefRepository } from "../repositories/belief.repository";
 
 /**
@@ -32,12 +32,20 @@ async function findMatchingBelief(
   context: LifeGraphContext,
   statement: string,
   domain: Belief["domain"],
+  category: BeliefCategory,
 ): Promise<Belief | null> {
   const existing = await repository.list(context);
   return (
     existing.find(
       (belief) =>
         belief.status !== "retracted" &&
+        // `category` es una coincidencia exacta siempre, nunca la
+        // relajación de "domain === undefined" que sí aplica abajo --
+        // sin esto, una creencia de estilo de comunicación (siempre
+        // sin domain) podría fusionarse por accidente con una creencia
+        // de área de vida no relacionada que también quedó sin domain,
+        // solo porque el texto coincide por casualidad.
+        belief.category === category &&
         (belief.domain === domain || domain === undefined) &&
         titlesLikelyMatch(belief.statement, statement),
     ) ?? null
@@ -74,12 +82,14 @@ export async function consolidateBeliefFromInsight(
   }
 
   const now = new Date();
+  const category: BeliefCategory = proposed.category ?? "life_domain";
 
   const match = await findMatchingBelief(
     repository,
     context,
     proposed.statement,
     proposed.domain,
+    category,
   );
 
   if (match) {
@@ -129,6 +139,7 @@ export async function consolidateBeliefFromInsight(
     subjectPersonId: context.personId,
     statement: proposed.statement,
     domain: proposed.domain,
+    category,
     status: "active",
     confidence: { score: proposed.confidence, assignedAt: now },
     firstObservedAt: now,
