@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
+import { beliefEvidence, conceptEvidence } from "../../../core/db/schema";
 import {
   AIBeliefConsolidationStrategy,
   DrizzleBeliefRepository,
@@ -163,7 +165,51 @@ export async function enrichKnowledgeGraph(
     await runStage("runReasoning", runReasoning);
     await runStage("runCuriosity", runCuriosity);
 
+    /**
+     * Idempotencia por insight (auditoría War Room 2026-07-29,
+     * reproducido con estrategias deterministas contra Postgres real:
+     * llamar dos veces a `extractConceptsFromInsight`/
+     * `consolidateBeliefFromInsight` para el MISMO insight duplica
+     * `concept_evidence`/`belief_evidence`/`belief_history`, e infla la
+     * confianza de un Belief ya existente -- 90 -> 98 sin ninguna
+     * evidencia nueva real, solo por reprocesar). Esto SÍ puede pasar
+     * en producción: si Vercel mata la función a mitad de un job
+     * (`maxDuration`, `app/api/cron/knowledge-worker/route.ts`) después
+     * de enriquecer con éxito el insight A pero antes de terminar el
+     * insight B, el job queda "processing" hasta que el lease expira
+     * (`PROCESSING_LEASE_MS`, `process-knowledge-job.ts`) y se
+     * reprocesa desde cero -- sin esta guarda, A se enriquecería dos
+     * veces. `getOrCreateConcept` ya dedupe el Concept en sí por label,
+     * pero nunca su evidencia/relaciones -- por eso la guarda es
+     * necesaria incluso ahí. Se revisa evidencia real ya existente
+     * (`concept_evidence`/`belief_evidence` por `insightId`) en vez de
+     * un campo de estado nuevo -- una sola fuente de verdad, nunca una
+     * bandera que se pueda desincronizar de los datos reales.
+     */
+    async function wasAlreadyEnriched(insightId: EntityId): Promise<boolean> {
+      const [existingConceptEvidence] = await db
+        .select({ id: conceptEvidence.id })
+        .from(conceptEvidence)
+        .where(eq(conceptEvidence.insightId, insightId))
+        .limit(1);
+      if (existingConceptEvidence) {
+        return true;
+      }
+
+      const [existingBeliefEvidence] = await db
+        .select({ id: beliefEvidence.id })
+        .from(beliefEvidence)
+        .where(eq(beliefEvidence.insightId, insightId))
+        .limit(1);
+
+      return existingBeliefEvidence !== undefined;
+    }
+
     async function enrichOneInsight(insight: Insight): Promise<void> {
+      if (await wasAlreadyEnriched(insight.id)) {
+        return;
+      }
+
       const evidence = await insightRepository.getEvidence(context, insight.id);
       const evidenceMemories = evidence
         .map((item) => memoryById.get(item.memoryId))
