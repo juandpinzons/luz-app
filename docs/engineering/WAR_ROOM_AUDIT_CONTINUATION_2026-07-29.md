@@ -1,6 +1,6 @@
 # War Room Audit — Continuación independiente, 2026-07-29
 
-**Status:** En curso (un hallazgo pendiente de auditoría en segundo plano)\
+**Status:** Final\
 **Rol:** Principal Engineer, auditoría independiente, sin repetir el War Room anterior\
 **Restricción explícita del Founder para este bloque:** ningún contrato de motor compartido (Memory/Knowledge/Reasoning/Context Engine) se modifica; ninguna mejora especulativa; evidencia sobre intuición.
 
@@ -33,6 +33,25 @@ esquema, cero tabla nueva):
    Arreglado con `Promise.all`, mismo método público de
    `BeliefRepository`, cero cambio de contrato.
 
+Una segunda auditoría independiente (idempotencia, caché, servicios
+huérfanos, paginación, feature flags, lógica duplicada) encontró dos
+hallazgos más reales, uno de los cuales también se implementó:
+
+4. **`/memories` sin ningún límite, ni siquiera de seguridad** (a
+   diferencia de `/conversations`, que ya tiene `LIMIT 200` desde un
+   bloque anterior) — la única lectura de todo el repo sin ningún
+   techo. Arreglado íntegramente dentro de `features/memories/`, sin
+   tocar `DrizzleMemoryRepository`/`MemoryRepository`.
+5. **Condición de carrera en la creación de conversaciones**
+   (`getOrCreateConversation`) — real, pero **no implementada**: a
+   diferencia de las razas de `find-or-create-*` (donde "mismo título
+   = misma entidad" es la respuesta obviamente correcta), acá no hay
+   una única corrección mecánica posible sin decidir un contrato
+   distinto (que el cliente genere el `conversationId` desde el primer
+   mensaje). Un advisory lock por sí solo no resuelve el problema
+   descrito — solo serializaría las dos escrituras, ambas seguirían
+   creando su propia fila. Documentado, no forzado.
+
 Ninguna decisión arquitectónica nueva se tomó ni se propuso en este
 bloque — todo lo implementado es, deliberadamente, trabajo dentro de
 límites ya establecidos.
@@ -50,6 +69,9 @@ límites ya establecidos.
 | `get-upcoming-deadlines.ts` filtra en JS, no SQL | BAJO | Documentado, no implementado |
 | Índice compuesto faltante en `memories` (life_graph_id, status) | BAJO→MEDIO a mediano plazo | Documentado, no implementado |
 | N+1 paralelo en evidencia de insights (`explain-insight.ts`) | BAJO | Documentado, no implementado |
+| `/memories` sin ningún límite ni siquiera de seguridad, + N+1 de `getConnections` | **ALTO** (a mediano plazo) | Implementado |
+| Condición de carrera en creación de conversaciones sin `conversationId` | MEDIO | Documentado, no implementado (sin corrección mecánica segura) |
+| `formatRelativeTime` duplicada en 5 archivos | BAJO | Documentado, no implementado (mantenimiento, no riesgo de producción) |
 
 ------------------------------------------------------------------------
 
@@ -149,11 +171,44 @@ en `describe-evolution.ts` y `collect-domain-movements.ts`, mismo
 método público de `BeliefRepository` (`getHistory`), cero cambio de
 contrato.
 
+## 3.4 [ALTO a mediano plazo, IMPLEMENTADO] `/memories` sin ningún límite
+
+**Hallazgo:** `search-memories.ts`, camino sin `text` de búsqueda,
+llamaba a `DrizzleMemoryRepository.list(context)` — sin `LIMIT`, sin
+filtrar `status` en SQL (se filtraba después, en JS). La única lectura
+de todo el repo sin ningún techo, ni siquiera de seguridad —
+`/conversations` ya tiene `LIMIT 200` desde un bloque anterior de esta
+misma auditoría; `/memories` no tenía nada equivalente. Además, por
+cada una de hasta 100 memorias mostradas, una consulta `getConnections`
+individual (paralela vía `Promise.all`, pero igual 100 round-trips).
+
+**Por qué no se tocó `DrizzleMemoryRepository`/`MemoryRepository`:**
+ese método tiene fan-out real (`get-life-timeline.ts`,
+`DefaultConnectStage` internamente) — cambiarlo habría afectado
+consumidores fuera del alcance de este arreglo puntual, exactamente el
+tipo de "modificar un contrato compartido" que el Founder pidió evitar.
+
+**Fix, íntegramente dentro de `features/memories/search-memories.ts`:**
+1. `listRecentActiveMemories`: consulta local, directa a la tabla
+   `memories` (mismo patrón que ya usa `app/dashboard/page.tsx` para
+   `conversations` — leer un schema directamente desde `features/` no
+   es nuevo en este código base), con `status = 'active'` y el orden
+   ya en SQL, `LIMIT RESULT_CAP` (100, el mismo cap que ya existía en
+   JS, ahora aplicado antes de traer los datos, no después).
+2. `loadConnectionsByMemoryId`: una sola consulta agrupada por lote
+   (`IN (...)` en ambas direcciones, sobre el pool ya acotado a 100),
+   en vez de hasta 100 consultas individuales — mismo patrón que
+   `countConnectionsByMemoryId` en §3.2, aquí con las filas completas
+   en vez de solo el conteo.
+
+Cero cambio a `Memory`/`MemoryConnection` (formas de entidad), cero
+migración, cero método nuevo en ninguna interfaz de `core/`.
+
 ------------------------------------------------------------------------
 
 # 4. Validación
 
-- **Typecheck:** limpio, en cada uno de los tres cambios y en el
+- **Typecheck:** limpio, en cada uno de los cuatro cambios y en el
   conjunto final.
 - **Lint:** limpio.
 - **Build de producción:** limpio, en cada paso.
@@ -194,6 +249,29 @@ contrato.
   esta sesión en "ninguna migración salvo estrictamente necesaria."
   Documentado como recomendación de bajo riesgo para cuando se decida
   tocar el esquema por otra razón.
+- **Condición de carrera en `getOrCreateConversation`
+  (`features/chat/services/send-message.ts`)**: rechazado, con
+  justificación técnica, no solo de alcance. La auditoría paralela
+  encontró que, sin `conversationId`, dos mensajes concurrentes del
+  mismo usuario (multi-pestaña, reintento de red — el guard `isSending`
+  del cliente ya cubre el doble-click en una sola pestaña) pueden crear
+  dos conversaciones donde se quiso decir una. A diferencia de las
+  razas de `find-or-create-*` (donde "mismo título = misma entidad" es
+  la corrección obviamente correcta), acá **un advisory lock no
+  resuelve nada**: serializaría las dos escrituras, pero ambas
+  seguirían creando su propia fila -- el problema no es de
+  concurrencia sobre un mismo recurso, es de falta de una señal de
+  idempotencia. La corrección real (que el cliente genere el
+  `conversationId` desde el primer POST, y el servidor inserte con
+  `ON CONFLICT DO NOTHING` sobre ese id) cambia el contrato de
+  `POST /api/chat` -- una decisión de producto/API, no un parche
+  mecánico. Documentado para que se decida deliberadamente, no
+  implementado a medias.
+- **`formatRelativeTime` duplicada en 5 archivos**: confirmado por la
+  auditoría paralela, real, pero es deuda de mantenimiento, no un
+  riesgo de producción -- ninguna de las 5 copias ha divergido todavía.
+  Fuera del criterio explícito de esta continuación ("no busques
+  mejoras estéticas ni refactors").
 - **Score de similitud de texto en la recuperación estructurada**: el
   Founder mencionó "similitud" como factor posible, pero
   `StructuredMemoryRetrievalStrategy` es explícitamente la mitad *no*
@@ -220,12 +298,17 @@ decisión de infraestructura/arquitectura ajena a este bloque.
 
 1. Decisión de infraestructura para el throughput del Knowledge Engine
    (heredado, sigue siendo lo más urgente).
-2. Unificar el fetch triplicado de Goals/Projects en Dashboard — bajo
+2. Decidir el contrato de `getOrCreateConversation` (¿`conversationId`
+   generado por el cliente desde el primer mensaje?) — bajo esfuerzo
+   una vez decidido, pero es una decisión de producto/API primero.
+3. Unificar el fetch triplicado de Goals/Projects en Dashboard — bajo
    esfuerzo, beneficio inmediato en latencia de la página más visitada.
-3. Índice compuesto en `memories` — trivial una vez que se decida tocar
+4. Índice compuesto en `memories` — trivial una vez que se decida tocar
    el esquema por cualquier otra razón.
-4. Política de borrado/retención real (heredado).
-5. Extender el ranking de recuperación a la mitad semántica (embeddings,
+5. Política de borrado/retención real (heredado).
+6. Extraer `formatRelativeTime` a un solo lugar — cosmético, bajo
+   esfuerzo, sin urgencia.
+7. Extender el ranking de recuperación a la mitad semántica (embeddings,
    PR-020) — mayor esfuerzo, pero es la extensión natural de lo ya
    implementado en este bloque.
 

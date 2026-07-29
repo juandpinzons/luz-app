@@ -1,10 +1,9 @@
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
+import { memories, memoryConnections } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life";
-import {
-  createMemoryEngine,
-  DrizzleMemoryRepository,
-  type Memory,
-} from "../../../core/memory-engine";
+import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
+import { createEntityId, type EntityId } from "../../../core/life/value-objects/entity-id";
 
 const RESULT_CAP = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,18 +52,128 @@ function groupByTimeLabel(memories: MemoryWithConnections[]): MemoryTimeGroup[] 
 }
 
 /**
+ * War Room 2026-07-29 (continuación): el camino sin `text` llamaba a
+ * `MemoryRepository.list()` -- sin límite, sin filtro de `status` en
+ * SQL (se filtraba después, en JS) -- la única lectura de todo el
+ * repo sin ningún techo, ni siquiera de seguridad (a diferencia de
+ * `/conversations`, que ya tiene un `LIMIT 200`). Reemplazado por una
+ * consulta local, directa a `memories` (mismo patrón que ya usa
+ * `app/dashboard/page.tsx` para `conversations` -- leer un schema
+ * directamente desde `features/` no es nuevo en este código base),
+ * con `status = 'active'` y el orden real ya en SQL, acotada a
+ * `RESULT_CAP`. Nunca se tocó `DrizzleMemoryRepository.list()` ni
+ * `MemoryRepository` -- ese método sigue exactamente igual para sus
+ * otros consumidores (`get-life-timeline.ts`, `DefaultConnectStage`).
+ */
+function toActiveMemory(row: {
+  id: string;
+  lifeGraphId: string;
+  personId: string | null;
+  type: Memory["type"];
+  content: string;
+  source: Memory["source"];
+  sourceId: string | null;
+  status: Memory["status"];
+  rankScore: number | null;
+  rankedAt: Date | null;
+  occurredAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): Memory {
+  return {
+    id: createEntityId(row.id),
+    lifeGraphId: createEntityId(row.lifeGraphId),
+    personId: row.personId ? createEntityId(row.personId) : undefined,
+    type: row.type,
+    content: row.content,
+    source: row.source,
+    sourceId: row.sourceId ?? undefined,
+    status: row.status,
+    rank:
+      row.rankScore !== null && row.rankedAt !== null
+        ? { score: row.rankScore, rankedAt: row.rankedAt }
+        : undefined,
+    occurredAt: row.occurredAt ?? undefined,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+async function listRecentActiveMemories(
+  db: Database,
+  context: LifeGraphContext,
+): Promise<Memory[]> {
+  const rows = await db
+    .select()
+    .from(memories)
+    .where(
+      and(eq(memories.lifeGraphId, context.lifeGraphId), eq(memories.status, "active")),
+    )
+    .orderBy(sql`${memories.occurredAt} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
+    .limit(RESULT_CAP);
+
+  return rows.map(toActiveMemory);
+}
+
+/**
+ * War Room 2026-07-29 (continuación): antes, una consulta
+ * `getConnections` por memoria (hasta `RESULT_CAP` = 100, paralelas
+ * pero igual 100 round-trips). Una sola consulta agrupada por lote,
+ * `IN (...)` en ambas direcciones -- mismo patrón ya usado en
+ * `structured-memory-retrieval-strategy.ts` para contar conexiones,
+ * aquí se necesitan las filas completas, no solo el conteo.
+ */
+async function loadConnectionsByMemoryId(
+  db: Database,
+  context: LifeGraphContext,
+  candidateIds: EntityId[],
+): Promise<Map<string, EntityId[]>> {
+  if (candidateIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await db
+    .select({
+      fromMemoryId: memoryConnections.fromMemoryId,
+      toMemoryId: memoryConnections.toMemoryId,
+    })
+    .from(memoryConnections)
+    .where(
+      and(
+        eq(memoryConnections.lifeGraphId, context.lifeGraphId),
+        or(
+          inArray(memoryConnections.fromMemoryId, candidateIds),
+          inArray(memoryConnections.toMemoryId, candidateIds),
+        ),
+      ),
+    );
+
+  const connectedIdsByMemoryId = new Map<string, EntityId[]>();
+  const addEdge = (memoryId: string, otherId: string) => {
+    const list = connectedIdsByMemoryId.get(memoryId) ?? [];
+    list.push(createEntityId(otherId));
+    connectedIdsByMemoryId.set(memoryId, list);
+  };
+  for (const row of rows) {
+    addEdge(row.fromMemoryId, row.toMemoryId);
+    addEdge(row.toMemoryId, row.fromMemoryId);
+  }
+  return connectedIdsByMemoryId;
+}
+
+/**
  * Memorias de Memories (Sprint 4, docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md
  * §3.3): con `text`, reutiliza `StructuredMemoryRetrievalStrategy` (ya
- * real, mismo mecanismo que el chat) — sin `text`, `MemoryRepository.list`
- * filtrado a `active`. Se reordena por `occurredAt` (nunca por rank)
- * porque esta pantalla es cronológica, no de relevancia — y, si se
- * pide, se agrupa por Hoy/Esta semana/Este mes/Más atrás.
+ * real, mismo mecanismo que el chat, ya acotada). Sin `text`,
+ * `listRecentActiveMemories` (arriba) -- también acotada, nunca la
+ * tabla completa. Se reordena por `occurredAt` (nunca por rank) porque
+ * esta pantalla es cronológica, no de relevancia — y, si se pide, se
+ * agrupa por Hoy/Esta semana/Este mes/Más atrás.
  *
- * `connectedContents` se resuelve contra el mismo lote ya cargado
- * (`MemoryConnection`, ya real) — si la memoria conectada quedó fuera
- * (p. ej. un `text` que la filtró, o el cap de 100), esa conexión no
- * se muestra en vez de disparar una consulta adicional; es el límite
- * más pequeño posible, no un olvido.
+ * `connectedContents` se resuelve contra el mismo lote ya cargado — si
+ * la memoria conectada quedó fuera (p. ej. un `text` que la filtró, o
+ * el cap de 100), esa conexión no se muestra en vez de disparar una
+ * consulta adicional; es el límite más pequeño posible, no un olvido.
  */
 export async function searchMemories(
   db: Database,
@@ -81,36 +190,28 @@ export async function searchMemories(
   context: LifeGraphContext,
   options: { text?: string; groupByTime?: boolean } = {},
 ): Promise<MemoryWithConnections[] | MemoryTimeGroup[]> {
-  const repository = new DrizzleMemoryRepository(db);
-
   const raw = options.text
     ? await createMemoryEngine(db).retrieve(context, {
         text: options.text,
         limit: RESULT_CAP,
       })
-    : (await repository.list(context)).filter(
-        (memory) => memory.status === "active",
-      );
+    : await listRecentActiveMemories(db, context);
 
   const sorted = sortByRecency(raw).slice(0, RESULT_CAP);
   const contentById = new Map(sorted.map((memory) => [memory.id, memory.content]));
-
-  const enriched: MemoryWithConnections[] = await Promise.all(
-    sorted.map(async (memory) => {
-      const connections = await repository.getConnections(context, memory.id);
-      const connectedContents = connections
-        .map((connection) =>
-          contentById.get(
-            connection.fromMemoryId === memory.id
-              ? connection.toMemoryId
-              : connection.fromMemoryId,
-          ),
-        )
-        .filter((content): content is string => Boolean(content));
-
-      return { ...memory, connectedContents };
-    }),
+  const connectedIdsByMemoryId = await loadConnectionsByMemoryId(
+    db,
+    context,
+    sorted.map((memory) => memory.id),
   );
+
+  const enriched: MemoryWithConnections[] = sorted.map((memory) => {
+    const connectedContents = (connectedIdsByMemoryId.get(memory.id) ?? [])
+      .map((otherId) => contentById.get(otherId))
+      .filter((content): content is string => Boolean(content));
+
+    return { ...memory, connectedContents };
+  });
 
   return options.groupByTime ? groupByTimeLabel(enriched) : enriched;
 }
