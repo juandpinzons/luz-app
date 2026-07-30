@@ -223,15 +223,22 @@ export async function enrichKnowledgeGraph(
         evidenceMemories,
       );
 
-      for (const concept of touchedConcepts) {
-        const conceptEvidence = await conceptRepository.listEvidence(context, concept.id);
-        const conceptRelations = await conceptRepository.listRelations(context, concept.id);
-        await updateImportance(importanceRepository, context, "concept", concept.id, {
-          evidenceCount: conceptEvidence.length,
-          connectionCount: conceptRelations.length,
-          recencyDays: 0,
-        });
-      }
+      // Conceptos independientes entre sí -- se procesan en paralelo en
+      // vez de secuencialmente, uno a la vez (auditoría de rendimiento,
+      // Fase I "Graph Performance").
+      await Promise.all(
+        touchedConcepts.map(async (concept) => {
+          const [conceptEvidence, conceptRelations] = await Promise.all([
+            conceptRepository.listEvidence(context, concept.id),
+            conceptRepository.listRelations(context, concept.id),
+          ]);
+          await updateImportance(importanceRepository, context, "concept", concept.id, {
+            evidenceCount: conceptEvidence.length,
+            connectionCount: conceptRelations.length,
+            recencyDays: 0,
+          });
+        }),
+      );
 
       await updateImportance(importanceRepository, context, "insight", insight.id, {
         evidenceCount: evidence.length,
@@ -254,8 +261,8 @@ export async function enrichKnowledgeGraph(
       const { belief } = consolidation;
       const beliefEvidence = await beliefRepository.getEvidence(context, belief.id);
 
-      const otherBeliefs = (await beliefRepository.list(context)).filter(
-        (candidate) => candidate.id !== belief.id && candidate.status === "active",
+      const otherBeliefs = (await beliefRepository.listActive(context)).filter(
+        (candidate) => candidate.id !== belief.id,
       );
       const beliefCandidates: ContradictionCandidate[] = otherBeliefs
         .slice(0, MAX_CONTRADICTION_CANDIDATES)
@@ -317,23 +324,28 @@ export async function enrichKnowledgeGraph(
       );
 
       const reasoningRepository = new DrizzleReasoningRepository(db);
-      for (const conclusion of conclusions) {
-        const conclusionEvidence = await reasoningRepository.getEvidence(context, conclusion.id);
-        await updateImportance(
-          importanceRepository,
-          context,
-          "reasoning_conclusion",
-          conclusion.id,
-          {
-            evidenceCount: conclusionEvidence.length,
-            confidence: conclusion.confidence.score,
-            recencyDays: 0,
-            involvedInOpenContradiction: conclusionEvidence.some(
-              (item) => item.ref.role === "contradicting",
-            ),
-          },
-        );
-      }
+      // Conclusiones independientes entre sí -- mismo criterio que el
+      // loop de conceptos arriba (auditoría de rendimiento, Fase I
+      // "Graph Performance").
+      await Promise.all(
+        conclusions.map(async (conclusion) => {
+          const conclusionEvidence = await reasoningRepository.getEvidence(context, conclusion.id);
+          await updateImportance(
+            importanceRepository,
+            context,
+            "reasoning_conclusion",
+            conclusion.id,
+            {
+              evidenceCount: conclusionEvidence.length,
+              confidence: conclusion.confidence.score,
+              recencyDays: 0,
+              involvedInOpenContradiction: conclusionEvidence.some(
+                (item) => item.ref.role === "contradicting",
+              ),
+            },
+          );
+        }),
+      );
     }
 
     /**

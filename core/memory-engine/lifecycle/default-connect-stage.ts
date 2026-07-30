@@ -95,11 +95,12 @@ export class DefaultConnectStage implements ConnectStage {
       );
     }
 
-    const all = await this.repository.list(context);
-    const candidates = all.filter(
-      (candidate) =>
-        candidate.id !== memory.id && candidate.status === "active",
-    );
+    // `listActive()`, no `list()` + filtro en JS -- evita hidratar todo
+    // el historial de memorias (archivadas/olvidadas incluidas, que
+    // solo crece con el tiempo) en cada memoria nueva capturada
+    // (auditoría de rendimiento, Fase I "Graph Performance").
+    const active = await this.repository.listActive(context);
+    const candidates = active.filter((candidate) => candidate.id !== memory.id);
 
     const matches = [
       ...sameOriginMatches(memory, candidates),
@@ -117,22 +118,23 @@ export class DefaultConnectStage implements ConnectStage {
     }
 
     const now = new Date();
-    const connections: MemoryConnection[] = [];
 
-    for (const [targetId, strength] of strongestByTarget) {
-      const connection: MemoryConnection = {
-        id: createEntityId(crypto.randomUUID()),
-        lifeGraphId: context.lifeGraphId,
-        fromMemoryId: memory.id,
-        toMemoryId: targetId,
-        strength,
-        createdAt: now,
-      };
-
-      connections.push(
-        await this.repository.saveConnection(context, connection),
-      );
-    }
+    // Cada conexión es una fila independiente (id propio, sin relación
+    // entre sí) -- escribirlas en paralelo es seguro y evita N
+    // ida-y-vueltas secuenciales cuando una memoria coincide con varios
+    // targets (auditoría de rendimiento, Fase I "Graph Performance").
+    const connections = await Promise.all(
+      [...strongestByTarget].map(([targetId, strength]) =>
+        this.repository.saveConnection(context, {
+          id: createEntityId(crypto.randomUUID()),
+          lifeGraphId: context.lifeGraphId,
+          fromMemoryId: memory.id,
+          toMemoryId: targetId,
+          strength,
+          createdAt: now,
+        }),
+      ),
+    );
 
     return connections;
   }

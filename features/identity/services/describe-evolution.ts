@@ -37,31 +37,28 @@ export async function describeEvolution(
     insightRepository.list(context),
   ]);
 
-  // War Room 2026-07-29: antes, un `await` por Belief dentro de un
-  // `for` -- round-trips estrictamente secuenciales a Postgres, nunca
-  // paralelizados (a diferencia del `Promise.all` de arriba). Con
-  // decenas de Beliefs acumulados (nada los archiva ni los borra
-  // todavía) esto añadía segundos de latencia solo para reconstruir el
-  // historial de confianza. Mismo llamador, mismo método público de
-  // `BeliefRepository` (`getHistory`, sin tocar su contrato) -- solo se
-  // invoca en paralelo en vez de uno por uno.
-  const beliefHistories = await Promise.all(
-    beliefs.map((belief) => beliefRepository.getHistory(context, belief.id)),
-  );
-
+  // Una sola consulta (`inArray`) para el historial de TODAS las
+  // creencias, no una por creencia -- antes eran N ida-y-vueltas
+  // secuenciales a Postgres, una por cada `belief` (auditoría de
+  // rendimiento, Fase I "Graph Performance").
   const beliefChanges: BeliefChangeInput[] = [];
-  beliefs.forEach((belief, index) => {
-    for (const entry of beliefHistories[index]) {
-      beliefChanges.push({
-        beliefId: belief.id,
-        statement: belief.statement,
-        domain: belief.domain,
-        previousConfidence: entry.previousConfidence,
-        newConfidence: entry.newConfidence,
-        changedAt: entry.changedAt,
-      });
-    }
-  });
+  const beliefById = new Map(beliefs.map((belief) => [belief.id, belief]));
+  const allHistory = await beliefRepository.getHistoryForBeliefs(
+    context,
+    beliefs.map((belief) => belief.id),
+  );
+  for (const entry of allHistory) {
+    const belief = beliefById.get(entry.beliefId);
+    if (!belief) continue;
+    beliefChanges.push({
+      beliefId: belief.id,
+      statement: belief.statement,
+      domain: belief.domain,
+      previousConfidence: entry.previousConfidence,
+      newConfidence: entry.newConfidence,
+      changedAt: entry.changedAt,
+    });
+  }
 
   const insightDiscoveries: InsightDiscoveryInput[] = insights
     .filter((insight) => insight.status === "validated" && insight.validatedAt)

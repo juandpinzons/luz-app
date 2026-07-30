@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import type { Database, Transaction } from "../../db/client";
 import { type ProjectRow, lifeProjects } from "../../db/schema";
 import type { Project } from "../entities/project";
 import type { LifeGraphContext } from "../life-graph-context";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
+import { INACTIVE_PROJECT_STATUSES } from "../value-objects/project-status";
 import type { ProjectInput, ProjectRepository } from "./project.repository";
 
 function toProject(row: ProjectRow): Project {
@@ -49,6 +50,21 @@ export class DrizzleProjectRepository implements ProjectRepository {
       .select()
       .from(lifeProjects)
       .where(eq(lifeProjects.lifeGraphId, context.lifeGraphId));
+
+    return rows.map(toProject);
+  }
+
+  /** Igual que `list()` filtrado a "no completado/cancelado", pero resuelto en SQL (`life_projects_life_graph_id_status_idx`) -- mismo criterio que `DrizzleGoalRepository.listActive`. */
+  async listActive(context: LifeGraphContext): Promise<Project[]> {
+    const rows = await this.db
+      .select()
+      .from(lifeProjects)
+      .where(
+        and(
+          eq(lifeProjects.lifeGraphId, context.lifeGraphId),
+          notInArray(lifeProjects.status, [...INACTIVE_PROJECT_STATUSES]),
+        ),
+      );
 
     return rows.map(toProject);
   }

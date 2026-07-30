@@ -60,15 +60,26 @@ export class DefaultReasoningEngine implements ReasoningEngine {
         continue;
       }
 
+      // Una sola consulta (`inArray`) para la evidencia de TODOS los
+      // insights del cluster, no una por insight -- antes era N
+      // ida-y-vueltas secuenciales por cada cluster procesado
+      // (auditoría de rendimiento, Fase I "Graph Performance").
+      const clusterEvidence = await this.stages.insightRepository.getEvidenceForInsights(
+        pipelineContext,
+        cluster.insights.map((insight) => insight.id),
+      );
+      const memoryIdsByInsightId = new Map<EntityId, EntityId[]>();
+      for (const item of clusterEvidence) {
+        const list = memoryIdsByInsightId.get(item.insightId) ?? [];
+        list.push(item.memoryId);
+        memoryIdsByInsightId.set(item.insightId, list);
+      }
+
       const evidenceMemoryIdsByInsightId = new Map<EntityId, EntityId[]>();
       const evidenceTextByInsightId = new Map<EntityId, string[]>();
 
       for (const insight of cluster.insights) {
-        const evidence = await this.stages.insightRepository.getEvidence(
-          pipelineContext,
-          insight.id,
-        );
-        const memoryIds = evidence.map((item) => item.memoryId);
+        const memoryIds = memoryIdsByInsightId.get(insight.id) ?? [];
         evidenceMemoryIdsByInsightId.set(insight.id, memoryIds);
         evidenceTextByInsightId.set(
           insight.id,

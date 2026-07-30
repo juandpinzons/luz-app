@@ -119,6 +119,11 @@ export const knowledgeEngineEvidence = pgTable(
     index("knowledge_engine_evidence_life_graph_id_idx").on(
       table.lifeGraphId,
     ),
+    // `listByEvidenceMemoryId` (InsightRepository) hace INNER JOIN
+    // filtrando por esta columna en CADA memoria capturada -- sin
+    // índice era un scan completo de la tabla (auditoría de
+    // rendimiento, Fase I "Graph Performance").
+    index("knowledge_engine_evidence_memory_id_idx").on(table.memoryId),
   ],
 );
 

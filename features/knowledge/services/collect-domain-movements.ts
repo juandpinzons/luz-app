@@ -24,28 +24,33 @@ export async function collectDomainMovements(
 ): Promise<DomainMovement[]> {
   const beliefs = await beliefRepository.list(context);
   const beliefsWithDomain = beliefs.filter(hasDomain);
+  const movements: DomainMovement[] = [];
 
-  // War Room 2026-07-29: mismo hallazgo y misma solución que
-  // `describe-evolution.ts` -- round-trips secuenciales por Belief,
-  // ahora en paralelo, mismo método público de `BeliefRepository`.
-  const histories = await Promise.all(
-    beliefsWithDomain.map((belief) => beliefRepository.getHistory(context, belief.id)),
+  // Una sola consulta (`inArray`) para el historial de TODAS las
+  // creencias con dominio, no una por creencia -- este servicio corre
+  // dentro de `enrichKnowledgeGraph`, después de CADA memoria
+  // capturada, así que el N+1 anterior escalaba con el total histórico
+  // de creencias en cada mensaje (auditoría de rendimiento, Fase I
+  // "Graph Performance").
+  const beliefById = new Map(beliefsWithDomain.map((belief) => [belief.id, belief]));
+  const allHistory = await beliefRepository.getHistoryForBeliefs(
+    context,
+    beliefsWithDomain.map((belief) => belief.id),
   );
 
-  const movements: DomainMovement[] = [];
-  beliefsWithDomain.forEach((belief, index) => {
-    for (const entry of histories[index]) {
-      if (entry.previousConfidence === undefined) continue;
-      if (entry.newConfidence === entry.previousConfidence) continue;
+  for (const entry of allHistory) {
+    const belief = beliefById.get(entry.beliefId);
+    if (!belief) continue;
+    if (entry.previousConfidence === undefined) continue;
+    if (entry.newConfidence === entry.previousConfidence) continue;
 
-      movements.push({
-        beliefId: belief.id,
-        domain: belief.domain,
-        direction: entry.newConfidence > entry.previousConfidence ? "strengthening" : "weakening",
-        changedAt: entry.changedAt,
-      });
-    }
-  });
+    movements.push({
+      beliefId: belief.id,
+      domain: belief.domain,
+      direction: entry.newConfidence > entry.previousConfidence ? "strengthening" : "weakening",
+      changedAt: entry.changedAt,
+    });
+  }
 
   return movements;
 }

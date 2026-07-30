@@ -51,6 +51,18 @@ export class DrizzleHabitRepository implements HabitRepository {
     return rows.map(toHabit);
   }
 
+  /** Igual que `list()` filtrado a `active: true`, pero resuelto en SQL (`life_habits_life_graph_id_active_idx`) -- mismo criterio que `DrizzleGoalRepository.listActive`. */
+  async listActive(context: LifeGraphContext): Promise<Habit[]> {
+    const rows = await this.db
+      .select()
+      .from(lifeHabits)
+      .where(
+        and(eq(lifeHabits.lifeGraphId, context.lifeGraphId), eq(lifeHabits.active, true)),
+      );
+
+    return rows.map(toHabit);
+  }
+
   async create(context: LifeGraphContext, input: HabitInput): Promise<Habit> {
     const [row] = await this.db
       .insert(lifeHabits)

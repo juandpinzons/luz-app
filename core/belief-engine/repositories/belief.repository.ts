@@ -13,6 +13,8 @@ import type { Belief } from "../entities/belief";
 export interface BeliefRepository {
   getById(context: LifeGraphContext, id: EntityId): Promise<Belief | null>;
   list(context: LifeGraphContext): Promise<Belief[]>;
+  /** Igual que `list()` filtrado a `status: "active"`, pero resuelto en SQL -- evita hidratar creencias expiradas/retractadas solo para descartarlas en JS (ver `enrich-knowledge-graph.ts`). */
+  listActive(context: LifeGraphContext): Promise<Belief[]>;
   save(context: LifeGraphContext, belief: Belief): Promise<Belief>;
 
   getEvidence(context: LifeGraphContext, beliefId: EntityId): Promise<BeliefEvidence[]>;
@@ -25,6 +27,11 @@ export interface BeliefRepository {
   getHistory(
     context: LifeGraphContext,
     beliefId: EntityId,
+  ): Promise<BeliefHistoryEntry[]>;
+  /** Igual que llamar `getHistory()` por cada id, pero en una sola consulta (`inArray`) -- evita N ida-y-vueltas secuenciales cuando el llamador ya tiene varias creencias en mano (ver `describe-evolution.ts`/`collect-domain-movements.ts`). Orden cronológico ascendente dentro de cada `beliefId`, pero sin garantía de orden entre distintos `beliefId` -- el llamador ya agrupa por `beliefId` si lo necesita. */
+  getHistoryForBeliefs(
+    context: LifeGraphContext,
+    beliefIds: readonly EntityId[],
   ): Promise<BeliefHistoryEntry[]>;
   appendHistory(
     context: LifeGraphContext,

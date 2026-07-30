@@ -33,25 +33,29 @@ export class DefaultReasoningCorrelateStage implements ReasoningCorrelateStage {
       adjacency.set(id, new Set());
     }
 
-    for (const insight of insights) {
-      const relationships = await this.repository.getRelationships(
-        pipelineContext,
-        insight.id,
-      );
+    // Una sola consulta para las relaciones de TODOS los insights de
+    // este cluster candidato, no una por insight -- antes era N
+    // ida-y-vueltas secuenciales en cada corrida del Reasoning Engine
+    // (auditoría de rendimiento, Fase I "Graph Performance"). Una fila
+    // solo puede llegar aquí si al menos uno de sus dos extremos está
+    // en `insights` (así se acotó la consulta); exigir que AMBOS lo
+    // estén reproduce exactamente el filtro `nodeById.has(otherId)` de
+    // antes, ya que el extremo "propio" siempre pertenece al conjunto.
+    const relationships = await this.repository.getRelationshipsForInsights(
+      pipelineContext,
+      insights.map((insight) => insight.id),
+    );
 
-      for (const relationship of relationships) {
-        const otherId =
-          relationship.fromInsightId === insight.id
-            ? relationship.toInsightId
-            : relationship.fromInsightId;
-
-        if (!nodeById.has(otherId)) {
-          continue;
-        }
-
-        adjacency.get(insight.id)?.add(otherId);
-        adjacency.get(otherId)?.add(insight.id);
+    for (const relationship of relationships) {
+      if (
+        !nodeById.has(relationship.fromInsightId) ||
+        !nodeById.has(relationship.toInsightId)
+      ) {
+        continue;
       }
+
+      adjacency.get(relationship.fromInsightId)?.add(relationship.toInsightId);
+      adjacency.get(relationship.toInsightId)?.add(relationship.fromInsightId);
     }
 
     const visited = new Set<EntityId>();

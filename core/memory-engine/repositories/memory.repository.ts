@@ -13,6 +13,8 @@ import type { Memory } from "../entities/memory";
 export interface MemoryRepository {
   getById(context: LifeGraphContext, id: EntityId): Promise<Memory | null>;
   list(context: LifeGraphContext): Promise<Memory[]>;
+  /** Igual que `list()` filtrado a `status: "active"`, pero resuelto en SQL (`memories_status_idx`) -- evita hidratar memorias archivadas/olvidadas solo para descartarlas en JS (ver `DefaultConnectStage`). */
+  listActive(context: LifeGraphContext): Promise<Memory[]>;
   save(context: LifeGraphContext, memory: Memory): Promise<Memory>;
   delete(context: LifeGraphContext, id: EntityId): Promise<void>;
   getConnections(

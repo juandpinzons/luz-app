@@ -86,6 +86,17 @@ export class DrizzleMemoryRepository implements MemoryRepository {
     return rows.map(toMemory);
   }
 
+  async listActive(context: LifeGraphContext): Promise<Memory[]> {
+    const rows = await this.db
+      .select()
+      .from(memories)
+      .where(
+        and(eq(memories.lifeGraphId, context.lifeGraphId), eq(memories.status, "active")),
+      );
+
+    return rows.map(toMemory);
+  }
+
   /**
    * Upsert. `memory.lifeGraphId` debe coincidir con
    * `context.lifeGraphId` — una discrepancia no se corrige en

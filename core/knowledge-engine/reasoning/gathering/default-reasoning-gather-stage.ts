@@ -18,10 +18,22 @@ export class DefaultReasoningGatherStage implements ReasoningGatherStage {
     window: ReasoningEvidenceWindow,
     pipelineContext: PipelineContext,
   ): Promise<Insight[]> {
-    const insights: Insight[] = [];
+    if (window.insightIds.length === 0) {
+      return [];
+    }
 
+    // Una sola consulta (`inArray`) para todos los ids de la ventana,
+    // no una por id -- antes era N ida-y-vueltas secuenciales por cada
+    // corrida del Reasoning Engine (auditoría de rendimiento, Fase I
+    // "Graph Performance"). `getByIds` no garantiza orden, así que se
+    // reconstruye el orden de `window.insightIds` explícitamente --
+    // esa prioridad ya la decidió quien armó la ventana.
+    const fetched = await this.repository.getByIds(pipelineContext, window.insightIds);
+    const byId = new Map(fetched.map((insight) => [insight.id, insight]));
+
+    const insights: Insight[] = [];
     for (const id of window.insightIds) {
-      const insight = await this.repository.getById(pipelineContext, id);
+      const insight = byId.get(id);
       // Quien armó la ventana pudo haber leído un insight que, entre
       // ese momento y este, se borró o se invalidó -- nunca se asume
       // que sigue siendo válido solo porque llegó en la ventana.

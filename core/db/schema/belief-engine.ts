@@ -117,6 +117,11 @@ export const beliefEvidence = pgTable(
   (table) => [
     index("belief_evidence_life_graph_id_idx").on(table.lifeGraphId),
     index("belief_evidence_belief_id_idx").on(table.beliefId),
+    // `wasAlreadyEnriched` (enrich-knowledge-graph.ts) filtra por esta
+    // columna en CADA memoria capturada -- sin índice era un scan
+    // completo de la tabla (auditoría de rendimiento, Fase I "Graph
+    // Performance").
+    index("belief_evidence_insight_id_idx").on(table.insightId),
   ],
 );
 

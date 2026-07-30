@@ -134,6 +134,13 @@
       "when": 1785294984794,
       "tag": "0018_nifty_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785362405849,
+      "tag": "0019_flawless_bastion",
+      "breakpoints": true
     }
   ]
 }

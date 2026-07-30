@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import {
   type KnowledgeEngineEvidenceRow,
@@ -96,6 +96,27 @@ export class DrizzleInsightRepository implements InsightRepository {
       .limit(1);
 
     return rows[0] ? toInsight(rows[0]) : null;
+  }
+
+  async getByIds(
+    context: LifeGraphContext,
+    ids: readonly EntityId[],
+  ): Promise<Insight[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select()
+      .from(knowledgeEngineInsights)
+      .where(
+        and(
+          eq(knowledgeEngineInsights.lifeGraphId, context.lifeGraphId),
+          inArray(knowledgeEngineInsights.id, ids as EntityId[]),
+        ),
+      );
+
+    return rows.map(toInsight);
   }
 
   async list(context: LifeGraphContext): Promise<Insight[]> {
@@ -205,6 +226,27 @@ export class DrizzleInsightRepository implements InsightRepository {
     return rows.map(toEvidence);
   }
 
+  async getEvidenceForInsights(
+    context: LifeGraphContext,
+    insightIds: readonly EntityId[],
+  ): Promise<Evidence[]> {
+    if (insightIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select()
+      .from(knowledgeEngineEvidence)
+      .where(
+        and(
+          eq(knowledgeEngineEvidence.lifeGraphId, context.lifeGraphId),
+          inArray(knowledgeEngineEvidence.insightId, insightIds as EntityId[]),
+        ),
+      );
+
+    return rows.map(toEvidence);
+  }
+
   async saveEvidence(
     context: LifeGraphContext,
     evidence: Evidence,
@@ -262,6 +304,31 @@ export class DrizzleInsightRepository implements InsightRepository {
           or(
             eq(knowledgeEngineInsightRelationships.fromInsightId, insightId),
             eq(knowledgeEngineInsightRelationships.toInsightId, insightId),
+          ),
+        ),
+      );
+
+    return rows.map(toInsightRelationship);
+  }
+
+  async getRelationshipsForInsights(
+    context: LifeGraphContext,
+    insightIds: readonly EntityId[],
+  ): Promise<InsightRelationship[]> {
+    if (insightIds.length === 0) {
+      return [];
+    }
+
+    const ids = insightIds as EntityId[];
+    const rows = await this.db
+      .select()
+      .from(knowledgeEngineInsightRelationships)
+      .where(
+        and(
+          eq(knowledgeEngineInsightRelationships.lifeGraphId, context.lifeGraphId),
+          or(
+            inArray(knowledgeEngineInsightRelationships.fromInsightId, ids),
+            inArray(knowledgeEngineInsightRelationships.toInsightId, ids),
           ),
         ),
       );

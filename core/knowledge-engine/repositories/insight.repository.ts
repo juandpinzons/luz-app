@@ -23,6 +23,8 @@ import type { InsightRelationship } from "../entities/insight-relationship";
  */
 export interface InsightRepository {
   getById(context: LifeGraphContext, id: EntityId): Promise<Insight | null>;
+  /** Igual que llamar `getById()` por cada id, pero en una sola consulta (`inArray`) -- sin garantía de orden, el llamador reordena si lo necesita (ver `DefaultReasoningGatherStage`). */
+  getByIds(context: LifeGraphContext, ids: readonly EntityId[]): Promise<Insight[]>;
   list(context: LifeGraphContext): Promise<Insight[]>;
   /**
    * Insights validados cuya evidencia incluye esta memoria -- usado por
@@ -42,6 +44,11 @@ export interface InsightRepository {
     context: LifeGraphContext,
     insightId: EntityId,
   ): Promise<Evidence[]>;
+  /** Igual que llamar `getEvidence()` por cada id, pero en una sola consulta (`inArray` sobre `insightId`) -- el llamador agrupa por `insightId` si lo necesita (ver `DefaultInsightConnectStage`/`DefaultReasoningEngine`). */
+  getEvidenceForInsights(
+    context: LifeGraphContext,
+    insightIds: readonly EntityId[],
+  ): Promise<Evidence[]>;
   saveEvidence(
     context: LifeGraphContext,
     evidence: Evidence,
@@ -49,6 +56,11 @@ export interface InsightRepository {
   getRelationships(
     context: LifeGraphContext,
     insightId: EntityId,
+  ): Promise<InsightRelationship[]>;
+  /** Igual que llamar `getRelationships()` por cada id, pero en una sola consulta -- relaciones donde CUALQUIERA de los ids participa en cualquiera de los dos extremos (ver `DefaultReasoningCorrelateStage`). */
+  getRelationshipsForInsights(
+    context: LifeGraphContext,
+    insightIds: readonly EntityId[],
   ): Promise<InsightRelationship[]>;
   saveRelationship(
     context: LifeGraphContext,

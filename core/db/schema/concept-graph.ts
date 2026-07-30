@@ -125,6 +125,10 @@ export const conceptEvidence = pgTable(
   (table) => [
     index("concept_evidence_life_graph_id_idx").on(table.lifeGraphId),
     index("concept_evidence_concept_id_idx").on(table.conceptId),
+    // Mismo motivo que `belief_evidence_insight_id_idx` -- filtrada por
+    // `wasAlreadyEnriched` en cada memoria capturada, sin índice antes
+    // (auditoría de rendimiento, Fase I "Graph Performance").
+    index("concept_evidence_insight_id_idx").on(table.insightId),
   ],
 );
 

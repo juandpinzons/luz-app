@@ -62,7 +62,13 @@ export const lifeGoals = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("life_goals_life_graph_id_idx").on(table.lifeGraphId)],
+  (table) => [
+    index("life_goals_life_graph_id_idx").on(table.lifeGraphId),
+    // `listActiveGoals` filtra por status en SQL, no en JS (auditoría
+    // de rendimiento, Fase I "Graph Performance") -- este compuesto
+    // hace ese filtro barato en vez de un scan por life_graph_id solo.
+    index("life_goals_life_graph_id_status_idx").on(table.lifeGraphId, table.status),
+  ],
 );
 
 export const lifeProjects = pgTable(
@@ -95,6 +101,8 @@ export const lifeProjects = pgTable(
   (table) => [
     index("life_projects_life_graph_id_idx").on(table.lifeGraphId),
     index("life_projects_goal_id_idx").on(table.goalId),
+    // Mismo motivo que `life_goals_life_graph_id_status_idx`.
+    index("life_projects_life_graph_id_status_idx").on(table.lifeGraphId, table.status),
   ],
 );
 
@@ -122,6 +130,9 @@ export const lifeHabits = pgTable(
   (table) => [
     index("life_habits_life_graph_id_idx").on(table.lifeGraphId),
     index("life_habits_goal_id_idx").on(table.goalId),
+    // `listActiveHabits` filtra por `active` en SQL, no en JS (auditoría
+    // de rendimiento, Fase I "Graph Performance").
+    index("life_habits_life_graph_id_active_idx").on(table.lifeGraphId, table.active),
   ],
 );
 

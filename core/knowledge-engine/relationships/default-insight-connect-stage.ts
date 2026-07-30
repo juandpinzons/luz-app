@@ -57,33 +57,55 @@ export class DefaultInsightConnectStage implements InsightConnectStage {
         candidate.id !== insight.id && candidate.status === "validated",
     );
 
-    const now = new Date();
-    const relationships: InsightRelationship[] = [];
-
-    for (const other of others) {
-      const otherEvidence = await this.repository.getEvidence(context, other.id);
-      const sharesEvidence = otherEvidence.some((item) =>
-        memoryIds.has(item.memoryId),
-      );
-      if (!sharesEvidence) {
-        continue;
-      }
-
-      const relationship: InsightRelationship = {
-        id: createEntityId(crypto.randomUUID()),
-        lifeGraphId: context.lifeGraphId,
-        fromInsightId: insight.id,
-        toInsightId: other.id,
-        relationType: SHARED_EVIDENCE_RELATION_TYPE,
-        strength: SHARED_EVIDENCE_STRENGTH,
-        createdAt: now,
-      };
-
-      relationships.push(
-        await this.repository.saveRelationship(context, relationship),
-      );
+    if (others.length === 0) {
+      return [];
     }
 
-    return relationships;
+    // Una sola consulta (`inArray`) para la evidencia de TODOS los
+    // demás insights, no una por insight -- antes esto era O(total de
+    // insights históricos del LifeGraph) ida-y-vueltas secuenciales en
+    // CADA insight nuevo persistido, el peor cuello de botella
+    // encontrado en la auditoría de rendimiento (Fase I "Graph
+    // Performance"): un grafo de conocimiento que crece con el tiempo
+    // (la premisa central de LUZ) volvía cada vez más lento conectar el
+    // siguiente insight.
+    const otherEvidence = await this.repository.getEvidenceForInsights(
+      context,
+      others.map((other) => other.id),
+    );
+    const memoryIdsByOtherInsight = new Map<EntityId, Set<EntityId>>();
+    for (const item of otherEvidence) {
+      const set = memoryIdsByOtherInsight.get(item.insightId) ?? new Set<EntityId>();
+      set.add(item.memoryId);
+      memoryIdsByOtherInsight.set(item.insightId, set);
+    }
+
+    const matchingOthers = others.filter((other) => {
+      const otherMemoryIds = memoryIdsByOtherInsight.get(other.id);
+      if (!otherMemoryIds) return false;
+      for (const memoryId of otherMemoryIds) {
+        if (memoryIds.has(memoryId)) return true;
+      }
+      return false;
+    });
+
+    const now = new Date();
+
+    // Cada relación es una fila independiente -- escribirlas en
+    // paralelo es seguro y evita más ida-y-vueltas secuenciales cuando
+    // un insight comparte evidencia con varios otros a la vez.
+    return Promise.all(
+      matchingOthers.map((other) =>
+        this.repository.saveRelationship(context, {
+          id: createEntityId(crypto.randomUUID()),
+          lifeGraphId: context.lifeGraphId,
+          fromInsightId: insight.id,
+          toInsightId: other.id,
+          relationType: SHARED_EVIDENCE_RELATION_TYPE,
+          strength: SHARED_EVIDENCE_STRENGTH,
+          createdAt: now,
+        }),
+      ),
+    );
   }
 }

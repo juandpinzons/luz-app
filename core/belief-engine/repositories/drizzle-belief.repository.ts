@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import {
   type BeliefEvidenceRow,
@@ -76,6 +76,17 @@ export class DrizzleBeliefRepository implements BeliefRepository {
       .select()
       .from(beliefs)
       .where(eq(beliefs.lifeGraphId, context.lifeGraphId));
+
+    return rows.map(toBelief);
+  }
+
+  async listActive(context: LifeGraphContext): Promise<Belief[]> {
+    const rows = await this.db
+      .select()
+      .from(beliefs)
+      .where(
+        and(eq(beliefs.lifeGraphId, context.lifeGraphId), eq(beliefs.status, "active")),
+      );
 
     return rows.map(toBelief);
   }
@@ -190,6 +201,28 @@ export class DrizzleBeliefRepository implements BeliefRepository {
         and(
           eq(beliefHistory.lifeGraphId, context.lifeGraphId),
           eq(beliefHistory.beliefId, beliefId),
+        ),
+      )
+      .orderBy(asc(beliefHistory.changedAt));
+
+    return rows.map(toBeliefHistoryEntry);
+  }
+
+  async getHistoryForBeliefs(
+    context: LifeGraphContext,
+    beliefIds: readonly EntityId[],
+  ): Promise<BeliefHistoryEntry[]> {
+    if (beliefIds.length === 0) {
+      return [];
+    }
+
+    const rows = await this.db
+      .select()
+      .from(beliefHistory)
+      .where(
+        and(
+          eq(beliefHistory.lifeGraphId, context.lifeGraphId),
+          inArray(beliefHistory.beliefId, beliefIds as EntityId[]),
         ),
       )
       .orderBy(asc(beliefHistory.changedAt));

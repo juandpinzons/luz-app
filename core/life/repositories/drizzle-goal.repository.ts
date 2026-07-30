@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import type { Database, Transaction } from "../../db/client";
 import { type GoalRow, lifeGoals } from "../../db/schema";
 import type { Goal } from "../entities/goal";
 import type { LifeGraphContext } from "../life-graph-context";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
+import { INACTIVE_GOAL_STATUSES } from "../value-objects/goal-status";
 import type { GoalInput, GoalRepository } from "./goal.repository";
 
 function toGoal(row: GoalRow): Goal {
@@ -41,6 +42,21 @@ export class DrizzleGoalRepository implements GoalRepository {
       .select()
       .from(lifeGoals)
       .where(eq(lifeGoals.lifeGraphId, context.lifeGraphId));
+
+    return rows.map(toGoal);
+  }
+
+  /** Igual que `list()` filtrado a "no completado/abandonado", pero resuelto en SQL (`life_goals_life_graph_id_status_idx`) -- evita hidratar objetivos históricos ya cerrados solo para descartarlos en JS (ver `listActiveGoals`, consumido en cada turno por Reality Snapshot). */
+  async listActive(context: LifeGraphContext): Promise<Goal[]> {
+    const rows = await this.db
+      .select()
+      .from(lifeGoals)
+      .where(
+        and(
+          eq(lifeGoals.lifeGraphId, context.lifeGraphId),
+          notInArray(lifeGoals.status, [...INACTIVE_GOAL_STATUSES]),
+        ),
+      );
 
     return rows.map(toGoal);
   }
