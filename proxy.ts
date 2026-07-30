@@ -5,9 +5,9 @@ import { sessions } from "@/auth/schema";
 import { logger } from "@/core/observability/logger";
 
 /**
- * Protege /chat, /dashboard, /admin, /feedback (UI) y /api/chat,
- * /api/feedback (API) exigiendo sesión. La landing (`/`) y `/login`
- * quedan públicas a propósito.
+ * Protege /chat, /dashboard, /admin, /feedback, /calendar (UI) y
+ * /api/chat, /api/feedback, /api/calendar (API) exigiendo sesión. La
+ * landing (`/`) y `/login` quedan públicas a propósito.
  * Desde Sprint Alpha-1a, /dashboard es la puerta de entrada post-login
  * (ver app/login/page.tsx) — necesita la misma protección que /chat.
  *
@@ -95,7 +95,9 @@ export const config = {
     "/dashboard/:path*",
     "/admin/:path*",
     "/feedback/:path*",
+    "/calendar/:path*",
     "/api/chat/:path*",
     "/api/feedback/:path*",
+    "/api/calendar/:path*",
   ],
 };
