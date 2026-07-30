@@ -2,6 +2,7 @@ import type { Database } from "../../../core/db/client";
 import {
   DrizzleGoalRepository,
   DrizzleHabitRepository,
+  DrizzlePersonRepository,
   DrizzleProjectRepository,
   DrizzleRelationshipRepository,
   GOAL_STATUSES,
@@ -18,6 +19,7 @@ import {
   type Relationship,
   type RelationshipType,
 } from "../../../core/life";
+import { buildLifeObservations, type LifeObservation } from "./build-life-observations";
 
 /**
  * "¿Cuál es el estado actual de la vida de esta persona?" -- para el
@@ -35,16 +37,23 @@ import {
  * todavía"). Este archivo es el punto de partida para un futuro bloque
  * de UI, no algo que ya esté en producción.
  *
- * Cada entidad (Goal/Project/Habit/Relationship) se trae con una sola
- * consulta (`repository.list(context)`), nunca una por cada
+ * Cada entidad (Goal/Project/Habit/Relationship/Person) se trae con
+ * una sola consulta (`repository.list(context)`), nunca una por cada
  * clasificación derivada -- evita exactamente el antipatrón de "triple
  * fetch" que esta misma auditoría encontró en `app/dashboard/page.tsx`.
  * Nunca se inventa un puntaje ni una interpretación: todo campo es un
  * conteo o una fecha trazable directamente a una fila real.
+ *
+ * `observations` (evolución 2026-07-29 sobre este mismo mandato) las
+ * arma `build-life-observations.ts` a partir de estas mismas cinco
+ * listas -- `Person` se agregó a este `Promise.all` únicamente para
+ * poder nombrar al otro extremo de una `Relationship`, mismo criterio
+ * de "una sola consulta por entidad" que ya regía aquí.
  */
 
-const INACTIVE_GOAL_STATUSES = new Set<GoalStatus>(["completed", "abandoned"]);
-const INACTIVE_PROJECT_STATUSES = new Set<ProjectStatus>(["completed", "cancelled"]);
+/** Exportados: `build-life-observations.ts` reusa exactamente el mismo criterio de "cerrado", nunca uno propio. */
+export const INACTIVE_GOAL_STATUSES = new Set<GoalStatus>(["completed", "abandoned"]);
+export const INACTIVE_PROJECT_STATUSES = new Set<ProjectStatus>(["completed", "cancelled"]);
 
 /** Mismo criterio que `app/dashboard/page.tsx` (`UPCOMING_WINDOW_DAYS`) -- consistencia entre agregadores del mismo Dashboard. */
 const UPCOMING_WINDOW_DAYS = 14;
@@ -54,10 +63,12 @@ const UPCOMING_WINDOW_DAYS = 14;
  * una interpretación, `updatedAt` es un hecho de la fila. El umbral es
  * generoso a propósito: nunca marcar algo como "estancado" solo porque
  * la persona no volvió a tocarlo la semana siguiente de crearlo.
+ * Exportado: `build-life-observations.ts` reusa el mismo número para
+ * "en riesgo"/"consistente"/"descuidada", nunca uno propio.
  */
-const STALLED_THRESHOLD_DAYS = 30;
+export const STALLED_THRESHOLD_DAYS = 30;
 
-function daysBetween(from: Date, to: Date): number {
+export function daysBetween(from: Date, to: Date): number {
   return Math.floor((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
 }
 
@@ -110,6 +121,8 @@ export interface LifeDashboardSnapshot {
   stalled: StalledLifeItem[];
   relationships: RelationshipsSnapshot;
   totals: LifeTotals;
+  /** Observaciones determinísticas derivadas de estas mismas entidades -- ningún LLM, ninguna tabla nueva. Ver `build-life-observations.ts`. */
+  observations: LifeObservation[];
 }
 
 function emptyGoalStatusRecord(): Record<GoalStatus, number> {
@@ -248,11 +261,12 @@ export async function buildLifeDashboardSnapshot(
 ): Promise<LifeDashboardSnapshot> {
   const now = new Date();
 
-  const [goals, projects, habits, relationships] = await Promise.all([
+  const [goals, projects, habits, relationships, persons] = await Promise.all([
     new DrizzleGoalRepository(db).list(context),
     new DrizzleProjectRepository(db).list(context),
     new DrizzleHabitRepository(db).list(context),
     new DrizzleRelationshipRepository(db).list(context),
+    new DrizzlePersonRepository(db).list(context),
   ]);
 
   const activeGoals = goals.filter((goal) => !INACTIVE_GOAL_STATUSES.has(goal.status));
@@ -262,14 +276,25 @@ export async function buildLifeDashboardSnapshot(
   const activeHabits = habits.filter((habit) => habit.active);
 
   const { overdue, upcoming } = buildDueItems(activeGoals, activeProjects, now);
+  const domains = buildDomainSnapshots(activeGoals, activeProjects, activeHabits);
 
   return {
     generatedAt: now,
-    domains: buildDomainSnapshots(activeGoals, activeProjects, activeHabits),
+    domains,
     overdue,
     upcoming,
     stalled: buildStalledItems(activeGoals, activeProjects, activeHabits, now),
     relationships: buildRelationshipsSnapshot(relationships),
     totals: buildLifeTotals(goals, projects, habits),
+    observations: buildLifeObservations({
+      now,
+      personId: context.personId,
+      goals,
+      projects,
+      habits,
+      relationships,
+      persons,
+      domains,
+    }),
   };
 }
