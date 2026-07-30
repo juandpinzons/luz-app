@@ -18,3 +18,4 @@ export * from "./belief-engine";
 export * from "./contradictions";
 export * from "./importance";
 export * from "./curiosity-engine";
+export * from "./calendar-connections";

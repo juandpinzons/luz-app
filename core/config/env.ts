@@ -39,6 +39,23 @@ const envSchema = z.object({
    * /admin queda cerrado para todos, nunca abierto por accidente.
    */
   ADMIN_EMAILS: z.string().default(""),
+
+  /**
+   * Clave de cifrado (AES-256-GCM, `core/security/secret-cipher.ts`)
+   * para credenciales de terceros que el dominio necesita guardar en
+   * texto reversible -- hoy solo `AppleCalendarCredentials.appSpecificPassword`
+   * (`core/calendar-connections/repository.ts`). 32 bytes en base64
+   * (`openssl rand -base64 32`). Obligatoria: sin esto, ninguna
+   * conexión de calendario puede guardarse ni leerse, nunca cae a
+   * texto plano por defecto.
+   */
+  CALENDAR_CREDENTIALS_ENCRYPTION_KEY: z
+    .string()
+    .min(1, "CALENDAR_CREDENTIALS_ENCRYPTION_KEY es obligatorio (genera uno con: openssl rand -base64 32).")
+    .refine(
+      (value) => Buffer.from(value, "base64").length === 32,
+      "CALENDAR_CREDENTIALS_ENCRYPTION_KEY debe decodificar a 32 bytes en base64 (genera uno con: openssl rand -base64 32).",
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;
