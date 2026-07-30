@@ -2,69 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
-import {
-  getStoredCalendarConnection,
-  markCalendarConnectionError,
-  markCalendarConnectionSynced,
-} from "@/core/calendar-connections/repository";
+import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
 import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
-import { applySyncResult, getCalendarSnapshot, synchronizeCalendar } from "@/features/reality/application";
-import type { CalendarEvent } from "@/features/reality/domain";
-import { AppleCalendarClient, AppleCalendarProvider } from "@/features/reality/providers/apple";
-import { buildCalendarContext } from "@/features/home/services/build-calendar-context";
-import type { HomeCalendarContext } from "@/features/home/domain/home-state";
+import { EventRow } from "@/features/home/components/event-row";
 import { DisconnectButton } from "./disconnect-button";
 
 const ROUTE = "/calendar";
-
-/**
- * Ventana de sincronización en vivo -- este V1 no persiste eventos ni
- * cursor (ver `core/calendar-connections/repository.ts`), así que cada
- * carga de esta página hace un sync completo acotado por fecha, nunca
- * incremental. Correcto y simple; el costo es una llamada de red real a
- * iCloud en cada visita -- aceptable para una sola persona con un
- * calendario personal, no pensado para escalar sin agregar persistencia
- * de eventos + cursor más adelante (ver `features/reality/README.md`,
- * "Puntos de extensión #2").
- */
-const SYNC_WINDOW_DAYS_BACK = 3;
-const SYNC_WINDOW_DAYS_FORWARD = 14;
-
-const TIME_FORMAT = new Intl.DateTimeFormat("es-CO", {
-  hour: "numeric",
-  minute: "2-digit",
-  hourCycle: "h23",
-  timeZone: "America/Bogota",
-});
-
-const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  timeZone: "America/Bogota",
-});
-
-function eventStart(event: CalendarEvent): Date {
-  return event.timing.isAllDay ? new Date(`${event.timing.date}T00:00:00Z`) : event.timing.dateTime;
-}
-
-function formatEventWhen(event: CalendarEvent): string {
-  if (event.timing.isAllDay) return "Todo el día";
-  return `${TIME_FORMAT.format(event.timing.dateTime)} – ${TIME_FORMAT.format(event.timing.endDateTime)}`;
-}
-
-function EventRow({ event }: { event: CalendarEvent }) {
-  return (
-    <li className="rounded-lg border border-zinc-800 px-4 py-3 text-sm">
-      <p className="text-zinc-100">{event.title}</p>
-      <p className="mt-1 text-zinc-500">
-        {DATE_FORMAT.format(eventStart(event))} · {formatEventWhen(event)}
-      </p>
-    </li>
-  );
-}
+const UPCOMING_WINDOW_DAYS = 14;
 
 const STATUS_LABEL: Record<string, string> = {
   up_to_date: "Sincronizado",
@@ -91,9 +37,9 @@ export default async function CalendarPage() {
     );
   }
 
-  const stored = await getStoredCalendarConnection(db, lifeGraphContext.lifeGraphId, "apple");
+  const outcome = await getLiveCalendarContext(db, lifeGraphContext.lifeGraphId);
 
-  if (!stored || stored.connection.status === "disconnected") {
+  if (outcome.status === "not_connected") {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-center text-white">
         <p className="text-2xl font-light">Ningún calendario conectado</p>
@@ -110,25 +56,7 @@ export default async function CalendarPage() {
     );
   }
 
-  let calendarContext: HomeCalendarContext | null = null;
-  let syncError: string | null = null;
-
-  try {
-    const provider = new AppleCalendarProvider(new AppleCalendarClient(stored.credentials));
-    const now = new Date();
-    const window = {
-      from: new Date(now.getTime() - SYNC_WINDOW_DAYS_BACK * 24 * 60 * 60 * 1000),
-      to: new Date(now.getTime() + SYNC_WINDOW_DAYS_FORWARD * 24 * 60 * 60 * 1000),
-    };
-
-    const syncResult = await synchronizeCalendar(provider, stored.connection, null, { window });
-    const events = applySyncResult([], syncResult.upserted, syncResult.deleted);
-    const snapshot = getCalendarSnapshot(events, syncResult.connection, { now, upcomingWindowDays: SYNC_WINDOW_DAYS_FORWARD });
-
-    calendarContext = buildCalendarContext(snapshot);
-    await markCalendarConnectionSynced(db, stored.connection.id);
-  } catch (error) {
-    const detail = describeError(error);
+  if (outcome.status === "error") {
     logger.log({
       event: "calendar.page.sync_failed",
       severity: "error",
@@ -136,11 +64,11 @@ export default async function CalendarPage() {
       route: ROUTE,
       userId: session.user.id,
       lifeGraphId: lifeGraphContext.lifeGraphId,
-      ...detail,
+      ...describeError(outcome.error),
     });
-    await markCalendarConnectionError(db, stored.connection.id);
-    syncError = "No pudimos sincronizar con Apple Calendar. Verifica que la contraseña específica de app siga siendo válida.";
   }
+
+  const { calendarContext } = outcome.status === "connected" ? outcome : { calendarContext: null };
 
   return (
     <main className="flex min-h-screen flex-col items-center bg-black px-6 py-16 text-white">
@@ -148,7 +76,7 @@ export default async function CalendarPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-2xl font-light">Tu calendario</p>
-            <p className="mt-1 text-sm text-zinc-500">{stored.connection.externalAccountId}</p>
+            <p className="mt-1 text-sm text-zinc-500">{outcome.externalAccountId}</p>
           </div>
           <DisconnectButton />
         </div>
@@ -157,9 +85,9 @@ export default async function CalendarPage() {
           {calendarContext ? STATUS_LABEL[calendarContext.status] ?? calendarContext.status : "Error de sincronización"}
         </p>
 
-        {syncError && (
+        {outcome.status === "error" && (
           <div className="mt-6 rounded-2xl border border-red-900/50 bg-red-950/20 px-5 py-4 text-sm text-red-300">
-            {syncError}
+            No pudimos sincronizar con Apple Calendar. Verifica que la contraseña específica de app siga siendo válida.
             <Link href="/calendar/connect" className="mt-2 block underline">
               Reconectar
             </Link>
@@ -184,7 +112,7 @@ export default async function CalendarPage() {
             <section className="mt-8">
               <h2 className="text-sm font-medium text-zinc-400">Próximos</h2>
               {calendarContext.upcomingEvents.length === 0 ? (
-                <p className="mt-3 text-sm text-zinc-600">Nada próximo en los siguientes {SYNC_WINDOW_DAYS_FORWARD} días.</p>
+                <p className="mt-3 text-sm text-zinc-600">Nada próximo en los siguientes {UPCOMING_WINDOW_DAYS} días.</p>
               ) : (
                 <ul className="mt-3 space-y-2">
                   {calendarContext.upcomingEvents.map((event) => (
@@ -199,7 +127,10 @@ export default async function CalendarPage() {
                 <h2 className="text-sm font-medium text-zinc-400">Compromisos recurrentes</h2>
                 <ul className="mt-3 space-y-2">
                   {calendarContext.recurringCommitments.map((commitment) => (
-                    <li key={`${commitment.title}-${commitment.rule}`} className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-200">
+                    <li
+                      key={`${commitment.title}-${commitment.rule}`}
+                      className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-200"
+                    >
                       {commitment.title}
                     </li>
                   ))}
@@ -211,7 +142,7 @@ export default async function CalendarPage() {
               <h2 className="text-sm font-medium text-zinc-400">Tiempo libre</h2>
               <p className="mt-3 text-sm text-zinc-500">
                 {calendarContext.freeBlocks.length} bloque{calendarContext.freeBlocks.length === 1 ? "" : "s"} libre
-                {calendarContext.freeBlocks.length === 1 ? "" : "s"} en los próximos {SYNC_WINDOW_DAYS_FORWARD} días.
+                {calendarContext.freeBlocks.length === 1 ? "" : "s"} en los próximos {UPCOMING_WINDOW_DAYS} días.
               </p>
             </section>
           </>

@@ -3,9 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
+import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { listActiveGoals, listActiveProjects, type Goal, type Project } from "@/core/life";
+import { EventRow } from "@/features/home/components/event-row";
 import {
   buildMorningBrief,
   timeOfDayGreeting,
@@ -226,6 +228,44 @@ export default async function DashboardPage() {
       });
     }
   }
+  /**
+   * Calendario en vivo (Misión "conéctalo al dashboard principal") --
+   * mismo criterio de tolerancia a fallos que el resto de esta página:
+   * sin conexión, con error de sync, o con datos reales, la página
+   * nunca se rompe por esto. `getLiveCalendarContext`
+   * (`core/calendar-connections/`) ya decide sync + estado de la
+   * conexión y nunca lanza por un fallo esperado (sync fallido); el
+   * `try/catch` de aquí solo cubre un fallo inesperado antes de eso
+   * (p. ej. la propia consulta de la conexión guardada).
+   */
+  let calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null = null;
+  if (lifeGraphContext) {
+    try {
+      calendarOutcome = await getLiveCalendarContext(db, lifeGraphContext.lifeGraphId);
+      if (calendarOutcome.status === "error") {
+        logger.log({
+          event: "dashboard.calendar_sync_failed",
+          severity: "error",
+          requestId,
+          route: ROUTE,
+          userId: session.user.id,
+          lifeGraphId: lifeGraphContext.lifeGraphId,
+          ...describeError(calendarOutcome.error),
+        });
+      }
+    } catch (error) {
+      logger.log({
+        event: "dashboard.calendar_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+    }
+  }
+
   const activeLifeItems = [...activeGoals, ...activeProjects];
 
   /**
@@ -351,6 +391,45 @@ export default async function DashboardPage() {
             ))}
           </ul>
         </section>
+      )}
+
+      {calendarOutcome?.status === "connected" && (
+        <section className="animate-fade-in mt-8" style={{ animationDelay: "180ms" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-400">Tu calendario hoy</h2>
+            <Link href="/calendar" className="text-xs text-zinc-500 hover:text-zinc-300">
+              Ver todo →
+            </Link>
+          </div>
+          {calendarOutcome.calendarContext.today.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-600">Nada agendado hoy.</p>
+          ) : (
+            <>
+              <ul className="mt-3 space-y-2">
+                {calendarOutcome.calendarContext.today.slice(0, 3).map((event) => (
+                  <EventRow key={event.id} event={event} />
+                ))}
+              </ul>
+              {calendarOutcome.calendarContext.today.length > 3 && (
+                <Link href="/calendar" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
+                  +{calendarOutcome.calendarContext.today.length - 3} más
+                </Link>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {calendarOutcome?.status === "not_connected" && (
+        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "180ms" }}>
+          <Link
+            href="/calendar/connect"
+            className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+          >
+            Conecta tu calendario
+          </Link>{" "}
+          para ver qué tienes ocupado y libre.
+        </p>
       )}
 
       {activeLifeItems.length > 0 && (
