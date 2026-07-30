@@ -7,7 +7,9 @@ import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-cal
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { listActiveGoals, listActiveProjects, type Goal, type Project } from "@/core/life";
+import { getRecentMemoryHighlight } from "@/features/dashboard/services/get-recent-memory-highlight";
 import { EventRow } from "@/features/home/components/event-row";
+import { truncateText } from "@/features/memories/components/truncate-text";
 import {
   buildMorningBrief,
   timeOfDayGreeting,
@@ -266,6 +268,30 @@ export default async function DashboardPage() {
     }
   }
 
+  /**
+   * "La memoria interna de LUZ reflejada en la experiencia" -- un
+   * teaser real (nunca solo un conteo, eso ya existía en
+   * `DashboardActivitySummary` vía `summary.memoriesStored`) de la
+   * última memoria activa que LUZ capturó. Mismo criterio de
+   * tolerancia a fallos que el resto de esta página.
+   */
+  let recentMemory: Awaited<ReturnType<typeof getRecentMemoryHighlight>> = null;
+  if (lifeGraphContext) {
+    try {
+      recentMemory = await getRecentMemoryHighlight(db, lifeGraphContext);
+    } catch (error) {
+      logger.log({
+        event: "dashboard.recent_memory_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+    }
+  }
+
   const activeLifeItems = [...activeGoals, ...activeProjects];
 
   /**
@@ -429,6 +455,18 @@ export default async function DashboardPage() {
             Conecta tu calendario
           </Link>{" "}
           para ver qué tienes ocupado y libre.
+        </p>
+      )}
+
+      {recentMemory && (
+        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
+          Lo último que recuerdo: &ldquo;{truncateText(recentMemory.content, 140)}&rdquo;{" "}
+          <Link
+            href="/memories"
+            className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
+          >
+            Ver más
+          </Link>
         </p>
       )}
 

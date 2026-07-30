@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type {
   LifeGraphBranch,
   LifeGraphItem,
@@ -73,12 +74,47 @@ interface LifeGraphViewProps {
  * de leer la misma información -- ninguna de las dos es la fuente de
  * verdad, ambas leen `summary`.
  */
+/**
+ * Cuánto esperar antes de cada `router.refresh()` automático al montar
+ * `/life` -- ver el `useEffect` de abajo para el porqué. Tres intentos
+ * a distintos espaciados en vez de un intervalo fijo: cubre tanto el
+ * caso rápido (una extracción de Life Capture que termina en 3-4s)
+ * como uno más lento, sin seguir sondeando indefinidamente después de
+ * los 15s si para entonces sigue sin aparecer -- en ese punto un
+ * refresh más no va a cambiar nada que un `router.refresh()` manual no
+ * pueda ya resolver.
+ */
+const AUTO_REFRESH_DELAYS_MS = [3000, 7000, 15000];
+
 export function LifeGraphView({ personName, summary, listView }: LifeGraphViewProps) {
+  const router = useRouter();
   const [mode, setMode] = useState<"map" | "list">("map");
   const [zoom, setZoom] = useState(100);
   const [selectedBranchId, setSelectedBranchId] = useState<LifeGraphBranch["id"] | null>(null);
   const [showRelationships, setShowRelationships] = useState(true);
   const [showMemories, setShowMemories] = useState(true);
+
+  /**
+   * El mapa puede aparecer "sin actualizar" justo después de chatear:
+   * `sendMessage` (`features/chat/services/send-message.ts`) captura
+   * Goals/Projects/Habits/Relationships en un `after()` que corre
+   * DESPUÉS de que la respuesta del chat ya se envió, y esa captura
+   * hace su propia llamada a IA antes de escribir en la base de datos
+   * -- si la persona navega a `/life` apenas ve la respuesta, la fila
+   * puede genuinamente no existir todavía (no es un problema de caché:
+   * `/life` ya se renderiza dinámico en cada visita, sin ningún
+   * `revalidatePath`/`revalidateTag` en el repo). `router.refresh()`
+   * vuelve a ejecutar el Server Component (`app/life/page.tsx`) sin
+   * perder el estado local de este componente (zoom, rama
+   * seleccionada) -- nunca recarga la página completa.
+   */
+  useEffect(() => {
+    const timers = AUTO_REFRESH_DELAYS_MS.map((delay) => setTimeout(() => router.refresh(), delay));
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a propósito: una sola tanda de reintentos al montar, no en cada cambio de `router`.
+  }, []);
 
   const branches = summary.branches;
   const positions = useMemo(

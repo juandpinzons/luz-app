@@ -1,9 +1,14 @@
 import type { InsightExplanation } from "@/features/knowledge/services/explain-insight";
+import { truncateText } from "./truncate-text";
 
 interface InsightCardProps {
   explanation: InsightExplanation;
   index?: number;
 }
+
+const EVIDENCE_QUOTE_MAX_LENGTH = 90;
+/** Mismo criterio que `MemoryCard` (`MAX_CONNECTED_CONTENTS_SHOWN`) -- una comprensión puede tener muchas evidencias; mostrar todas convertía la tarjeta en una lista larga en vez de una idea con respaldo. */
+const MAX_EVIDENCE_SHOWN = 2;
 
 /**
  * Traduce `evidenceCount`/`spanDays`/`daysSinceMostRecentEvidence`
@@ -49,6 +54,8 @@ function describeConsistency(explanation: InsightExplanation): string | null {
  */
 export function InsightCard({ explanation, index = 0 }: InsightCardProps) {
   const consistency = describeConsistency(explanation);
+  const shownEvidence = explanation.evidence.slice(0, MAX_EVIDENCE_SHOWN);
+  const hiddenEvidenceCount = explanation.evidence.length - shownEvidence.length;
 
   return (
     <li
@@ -57,13 +64,14 @@ export function InsightCard({ explanation, index = 0 }: InsightCardProps) {
     >
       <p className="text-zinc-200">{explanation.reason}</p>
 
-      {explanation.evidence.length > 0 && (
+      {shownEvidence.length > 0 && (
         <div className="mt-2 space-y-1 text-xs text-zinc-500">
-          {explanation.evidence.map((item, contentIndex) => (
+          {shownEvidence.map((item, contentIndex) => (
             <p key={contentIndex}>
-              — algo que dijiste: &ldquo;{item.content}&rdquo;
+              — algo que dijiste: &ldquo;{truncateText(item.content, EVIDENCE_QUOTE_MAX_LENGTH)}&rdquo;
             </p>
           ))}
+          {hiddenEvidenceCount > 0 && <p>— y {hiddenEvidenceCount} vez{hiddenEvidenceCount === 1 ? "" : "es"} más</p>}
         </div>
       )}
 

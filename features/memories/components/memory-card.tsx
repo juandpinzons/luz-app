@@ -1,4 +1,5 @@
 import type { Memory } from "../../../core/memory-engine";
+import { truncateText } from "./truncate-text";
 
 interface MemoryCardProps {
   memory: Memory;
@@ -9,6 +10,12 @@ interface MemoryCardProps {
   /** Posición dentro de la lista completa (no solo su grupo de tiempo) — solo para escalonar la entrada; recortada por el llamador para que una lista larga no tarde en aparecer. */
   index?: number;
 }
+
+/** Antes se mostraba texto completo sin límite -- una memoria larga, con varias conexiones, ocupaba varias pantallas. La cita principal sigue siendo el contenido real (nunca un resumen generado), solo recortada si es larga. */
+const CONTENT_MAX_LENGTH = 220;
+const CONNECTED_CONTENT_MAX_LENGTH = 70;
+/** Antes se listaban TODAS las conexiones completas -- con varias, la tarjeta dejaba de leerse como "un recuerdo" y pasaba a ser una lista. Una sola, con conteo de las demás, sigue mostrando que existe la conexión sin la sobrecarga. */
+const MAX_CONNECTED_CONTENTS_SHOWN = 1;
 
 /**
  * Memoria individual: contenido, conexiones (docs/product/
@@ -23,18 +30,22 @@ export function MemoryCard({
   mentionedLifeTitles,
   index = 0,
 }: MemoryCardProps) {
+  const shownConnections = connectedContents.slice(0, MAX_CONNECTED_CONTENTS_SHOWN);
+  const hiddenConnectionCount = connectedContents.length - shownConnections.length;
+
   return (
     <li
       className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
       style={{ animationDelay: `${index * 30}ms` }}
     >
-      <p className="text-zinc-300">&ldquo;{memory.content}&rdquo;</p>
+      <p className="text-zinc-300">&ldquo;{truncateText(memory.content, CONTENT_MAX_LENGTH)}&rdquo;</p>
 
-      {(connectedContents.length > 0 || mentionedLifeTitles.length > 0) && (
+      {(shownConnections.length > 0 || mentionedLifeTitles.length > 0) && (
         <div className="mt-2 space-y-1 text-xs text-zinc-500">
-          {connectedContents.map((content, index) => (
-            <p key={`connected-${index}`}>
-              — también pensé en esto: &ldquo;{content}&rdquo;
+          {shownConnections.map((content, contentIndex) => (
+            <p key={`connected-${contentIndex}`}>
+              — también pensé en esto: &ldquo;{truncateText(content, CONNECTED_CONTENT_MAX_LENGTH)}&rdquo;
+              {hiddenConnectionCount > 0 && ` (+${hiddenConnectionCount} más)`}
             </p>
           ))}
           {mentionedLifeTitles.map((title) => (
