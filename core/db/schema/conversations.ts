@@ -41,7 +41,20 @@ export const conversations = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("conversations_user_id_idx").on(table.userId)],
+  (table) => [
+    index("conversations_user_id_idx").on(table.userId),
+    /**
+     * Index Optimization (auditoría de las 45 tablas reales, evidencia en
+     * docs/adr, no "por si acaso"): `getLatestConversation`
+     * (`features/chat/services/get-latest-conversation.ts`) hace
+     * exactamente `WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1` --
+     * sin esta columna en el índice, Postgres ordena TODAS las
+     * conversaciones del usuario antes de tomar la primera. Medido contra
+     * un usuario sintético con 300 conversaciones: cost 34.85→0.59,
+     * 0.146ms→0.033ms, el nodo `Sort` desaparece del plan por completo.
+     */
+    index("conversations_user_id_created_at_idx").on(table.userId, table.createdAt.desc()),
+  ],
 );
 
 export const conversationMessages = pgTable(
@@ -68,6 +81,23 @@ export const conversationMessages = pgTable(
       table.conversationId,
     ),
     index("conversation_messages_user_id_idx").on(table.userId),
+    /**
+     * Index Optimization: la consulta más caliente de todo el repo --
+     * `send-message.ts` trae el historial reciente
+     * (`WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 60`) en
+     * CADA mensaje enviado, sin `created_at` en el índice existente
+     * Postgres debe traer TODA la conversación y ordenarla antes de
+     * recortar. Medido con una conversación sintética de 3000 mensajes
+     * (una charla diaria de casi un año, el caso real que este producto
+     * busca): cost 894.90→57.20, 0.559ms→0.098ms, `Sort` reemplazado por
+     * `Index Scan Backward` que se detiene en el límite. Mismo índice
+     * sirve `get-conversation-detail.ts` (orden ascendente) sin costo
+     * adicional -- ninguna prueba mostró regresión ahí.
+     */
+    index("conversation_messages_conversation_id_created_at_idx").on(
+      table.conversationId,
+      table.createdAt,
+    ),
   ],
 );
 
