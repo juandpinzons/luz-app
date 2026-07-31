@@ -22,3 +22,4 @@ ADR-0017 AIProvider Streaming
 ADR-0018 Architecture V1 Frozen
 ADR-0019 AIProvider Registry
 ADR-0020 Fast User Understanding
+ADR-0021 Curiosity Engine Authorization
