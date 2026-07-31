@@ -179,3 +179,143 @@ const { connection: updated, cursor, events, snapshot } =
 ```
 
 `provider`/`AppleCalendarClient` son las ÚNICAS piezas que saben que Apple/CalDAV existen. Todo lo demás (`domain/`, `application/`) es válido sin cambios el día que exista `GoogleCalendarProvider`.
+
+---
+
+# Gmail Foundation
+
+Cimiento hermano de Calendar Foundation (arriba), mismo patrón arquitectónico exacto, viviendo en la misma carpeta (`features/reality/`). Misión: "Gmail Foundation + Data Isolation Hardening". Estado: **completo desde el punto de vista arquitectónico** -- contratos, un proveedor real (Gmail API v1, con integración real de OAuth/refresh/historial), y una capa de aplicación completa con la vista de producto (`EmailSnapshot`). Sin persistencia, sin flujo de autorización OAuth (pantalla de consentimiento), sin rutas API, sin UI -- exactamente la misma frontera de fase que Calendar Foundation tuvo en su momento (ver arriba, "Puntos de extensión #2/#3"): esa es responsabilidad de quien lo consuma después.
+
+## Qué es Gmail Foundation
+
+La abstracción que cualquier proveedor de correo (Gmail, Outlook, ...) implementa, más la capa de casos de uso que traduce lo que un proveedor devuelve en señales de producto deterministas -- sin que el resto de LUZ sepa que Gmail/Outlook existen.
+
+```
+features/reality/
+  domain/       — EmailMessage, EmailSender, EmailImportance, EmailConnection,
+                   EmailSyncCursor, EmailSyncOptions (+ EMAIL_SYNC_HARD_CEILING),
+                   EmailSyncResult, EmailSnapshot (+ EmailThreadSummary),
+                   ExternalMessageId/ExternalThreadId (en identifiers.ts,
+                   junto a los de Calendar), EmailProviderKind
+  providers/
+    email-provider.ts   — el puerto (EmailProvider) + EmailLabelDescriptor
+    gmail/               — GmailProvider (Gmail API v1), único proveedor real
+  application/
+    run-gmail-sync.ts           — paginación agnóstica de proveedor
+    connect-gmail.ts            — valida y construye una EmailConnection
+    disconnect-gmail.ts         — transición de estado pura
+    synchronize-gmail.ts        — sync + bookkeeping de conexión
+    apply-email-sync-result.ts  — fusiona un delta + hace cumplir el techo de 10
+    refresh-gmail.ts            — synchronize + apply + snapshot, en una llamada
+    get-email-snapshot.ts       — la vista de producto completa (5 señales)
+    get-recent-emails.ts        — accesor angosto
+```
+
+Misma disciplina de capas que Calendar (ver arriba, "Responsabilidades por capa") -- `domain/` no sabe cómo se obtienen los mensajes, `providers/gmail/` es el único lugar del repo que sabe que Gmail existe, `application/` solo depende del puerto `EmailProvider`.
+
+## Alcance deliberadamente acotado (la parte que NO es "como Calendar")
+
+A diferencia de Calendar (sin límite de volumen), Gmail Foundation tiene un **techo de producto explícito, no solo técnico**: `EMAIL_SYNC_HARD_CEILING = 10` (`domain/email-sync-options.ts`). "Nunca más de 10 mensajes conocidos a la vez" se hace cumplir en tres capas independientes, a propósito (defensa en profundidad, no redundancia accidental):
+
+1. `GmailProvider.sync()` recorta `options.maxResults` a este techo antes de pedirle nada a Gmail.
+2. `applyEmailSyncResult()` vuelve a recortar DESPUÉS de fusionar `priorMessages` + el delta -- el único lugar con visibilidad sobre el estado acumulado completo.
+3. El propio contrato (`EmailSyncOptions`, `EmailSnapshot`) documenta el techo como política, no como detalle de implementación.
+
+**Nunca se persiste ni se transporta el cuerpo de un mensaje.** `EmailMessage` (`domain/email-message.ts`) no tiene NINGÚN campo para contenido/HTML/cuerpo -- ausencia estructural, no un campo opcional sin poblar. `GmailClient.getMessage()` pide `format=metadata` exclusivamente (nunca `format=full`/`raw`), y acota `metadataHeaders` a `From`/`Subject`/`Date` -- ni siquiera se le pide a Gmail que incluya más de lo que el dominio puede representar. El scope OAuth recomendado para esto es `gmail.metadata` (o, si un consumidor futuro ya usa `gmail.readonly` por otro motivo, sigue siendo válido -- este cliente simplemente nunca ejerce el permiso de leer cuerpos aunque el scope se lo permitiera).
+
+## Frontera de proveedor
+
+Mismo principio que Calendar (verificado por diseño, no solo por convención): `providers/gmail/` es el único lugar del repo que importa algo de la Gmail API, construye una URL de `gmail.googleapis.com`, o sabe que un `historyId` existe. `domain/` y `application/` solo conocen `EmailProvider` (el puerto) y las formas neutrales (`EmailMessage`, `EmailSnapshot`, ...).
+
+## Flujo de sincronización
+
+Dos caminos reales según haya o no un cursor previo -- mismo patrón de dos niveles que Calendar (paginación + aplicación):
+
+```
+sync inicial (cursor: null)
+  GmailProvider.getProfile()          -- siembra historyId real, confirma
+                                          identidad de cuenta (assertAccountMatches)
+  → GmailClient.listMessages(≤10)     -- lista de ids, SIN confiar en su orden
+  → GmailClient.getMessage(id) × N    -- format=metadata, aislado por mensaje
+  → ordenado por receivedAt descendente, siempre -- determinista pase lo que
+    pase con el orden que Gmail devolvió
+
+sync incremental (cursor: historyId previo)
+  GmailClient.listHistory(startHistoryId)   -- Change History API real
+    messagesAdded / labelsAdded / labelsRemoved  → releer mensaje completo (upsert)
+    messagesDeleted                              → id a borrar (gana sobre upsert)
+  → historyId nuevo de la respuesta = cursor a persistir
+
+applyEmailSyncResult(mensajesConocidos, upserted, deleted)
+  → upsert por id, quita borrados, RECORTA a los 10 más recientes
+
+getEmailSnapshot(mensajes, connection, options)
+  → deriva EmailSnapshot -- pura, sin I/O
+
+refreshGmail(...)  =  los tres pasos de arriba, en una sola llamada
+```
+
+`connectGmail(provider, input)` valida la conexión llamando `provider.listLabels()` una vez (mismo criterio que `connectCalendar`: credenciales inválidas fallan aquí, nunca en silencio en el primer sync). `disconnectGmail(connection)` es una transición de estado pura.
+
+**Reautenticación real, no solo modelada**: `GmailClient` intenta EXACTAMENTE un refresh (`refresh_token` -> nuevo `access_token`, RFC 6749 §6) por request fallido con 401, proactivo si `expiresAt` indica que el token ya venció -- nunca un loop. Sin `refreshToken`/`clientId`/`clientSecret`, o si el refresh también falla, lanza `GmailAuthExpiredError` -- el llamador decide marcar `needs_reauth`, este cimiento nunca reintenta solo (mismo principio de restricción que `CalDavInvalidSyncTokenError` en Calendar).
+
+**Aislamiento por registro** (misma lección que Calendar aprendió en su fase de hardening, aplicada aquí desde el principio, no después de un bug real): un mensaje individual que falla al obtenerse (404 -- borrado entre listar y leer) se omite con `console.error`, nunca aborta el resto del lote.
+
+## Contrato del Snapshot -- cinco señales, todas deterministas
+
+`EmailSnapshot` (`domain/email-snapshot.ts`) es el único punto de contacto que un feature de producto debería necesitar. Cada campo (salvo `recent`/`generatedAt`/`syncStatus`) es directamente una de las cinco señales pedidas por la misión -- mismo patrón que `today`/`upcoming`/`freeBlocks`/`busyPeriods`/`recurringCommitments` en `CalendarSnapshot`, nunca un tipo "Signal" genérico envolviendo todo:
+
+| Señal | Campo | Regla exacta (ver `application/get-email-snapshot.ts`) |
+|---|---|---|
+| `new_email` | `newEmails` | `receivedAt` dentro de las últimas 24h antes de `now` (ventana de recencia, no delta contra una sincronización anterior -- esta función es pura sobre una lista estática) |
+| `important_email` | `important` | `importance === "high"` |
+| `unread_email` | `unread` | `unread === true` |
+| `waiting_reply` | `waitingReply` | no leído + el remitente NO es la propia cuenta (`EmailConnection.externalAccountId`) + ≥4h desde que llegó |
+| `recent_thread` | `recentThreads` | mensajes agrupados por `threadId`, con conteo y si el hilo tiene algo sin leer |
+
+Ambos umbrales (24h, 4h) son parámetros de `EmailSnapshotOptions`, no constantes escondidas -- un consumidor puede ajustarlos sin tocar este cimiento.
+
+## Puntos de extensión
+
+1. **Un proveedor nuevo** (`OutlookMailProvider`): una carpeta nueva en `providers/`, una clase que implemente `EmailProvider`. Cero cambios en `domain/` o `application/`.
+2. **Persistencia**: `EmailConnection` + el resultado de `applyEmailSyncResult`/`getEmailSnapshot` son las formas que una futura capa de persistencia guardaría -- mismo patrón que `core/calendar-connections/` para Calendar (tabla `email_connections`, cifrado de `refreshToken` vía `core/security/secret-cipher.ts`, reutilizable tal cual). Esa capa también es donde `GmailClient.getCurrentCredentials()` (el access token ya refrescado en memoria durante una llamada) debería leerse y re-guardarse -- este cimiento nunca lo persiste por su cuenta.
+3. **OAuth real**: el scope incremental (`gmail.metadata` o `gmail.readonly`) sobre el proveedor Google YA configurado en `auth/providers/index.ts` (login) es la vía natural -- pedirlo en un flujo de conexión SEPARADO del login (mismo patrón que Calendar: conectar es una acción explícita de la persona, nunca agregado al scope de login por defecto, para no cambiar la pantalla de consentimiento que TODOS los usuarios ven al iniciar sesión).
+4. **Bridge hacia `core/reality`/`core/connectors`**: igual que Calendar (ver arriba, punto #4) -- no existe todavía, documentado como extensión.
+5. **Resolución de etiquetas personalizadas**: `EmailMessage.labels` son ids opacos (`Label_17`) -- `EmailProvider.listLabels()` ya existe para que un consumidor futuro los resuelva a nombres legibles por su cuenta.
+
+## Consideraciones de producción y limitaciones honestas
+
+- **Sin verificación contra una cuenta Gmail real todavía** -- mismo punto exacto en el que Calendar Foundation estaba antes de su fase de "Hardening" (ver arriba): esta fase construyó un cliente REAL (endpoints, formas de request/response, manejo de errores, todo según la documentación oficial de Gmail API v1), verificado con fixtures deterministas (mapper + pipeline completo + aislamiento multi-cuenta, ver `.scratch/smoke-gmail-foundation.ts`), pero sin una llamada real contra `gmail.googleapis.com` -- este entorno no tiene forma de completar un flujo de consentimiento OAuth interactivo. Verificar contra una cuenta real (como se hizo para Apple, ver `providers/apple/AUDIT.md` §8) es el siguiente paso recomendado antes de producción.
+- **Una sola página de historial por llamada a `sync()`**: `GmailProvider` no persigue `nextPageToken` de `history.list()` dentro de una sola llamada -- reporta `hasMore: true` y confía en que `runEmailSync` (el runner de paginación, ya genérico) pida la siguiente página. Correcto por diseño, sin verificar empíricamente con un volumen de historial real.
+- **`historyId` puede expirar** (Gmail retiene el historial por un tiempo limitado, no garantizado por días exactos) -- `GmailHistoryExpiredError` señala la condición; ningún llamador de esta fase implementa el reinicio automático a `cursor: null` (sería inventar comportamiento no pedido, mismo criterio que Calendar).
+- **`assertAccountMatches`**: `GmailProvider` compara la cuenta autenticada (`getProfile().emailAddress`) contra `EmailConnection.externalAccountId` en cada sync inicial y aborta si no coinciden -- control de aislamiento defensivo añadido específicamente por la misión de hardening que motivó esta fase, sin equivalente hoy en `AppleCalendarProvider` (Apple no tiene un endpoint de perfil barato para hacer la misma comprobación).
+
+## Para quien consume esto (Product Engineering / i7)
+
+```ts
+import {
+  connectGmail, synchronizeGmail, refreshGmail,
+  getEmailSnapshot, getRecentEmails, disconnectGmail,
+} from "features/reality/application";
+import { GmailClient, GmailProvider } from "features/reality/providers/gmail";
+
+// 1) Construir el proveedor concreto -- SOLO este paso conoce a Gmail.
+//    accessToken/refreshToken ya resueltos por un flujo OAuth futuro
+//    (ver "Puntos de extensión #3") -- este cimiento nunca los obtiene.
+const provider = new GmailProvider(new GmailClient({
+  accessToken, refreshToken, expiresAt, clientId, clientSecret,
+}));
+
+// 2) Conectar (valida credenciales) -- guarda `connection` donde decidas.
+const connection = await connectGmail(provider, { lifeGraphId, externalAccountId });
+
+// 3) Sincronizar + obtener el snapshot en un solo paso.
+const { connection: updated, cursor, messages, snapshot } =
+  await refreshGmail(provider, connection, previousCursor, priorMessages);
+
+// snapshot.newEmails / snapshot.unread / snapshot.important /
+// snapshot.waitingReply / snapshot.recentThreads -- eso es todo lo que un
+// componente de UI o un engine de LUZ debería necesitar tocar.
+```
+
+`provider`/`GmailClient` son las ÚNICAS piezas que saben que Gmail existe. Todo lo demás (`domain/`, `application/`) es válido sin cambios el día que exista `OutlookMailProvider`.
