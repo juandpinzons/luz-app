@@ -14,6 +14,18 @@ export const eventTypeEnum = pgEnum("event_type", [
   "error",
   "message_attempted",
   "message_sent",
+  /**
+   * Misión "Experience Intelligence V1" -- una fila por cada vez que
+   * Home decide cuál `ExperienceCard` mostrar como primaria.
+   * `metadata.key`/`metadata.category` (ver `features/experience/`)
+   * es lo único que la rotación necesita leer de vuelta: qué tarjeta
+   * exacta ganó, ordenado por `createdAt`, filtrado por
+   * `events_user_type_created_at_idx` (mismo índice que ya usa
+   * `reserveRateLimitSlot`). Ninguna tabla nueva: es exactamente el
+   * tipo de "señal operacional que ninguna tabla de dominio ya
+   * captura" que esta tabla ya existe para modelar.
+   */
+  "experience_card_shown",
 ]);
 
 export const events = pgTable(

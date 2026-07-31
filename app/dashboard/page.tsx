@@ -6,7 +6,6 @@ import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
-import { listActiveGoals, listActiveProjects, type Goal, type Project } from "@/core/life";
 import { getRecentMemoryHighlight } from "@/features/dashboard/services/get-recent-memory-highlight";
 import { EventRow } from "@/features/home/components/event-row";
 import { truncateText } from "@/features/memories/components/truncate-text";
@@ -18,11 +17,20 @@ import {
   buildDashboardSummary,
   type DashboardSummary,
 } from "@/features/dashboard/services/build-dashboard-summary";
-import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
+import { buildLifeDashboardSnapshot } from "@/features/dashboard/services/build-life-dashboard-snapshot";
+import { buildFollowUpRecommendations } from "@/features/dashboard/services/build-follow-up-recommendations";
+import { buildPresenceState } from "@/features/presence/application/build-presence-state";
+import { buildHomeState } from "@/features/home/application/build-home-state";
+import type { HomeState } from "@/features/home/domain/home-state";
+import { buildExperienceState } from "@/features/experience/application/build-experience-state";
+import type { ExperienceState } from "@/features/experience/domain/experience-state";
 import {
-  getUpcomingDeadlines,
-  type UpcomingDeadline,
-} from "@/features/life/services/get-upcoming-deadlines";
+  getRecentPrimaryKeys,
+  recordExperienceCardShown,
+} from "@/features/experience/services/experience-signal-log";
+import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
+import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
+import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
@@ -41,12 +49,6 @@ import { ConversationOpeningRitual } from "@/features/chat/components/conversati
 const FIRST_VISIT_CUE = "Hola";
 
 const ROUTE = "/dashboard";
-
-const UPCOMING_WINDOW_DAYS = 14;
-
-function daysUntil(date: Date): number {
-  return Math.ceil((date.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
-}
 
 /** A partir de cuántos días sin hablar vale la pena reconocer la pausa, en vez de saludar como si fuera un día cualquiera. */
 const RETURNING_GAP_DAYS = 3;
@@ -86,6 +88,23 @@ function buildReturningLine(daysAway: number): string {
 }
 
 /**
+ * Misión "Experience Intelligence V1": el saludo determinístico de
+ * Presence (`HomeState.greeting`, vía `buildGreeting`) nunca incluye
+ * el nombre de la persona -- Presence no recibe datos de identidad, a
+ * propósito (ver `features/presence/README.md`). Home expone las
+ * piezas, no redacta prosa combinándolas; combinarlas es
+ * responsabilidad de quien arma la pantalla, exactamente lo que hace
+ * esta función. Reemplaza el `greetingLine` que antes armaba
+ * `buildMorningBrief` con su propio `timeOfDayGreeting` -- misma hora
+ * de Bogotá, misma decisión, ahora tomada una sola vez.
+ */
+function personalizeGreeting(greeting: string, personName: string | null | undefined): string {
+  const firstName = personName?.trim().split(/\s+/)[0];
+  const base = greeting.replace(/\.$/, "");
+  return firstName ? `${base}, ${firstName}.` : `${base}.`;
+}
+
+/**
  * Puerta de entrada de LUZ después del login (Sprint Alpha-1a; Dashboard
  * V2 en Sprint 2, docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §3.1/4.1).
  * El proxy (`proxy.ts`) ya exige sesión para llegar aquí; el `redirect`
@@ -94,6 +113,14 @@ function buildReturningLine(daysAway: number): string {
  * Si `LifeGraphContext` no se resuelve, se degrada a un saludo simple
  * en vez de romper la pantalla — mismo criterio de tolerancia a fallos
  * que ya usa `sendMessage` desde Sprint B1.
+ *
+ * Misión "Experience Intelligence V1": esta página ya no arma su
+ * propia lectura de Goals/Projects/calendario por separado -- consume
+ * el mismo `HomeState` (Presence + Calendar Foundation + Life Graph)
+ * que `features/home/` ya sabía componer, y lo arbitra con
+ * `buildExperienceState` para decidir UNA sola experiencia primaria en
+ * vez de una pila de secciones independientes. Ver
+ * `features/experience/README.md`.
  */
 export default async function DashboardPage() {
   const session = await auth();
@@ -138,6 +165,37 @@ export default async function DashboardPage() {
   }
 
   /**
+   * El mismo `HomeState` que `features/home/` ya sabía componer
+   * (Presence + Calendar Foundation + Life Graph) -- antes nunca se
+   * conectaba a ninguna pantalla real (ver `features/home/README.md`,
+   * `features/dashboard/services/build-life-dashboard-snapshot.ts`:
+   * "deliberadamente NO se conecta todavía a ninguna página"). Esta es
+   * esa conexión. `calendar` se completa más abajo, una vez que se
+   * resuelve la conexión real (`getLiveCalendarContext`) -- se
+   * construye primero con `null` para no bloquear el resto del Life
+   * Graph a que el calendario responda.
+   */
+  let homeState: HomeState | null = null;
+  if (lifeGraphContext) {
+    try {
+      const snapshot = await buildLifeDashboardSnapshot(db, lifeGraphContext);
+      const recommendations = buildFollowUpRecommendations(snapshot.observations, snapshot);
+      const presence = buildPresenceState(snapshot.observations, snapshot, recommendations);
+      homeState = buildHomeState(snapshot, snapshot.observations, recommendations, presence, null);
+    } catch (error) {
+      logger.log({
+        event: "dashboard.home_state_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+    }
+  }
+
+  /**
    * Antes sin try/catch: si `assembleRealitySnapshot` fallaba (p. ej.
    * una consulta a `core/life` real), tumbaba toda la página en vez de
    * degradarse — el mismo criterio de tolerancia a fallos que ya
@@ -166,70 +224,6 @@ export default async function DashboardPage() {
     }
   }
 
-  /**
-   * Goals/Projects reales, leídos directo de `core/life` — no vía
-   * Reality Snapshot (ese contrato es para ensamblar el prompt de IA,
-   * ADR-0013; una pantalla de solo lectura no lo necesita, §6 del
-   * diseño). "Próximos a vencer" responde a la vez las preguntas (a) y
-   * (d) del §3.1 — ambas usan la misma ventana de 14 días sobre
-   * targetDate/dueDate; mostrarlas por separado habría repetido los
-   * mismos Goals/Projects dos veces.
-   *
-   * `allSettled`, no `all`: antes, si una de las tres fallaba, las tres
-   * desaparecían juntas (mismo bug de fondo que en app/life/page.tsx) —
-   * cada una se degrada por separado ahora.
-   */
-  let activeGoals: Goal[] = [];
-  let activeProjects: Project[] = [];
-  let upcomingDeadlines: UpcomingDeadline[] = [];
-  if (lifeGraphContext) {
-    const [goalsResult, projectsResult, deadlinesResult] = await Promise.allSettled([
-      listActiveGoals(db, lifeGraphContext),
-      listActiveProjects(db, lifeGraphContext),
-      getUpcomingDeadlines(db, lifeGraphContext, {
-        withinDays: UPCOMING_WINDOW_DAYS,
-      }),
-    ]);
-    if (goalsResult.status === "fulfilled") {
-      activeGoals = goalsResult.value;
-    } else {
-      logger.log({
-        event: "dashboard.active_goals_failed",
-        severity: "error",
-        requestId,
-        route: ROUTE,
-        userId: session.user.id,
-        lifeGraphId: lifeGraphContext.lifeGraphId,
-        ...describeError(goalsResult.reason),
-      });
-    }
-    if (projectsResult.status === "fulfilled") {
-      activeProjects = projectsResult.value;
-    } else {
-      logger.log({
-        event: "dashboard.active_projects_failed",
-        severity: "error",
-        requestId,
-        route: ROUTE,
-        userId: session.user.id,
-        lifeGraphId: lifeGraphContext.lifeGraphId,
-        ...describeError(projectsResult.reason),
-      });
-    }
-    if (deadlinesResult.status === "fulfilled") {
-      upcomingDeadlines = deadlinesResult.value;
-    } else {
-      logger.log({
-        event: "dashboard.upcoming_deadlines_failed",
-        severity: "error",
-        requestId,
-        route: ROUTE,
-        userId: session.user.id,
-        lifeGraphId: lifeGraphContext.lifeGraphId,
-        ...describeError(deadlinesResult.reason),
-      });
-    }
-  }
   /**
    * Calendario en vivo (Misión "conéctalo al dashboard principal") --
    * mismo criterio de tolerancia a fallos que el resto de esta página:
@@ -268,6 +262,41 @@ export default async function DashboardPage() {
     }
   }
 
+  if (homeState && calendarOutcome?.status === "connected") {
+    homeState = { ...homeState, calendar: calendarOutcome.calendarContext };
+  }
+
+  /**
+   * Fases 1-5 de "Experience Intelligence V1" (ver
+   * `features/experience/README.md`): de todo lo que `homeState` ya
+   * decidió, cuál ES la experiencia de hoy. `getRecentPrimaryKeys`
+   * nunca lanza por sí sola (select simple); si falla, todo el bloque
+   * se degrada a "sin experiencia arbitrada hoy" en vez de romper la
+   * página, mismo criterio que el resto de este archivo.
+   * `recordExperienceCardShown` es tolerante a fallos por dentro
+   * (reusa `recordEvent`), así que nunca necesita su propio catch.
+   */
+  let experience: ExperienceState | null = null;
+  if (homeState) {
+    try {
+      const recentPrimaryKeys = await getRecentPrimaryKeys(db, session.user.id);
+      experience = buildExperienceState(homeState, recentPrimaryKeys);
+      if (experience.primary) {
+        await recordExperienceCardShown(db, session.user.id, experience.primary);
+      }
+    } catch (error) {
+      logger.log({
+        event: "dashboard.experience_state_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext?.lifeGraphId,
+        ...describeError(error),
+      });
+    }
+  }
+
   /**
    * "La memoria interna de LUZ reflejada en la experiencia" -- un
    * teaser real (nunca solo un conteo, eso ya existía en
@@ -291,8 +320,6 @@ export default async function DashboardPage() {
       });
     }
   }
-
-  const activeLifeItems = [...activeGoals, ...activeProjects];
 
   /**
    * Resumen del Dashboard (Sprint Alpha-1a: Dashboard) — datos reales
@@ -339,10 +366,12 @@ export default async function DashboardPage() {
         acotación, no como parte del saludo.
       */}
       <div className="animate-fade-in space-y-1">
-        {brief ? (
+        {homeState ? (
           <>
-            <p className="text-2xl font-light text-zinc-100">{brief.greetingLine}</p>
-            <p className="text-sm text-zinc-500">{brief.dateLine}</p>
+            <p className="text-2xl font-light text-zinc-100">
+              {personalizeGreeting(homeState.greeting, session.user.name)}
+            </p>
+            {brief?.dateLine && <p className="text-sm text-zinc-500">{brief.dateLine}</p>}
           </>
         ) : (
           <p className="text-2xl font-light text-zinc-100">
@@ -392,33 +421,34 @@ export default async function DashboardPage() {
         )
       )}
 
-      {upcomingDeadlines.length > 0 && (
-        <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
-          <h2 className="text-sm font-medium text-zinc-400">
-            Lo que se acerca
-          </h2>
-          <ul className="mt-3 space-y-2">
-            {upcomingDeadlines.map((item, index) => (
-              <li
-                key={item.id}
-                className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
-                style={{ animationDelay: `${200 + index * 40}ms` }}
-              >
-                <span className="text-zinc-300">
-                  {item.kind === "goal" ? "Objetivo" : "Proyecto"} &ldquo;
-                  {item.title}&rdquo;
-                </span>
-                <span className="text-zinc-500">
-                  {" "}
-                  — en {daysUntil(item.dueAt)}{" "}
-                  {daysUntil(item.dueAt) === 1 ? "día" : "días"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/*
+        Misión "Experience Intelligence V1": UNA sola experiencia
+        primaria (Fase 1) -- reemplaza las antiguas secciones
+        independientes "Lo que se acerca" y "Objetivos activos", que
+        mostraban listas completas sin ninguna arbitración real (esta
+        misma auditoría encontró que ninguna de las dos usaba todavía
+        `HomeState`/`PresenceState`, ver `features/home/README.md`).
+        Esa información ahora fluye, ya priorizada, a través de
+        `experience.primary`/`.secondary`.
+      */}
+      {experience?.primary && (
+        <PrimaryExperienceCard
+          card={experience.primary}
+          tone={experience.tone}
+          isNew={experience.isNewPrimary}
+        />
+      )}
+      {experience && experience.secondary.length > 0 && (
+        <SecondaryExperienceList cards={experience.secondary} />
       )}
 
+      {/*
+        Calendario de hoy: información complementaria genuina (no
+        cubierta por `experience`, que solo arbitra momentos relativos
+        a "ahora" -- ver `features/experience/README.md`), por eso se
+        mantiene, pero como apoyo visual a la experiencia primaria,
+        nunca compitiendo con ella.
+      */}
       {calendarOutcome?.status === "connected" && (
         <section className="animate-fade-in mt-8" style={{ animationDelay: "180ms" }}>
           <div className="flex items-center justify-between">
@@ -470,25 +500,6 @@ export default async function DashboardPage() {
         </p>
       )}
 
-      {activeLifeItems.length > 0 && (
-        <section className="animate-fade-in mt-8" style={{ animationDelay: "200ms" }}>
-          <h2 className="text-sm font-medium text-zinc-400">
-            Objetivos activos
-          </h2>
-          <div className="mt-3 flex flex-wrap gap-3">
-            {activeLifeItems.map((item, index) => (
-              <div
-                key={item.id}
-                className="animate-fade-in rounded-xl border border-zinc-800 px-4 py-3"
-                style={{ animationDelay: `${240 + index * 40}ms` }}
-              >
-                <p className="text-sm text-zinc-200">{item.title}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       <Link
         href="/chat"
         className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
@@ -508,7 +519,7 @@ export default async function DashboardPage() {
       <DashboardActivitySummary
         user={session.user}
         summary={summary}
-        hasUpcomingDeadline={upcomingDeadlines.length > 0}
+        hasUpcomingDeadline={(homeState?.upcoming.length ?? 0) > 0}
       />
     </>
   );

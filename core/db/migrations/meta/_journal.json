@@ -148,6 +148,13 @@
       "when": 1785441043405,
       "tag": "0020_calendar_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785503984467,
+      "tag": "0021_experience_card_shown_event_type",
+      "breakpoints": true
     }
   ]
 }
