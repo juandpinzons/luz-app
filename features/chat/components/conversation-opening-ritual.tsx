@@ -7,18 +7,26 @@ import { useEffect, useState } from "react";
  * constantes independientes elegidas por separado -- es lo que hace
  * que el ritual se lea como un solo movimiento en vez de cuatro
  * animaciones que casualmente ocurren cerca una de otra. El orden es
- * literal: respira ~1s, "Welcome" se escribe, y solo cuando termina de
+ * literal: respira 0.7s, "Welcome" se escribe, y solo cuando termina de
  * escribirse (nunca antes) puede empezar el pulso que la cierra.
+ *
+ * Ajustado (queja real de producto: "la esfera toma mucho tiempo,
+ * debe respirar 0.5 a 1 segundo") -- el total bajó de 2750ms a
+ * 1900ms mantiendo las mismas proporciones entre fases, para que
+ * siga leyéndose como una sola respiración, solo más corta. La causa
+ * real de la demora percibida no era esta coreografía fija sino que
+ * `ready` en `/chat` esperaba una llamada a IA real antes de empezar
+ * (ver `app/chat/page.tsx`, `loadConversation`) -- corregido aparte.
  */
-const BREATHE_BEFORE_TEXT_MS = 1000;
+const BREATHE_BEFORE_TEXT_MS = 700;
 /** Debe coincidir con `--animate-script-reveal` (`app/globals.css`). */
-const TEXT_REVEAL_DURATION_MS = 900;
+const TEXT_REVEAL_DURATION_MS = 600;
 /** Un respiro breve después de terminar de escribir -- nunca instantáneo, para que el pulso se sienta como una reacción, no como un cronómetro. */
-const PULSE_BUFFER_MS = 150;
+const PULSE_BUFFER_MS = 100;
 const MIN_RITUAL_DURATION_MS =
   BREATHE_BEFORE_TEXT_MS + TEXT_REVEAL_DURATION_MS + PULSE_BUFFER_MS;
 /** Debe coincidir con `--animate-light-pulse`/`--animate-veil-dissolve`/`--animate-emerge` (`app/globals.css`) -- las tres comparten esta duración a propósito, para disolverse como un solo gesto. */
-const PULSE_DURATION_MS = 700;
+const PULSE_DURATION_MS = 500;
 
 function prefersReducedMotion(): boolean {
   return (

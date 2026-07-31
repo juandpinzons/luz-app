@@ -47,11 +47,11 @@
    * animaciones que casualmente ocurren juntas.
    */
   --animate-sphere-breathe: sphere-breathe 3.2s ease-in-out infinite;
-  /** "Welcome" revelándose de izquierda a derecha, como un trazo manual -- nunca un simple fade, ver `script-reveal`. */
-  --animate-script-reveal: script-reveal 900ms ease-out both;
-  --animate-light-pulse: light-pulse 700ms ease-in both;
-  --animate-veil-dissolve: veil-dissolve 700ms ease-in both;
-  --animate-emerge: emerge 700ms ease-out both;
+  /** "Welcome" revelándose de izquierda a derecha, como un trazo manual -- nunca un simple fade, ver `script-reveal`. Duración sincronizada con `TEXT_REVEAL_DURATION_MS` (`conversation-opening-ritual.tsx`) -- ver ese archivo si cambia. */
+  --animate-script-reveal: script-reveal 600ms ease-out both;
+  --animate-light-pulse: light-pulse 500ms ease-in both;
+  --animate-veil-dissolve: veil-dissolve 500ms ease-in both;
+  --animate-emerge: emerge 500ms ease-out both;
 }
 
 @keyframes fade-in {

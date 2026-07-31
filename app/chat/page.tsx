@@ -331,16 +331,28 @@ function ChatPageContent() {
           setIsHistoricalConversation(false);
           setHistoricalLabel(null);
 
-          const response = await fetch("/api/chat/welcome");
-          const data: GetWelcomeResponse | null = response.ok
-            ? await response.json()
-            : null;
-
-          if (!cancelled && data) {
-            setWelcomeCue(data.cue);
-            setWelcomeGreeting(data.greeting);
-            setOrbSignature(data.orb);
-          }
+          // Fire-and-forget, nunca `await` -- el saludo/orbe generado por
+          // IA (`generate-welcome.ts`) es una mejora sobre la apertura,
+          // nunca un requisito para poder escribir. Antes este `await`
+          // dejaba la esfera del ritual (`ready={!isLoadingHistory}`)
+          // esperando lo que tardara esa llamada real a IA, contradiciendo
+          // su propio diseño ("nunca depende de cuánto tarde una petición
+          // real", ver `conversation-opening-ritual.tsx`) -- mismo
+          // criterio que `startNewConversation` ya usa más abajo. Sin
+          // datos todavía, el render ya tiene un respaldo sensato
+          // (`welcomeGreeting ?? "Aquí estoy."`), nunca un placeholder
+          // roto.
+          fetch("/api/chat/welcome")
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data: GetWelcomeResponse | null) => {
+              if (cancelled || !data) return;
+              setWelcomeCue(data.cue);
+              setWelcomeGreeting(data.greeting);
+              setOrbSignature(data.orb);
+            })
+            .catch(() => {
+              // Silencioso a propósito, mismo criterio que `startNewConversation`.
+            });
         }
       } catch (error) {
         console.error(error);
