@@ -58,18 +58,46 @@ function recommendationEntityKey(recommendation: FollowUpRecommendation): string
   return primary ? entityKey(primary) : null;
 }
 
+/**
+ * `recommendation.title` es el nombre genérico del TIPO de
+ * recomendación ("Enfocar dominio", igual para cualquier dominio) --
+ * nunca la entidad real. `recommendation.explanation` sí trae la
+ * entidad real, pero además incluye evidencia cruda entre corchetes
+ * (`[activeItems=0, everHadActivity=false]`), pensada para
+ * trazabilidad interna (`build-follow-up-recommendations.ts`), no
+ * para mostrarse tal cual.
+ *
+ * Encontrado en producción (captura real de `/dashboard`): dos
+ * recomendaciones `FOCUS_DOMAIN` de dominios distintos se veían como
+ * la misma tarjeta repetida (mismo `recommendation.title` genérico), y
+ * la tarjeta primaria mostraba la evidencia cruda sin traducir. Esta
+ * función arma un título específico (la entidad real, cuando existe)
+ * y un detalle sin la evidencia cruda -- nunca un dato nuevo, solo una
+ * presentación distinta de lo que la recomendación ya trae.
+ */
+function describeRecommendation(recommendation: FollowUpRecommendation): { title: string; detail: string } {
+  const primaryEntity = recommendation.relatedEntities[0];
+  return {
+    title: primaryEntity?.title ?? recommendation.title,
+    detail: recommendation.explanation.replace(/\s*\[[^\]]*\]/, ""),
+  };
+}
+
 function attentionCandidates(items: FollowUpRecommendation[]): CandidateWithEntity[] {
-  return items.map((recommendation) => ({
-    entityKey: recommendationEntityKey(recommendation),
-    card: {
-      key: `attention:${recommendation.id}`,
-      category: "attention",
-      title: recommendation.title,
-      detail: recommendation.explanation,
-      importance: RECOMMENDATION_PRIORITY_IMPORTANCE[recommendation.priority] ?? 1,
-      action: recommendation.suggestedAction,
-    },
-  }));
+  return items.map((recommendation) => {
+    const { title, detail } = describeRecommendation(recommendation);
+    return {
+      entityKey: recommendationEntityKey(recommendation),
+      card: {
+        key: `attention:${recommendation.id}`,
+        category: "attention",
+        title,
+        detail,
+        importance: RECOMMENDATION_PRIORITY_IMPORTANCE[recommendation.priority] ?? 1,
+        action: recommendation.suggestedAction,
+      },
+    };
+  });
 }
 
 /**
@@ -84,17 +112,20 @@ function celebrationCandidates(
   items: FollowUpRecommendation[],
   encouragement: string | null,
 ): CandidateWithEntity[] {
-  return items.map((recommendation) => ({
-    entityKey: recommendationEntityKey(recommendation),
-    card: {
-      key: `celebration:${recommendation.id}`,
-      category: "celebration",
-      title: recommendation.title,
-      detail: encouragement ?? recommendation.explanation,
-      importance: CELEBRATION_IMPORTANCE,
-      action: recommendation.suggestedAction,
-    },
-  }));
+  return items.map((recommendation) => {
+    const { title, detail } = describeRecommendation(recommendation);
+    return {
+      entityKey: recommendationEntityKey(recommendation),
+      card: {
+        key: `celebration:${recommendation.id}`,
+        category: "celebration",
+        title,
+        detail: encouragement ?? detail,
+        importance: CELEBRATION_IMPORTANCE,
+        action: recommendation.suggestedAction,
+      },
+    };
+  });
 }
 
 const MEETING_MOMENT_IMPORTANCE: Record<HomeMeetingMomentKind, number> = {

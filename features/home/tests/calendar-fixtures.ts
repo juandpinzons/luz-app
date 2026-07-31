@@ -177,6 +177,20 @@ export const boundaryLimitationCalendarSnapshot: CalendarSnapshot = getCalendarS
   { now: BOUNDARY_LIMITATION_NOW },
 );
 
+/**
+ * Mismo escenario exacto de arriba, pero pasando `timeZone` (misión
+ * "Experience Intelligence V1": confirmada en producción vía captura
+ * de pantalla real -- un evento de la noche anterior aparecía bajo
+ * "hoy" en `/dashboard`). Demuestra que el parámetro aditivo SÍ
+ * corrige el límite: el standup de las 9am debe seguir apareciendo en
+ * `today` a las 10pm hora de Bogotá, en vez de desaparecer.
+ */
+export const boundaryLimitationFixedCalendarSnapshot: CalendarSnapshot = getCalendarSnapshot(
+  boundaryLimitationEvents,
+  boundaryLimitationConnection,
+  { now: BOUNDARY_LIMITATION_NOW, timeZone: "America/Bogota" },
+);
+
 // ---------------------------------------------------------------------------
 // Estados de sincronización, independientes de la hora del día.
 // ---------------------------------------------------------------------------

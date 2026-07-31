@@ -31,6 +31,19 @@ const SYNC_WINDOW_DAYS_BACK = 3;
 const SYNC_WINDOW_DAYS_FORWARD = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * LUZ es un producto pensado para Colombia (mismo criterio que
+ * `build-morning-brief.ts`) -- sin esto, `getCalendarSnapshot` calcula
+ * "hoy" en fronteras de día UTC puro, y un evento de la noche/tarde en
+ * Bogotá puede clasificarse en el día UTC equivocado (ver
+ * `features/reality/README.md`, "Timezone real de la persona";
+ * `features/home/README.md`, hallazgo #3). Único punto que necesita
+ * este cambio: `getCalendarSnapshot` sigue siendo UTC por defecto para
+ * cualquier otro llamador (p. ej. los fixtures que documentan a
+ * propósito el límite sin este parámetro).
+ */
+const PERSON_TIME_ZONE = "America/Bogota";
+
 export type LiveCalendarOutcome =
   | { status: "not_connected" }
   | { status: "connected"; externalAccountId: string; calendarContext: HomeCalendarContext }
@@ -56,6 +69,7 @@ export async function getLiveCalendarContext(db: Database, lifeGraphId: EntityId
     const snapshot = getCalendarSnapshot(events, syncResult.connection, {
       now,
       upcomingWindowDays: SYNC_WINDOW_DAYS_FORWARD,
+      timeZone: PERSON_TIME_ZONE,
     });
 
     await markCalendarConnectionSynced(db, stored.connection.id);

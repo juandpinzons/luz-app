@@ -6,6 +6,7 @@ import type { HomeState } from "../domain/home-state";
 import type { CalendarSnapshot } from "../../reality/domain";
 import {
   boundaryLimitationCalendarSnapshot,
+  boundaryLimitationFixedCalendarSnapshot,
   busyDayCalendarSnapshot,
   errorCalendarSnapshot,
   MORNING_MEETING_ID,
@@ -243,6 +244,20 @@ const CALENDAR_SCENARIOS: Array<{ name: string; run: () => void }> = [
       assert(
         !boundaryLimitationCalendarSnapshot.upcoming.some((event) => event.id === MORNING_MEETING_ID),
         "el mismo evento tampoco debía aparecer en 'upcoming' -- no se recategoriza, desaparece por completo",
+      );
+    },
+  },
+  {
+    name: "calendar: límite de zona horaria, corregido cuando se pasa timeZone",
+    run() {
+      // Mismo escenario exacto que arriba (10pm hora de Bogotá, standup de las
+      // 9am) pero pasando `timeZone: "America/Bogota"` -- confirma que el
+      // parámetro aditivo (`get-calendar-snapshot.ts`) corrige el límite en
+      // vez de solo documentarlo. `get-live-calendar-context.ts` ya lo pasa
+      // en producción.
+      assert(
+        boundaryLimitationFixedCalendarSnapshot.today.some((event) => event.id === MORNING_MEETING_ID),
+        "con timeZone real, el standup de las 9am debía seguir en 'today' a las 10pm hora de Bogotá",
       );
     },
   },

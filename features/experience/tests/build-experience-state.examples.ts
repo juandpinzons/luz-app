@@ -124,6 +124,31 @@ runScenario("la realidad cambia -> la experiencia cambia, sin esperar cooldown",
   assert(day2.isNewPrimary, "día 2: cambiar de problema real cuenta como nueva experiencia primaria");
 });
 
+runScenario("recomendaciones con título genérico -- título/detalle deben diferenciar y ocultar evidencia cruda", () => {
+  // Reproduce el bug real encontrado en producción (captura de `/dashboard`):
+  // dos recomendaciones `FOCUS_DOMAIN` de dominios distintos comparten el
+  // mismo `recommendation.title` genérico ("Enfocar dominio") y traen
+  // evidencia cruda entre corchetes en `explanation`.
+  const first = makeRecommendation("goal-x", "medium", "Objetivo X");
+  const second = makeRecommendation("goal-y", "medium", "Objetivo Y");
+  first.title = "Enfocar dominio";
+  first.explanation = `Enfocar dominio: "${first.relatedEntities[0]!.title}" [activeItems=0, everHadActivity=false].`;
+  second.title = "Enfocar dominio";
+  second.explanation = `Enfocar dominio: "${second.relatedEntities[0]!.title}" [activeItems=0, everHadActivity=false].`;
+
+  const state = buildExperienceState(makeHomeState([first, second]), []);
+  const cards = [state.primary, ...state.secondary].filter((card): card is NonNullable<typeof card> => card !== null);
+
+  assert(cards.length === 2, "debían existir 2 tarjetas (dos entidades reales distintas)");
+  assert(
+    cards[0]!.title !== cards[1]!.title,
+    "las dos tarjetas debían tener títulos distintos, aunque compartan el título genérico de la recomendación",
+  );
+  for (const card of cards) {
+    assert(!card.detail.includes("["), `detail no debía exponer evidencia cruda entre corchetes: "${card.detail}"`);
+  }
+});
+
 if (hasFailure) {
   process.exit(1);
 }

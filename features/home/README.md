@@ -238,34 +238,35 @@ M4 sobre una imprecisión de nombre no calificaba como "problema real"
 bajo el mandato de esta fase ("fix only real issues, do not expand
 scope").
 
-**Hallazgo #3 (real, diagnosticado, deliberadamente sin resolver):
-límite de zona horaria heredado de Calendar Foundation.**
-`getCalendarSnapshot`/`getUpcomingEvents` calculan fronteras de "hoy" en
-UTC puro (`calendar-timing-helpers.ts`, límite documentado en
-`features/reality/README.md`, punto de extensión #5). El resto de LUZ
-ya asume hora de Bogotá (`buildGreeting` en Presence). Para alguien en
-Bogotá (UTC-5), desde las 7pm en adelante la frontera UTC de "hoy" ya
-rodó al día calendario siguiente mientras en Bogotá sigue siendo el
-mismo día -- un evento de esa misma mañana desaparece de `today` Y de
-`upcoming` (no se recategoriza, desaparece).
+**Hallazgo #3 (real, diagnosticado en su momento -- corregido en la
+misión "Experience Intelligence V1"): límite de zona horaria heredado
+de Calendar Foundation.**
+`getCalendarSnapshot` calculaba fronteras de "hoy" en UTC puro
+(`calendar-timing-helpers.ts`). El resto de LUZ ya asume hora de
+Bogotá (`buildGreeting` en Presence). Para alguien en Bogotá (UTC-5),
+desde las 7pm en adelante la frontera UTC de "hoy" ya rodaba al día
+calendario siguiente mientras en Bogotá seguía siendo el mismo día --
+un evento de esa misma mañana desaparecía de `today` Y de `upcoming`
+(no se recategorizaba, desaparecía). Confirmado en producción vía
+captura real de `/dashboard` (un evento de la noche anterior aparecía
+bajo "hoy").
 
-Se investigó una corrección desde este lado (desplazar `now` antes de
-llamar a `getCalendarSnapshot`) y **se descartó explícitamente**:
-`startOfUtcDay` solo puede devolver instantes a las `00:00:00Z`; la
-medianoche real de Bogotá cae a las `05:00:00Z`. Ningún desplazamiento
-de `now` hace que ambas coincidan -- en el mejor caso, un ajuste así
-solo cambia CUÁNDO se manifiesta el error, nunca lo elimina, y arriesga
-dar una falsa sensación de que está resuelto. La corrección real
-requiere que Calendar Foundation reciba una zona horaria (el
-`timeZone?: string` aditivo que M4 ya reservó como punto de extensión)
-y la use para desplazar la comparación, no solo `now` -- un cambio
-dentro de `features/reality/`, fuera del alcance de esta misión
-("Do NOT modify... Calendar Foundation").
+La corrección real necesitaba que Calendar Foundation recibiera una
+zona horaria real, no un desplazamiento de `now` (desplazar `now` solo
+cambia CUÁNDO se manifiesta el error, nunca lo elimina -- `startOfUtcDay`
+solo puede devolver instantes a las `00:00:00Z`, y la medianoche real
+de Bogotá cae a las `05:00:00Z`). Esa corrección ya se hizo, de forma
+aditiva: `CalendarSnapshotOptions.timeZone?: string`
+(`features/reality/`, `startOfDayInZone` reemplaza `startOfUtcDay`
+solo cuando se pasa) y `core/calendar-connections/get-live-calendar-context.ts`
+(el camino real de `/dashboard`) ya lo pasa (`"America/Bogota"`).
+Ningún otro llamador que no pase `timeZone` cambia de comportamiento.
 
-`tests/build-home-state.examples.ts` reproduce este límite
-deliberadamente (escenario "calendar: límite real de zona horaria") en
-vez de ocultarlo -- documentado, no oculto, hasta que exista ese
-parámetro.
+`tests/build-home-state.examples.ts` mantiene el escenario original
+("calendar: límite real de zona horaria") documentando el
+comportamiento SIN el parámetro (el default, sin cambios), y agrega
+"calendar: límite de zona horaria, corregido cuando se pasa timeZone"
+confirmando que el mismo escenario se corrige con él.
 
 ### Fase 3 -- Por qué Presence y Dashboard no se tocaron
 
