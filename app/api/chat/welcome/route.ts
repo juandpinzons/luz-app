@@ -50,7 +50,7 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({
       cue: "Aquí estoy",
       greeting: "Cuéntame lo que quieras, sin apuro.",
-      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false },
+      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false, paletteName: "amber" },
     } satisfies GetWelcomeResponse);
   }
 
@@ -93,7 +93,7 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({
       cue: "Aquí estoy",
       greeting: "Cuéntame lo que quieras, sin apuro.",
-      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false },
+      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false, paletteName: "amber" },
     } satisfies GetWelcomeResponse);
   }
 }

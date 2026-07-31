@@ -42,12 +42,31 @@ function prefersReducedMotion(): boolean {
  * la única fuente de estos valores. Nunca se define un segundo lugar
  * que decida calidez/ritmo/madurez por su cuenta.
  */
+export type RitualOrbPaletteName = "amber" | "rose_gold" | "copper" | "honey" | "coral" | "champagne";
+
 export interface RitualOrbSignature {
   maturityStage: "spark" | "steady" | "radiant";
   warmth: number;
   rhythmMs: number;
   anticipation: boolean;
+  paletteName: RitualOrbPaletteName;
 }
+
+/**
+ * Familia de tonos cálidos "de marca" -- variaciones de `--color-luz`
+ * (227, 177, 104), nunca un color frío o ajeno a LUZ. `amber` es
+ * literalmente el mismo valor que `--color-luz` ya usa en el resto de
+ * la interfaz -- quien no tiene todavía un `paletteName` real (`NEUTRAL_ORB`)
+ * ve exactamente el mismo orbe de siempre, nunca uno nuevo por accidente.
+ */
+const ORB_PALETTE_RGB: Record<RitualOrbPaletteName, string> = {
+  amber: "227, 177, 104",
+  rose_gold: "224, 158, 149",
+  copper: "214, 141, 92",
+  honey: "222, 186, 96",
+  coral: "222, 139, 118",
+  champagne: "206, 193, 158",
+};
 
 export interface ConversationOpeningRitualProps {
   children: React.ReactNode;
@@ -160,12 +179,13 @@ export function ConversationOpeningRitual({
   );
 }
 
-/** Presencia neutral cuando todavía no hay una `RitualOrbSignature` real (p. ej. mientras `/api/chat/welcome` sigue en vuelo) -- mismo look que el orbe siempre tuvo, nunca un estado roto. */
+/** Presencia neutral cuando todavía no hay una `RitualOrbSignature` real (p. ej. mientras `/api/chat/welcome` sigue en vuelo) -- mismo look que el orbe siempre tuvo, nunca un estado roto. `amber` porque es literalmente el mismo tono que `--color-luz` ya usa en el resto de la interfaz. */
 const NEUTRAL_ORB: RitualOrbSignature = {
   maturityStage: "steady",
   warmth: 0.45,
   rhythmMs: 4200,
   anticipation: false,
+  paletteName: "amber",
 };
 
 function WelcomeSphere({
@@ -191,6 +211,7 @@ function WelcomeSphere({
   const glowAlpha = 0.18 + orb.warmth * 0.22;
   const glowSpread = orb.anticipation ? 24 : 18;
   const coreStop = orb.anticipation ? 60 : 55;
+  const rgb = ORB_PALETTE_RGB[orb.paletteName];
 
   return (
     <div
@@ -204,7 +225,7 @@ function WelcomeSphere({
           <div
             className={`absolute rounded-full ${sizeClass} scale-125 ${pulsing ? "" : "animate-sphere-breathe"}`}
             style={{
-              background: `radial-gradient(circle at 50% 50%, rgba(227, 177, 104, ${glowAlpha * 0.5}) 0%, transparent 70%)`,
+              background: `radial-gradient(circle at 50% 50%, rgba(${rgb}, ${glowAlpha * 0.5}) 0%, transparent 70%)`,
               animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
             }}
           />
@@ -214,8 +235,8 @@ function WelcomeSphere({
             pulsing ? "animate-light-pulse" : "animate-sphere-breathe"
           }`}
           style={{
-            background: `radial-gradient(circle at 35% 30%, #ffffff 0%, var(--color-luz) ${coreStop}%, rgba(227, 177, 104, 0.15) 100%)`,
-            boxShadow: `0 0 ${60 + orb.warmth * 20}px ${glowSpread}px rgba(227, 177, 104, ${glowAlpha})`,
+            background: `radial-gradient(circle at 35% 30%, #ffffff 0%, rgb(${rgb}) ${coreStop}%, rgba(${rgb}, 0.15) 100%)`,
+            boxShadow: `0 0 ${60 + orb.warmth * 20}px ${glowSpread}px rgba(${rgb}, ${glowAlpha})`,
             animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
           }}
         />
