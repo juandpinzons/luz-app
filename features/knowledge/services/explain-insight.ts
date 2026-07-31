@@ -1,5 +1,5 @@
 import type { Database } from "../../../core/db/client";
-import { DrizzleInsightRepository } from "../../../core/knowledge-engine";
+import { DrizzleInsightRepository, type InsightType } from "../../../core/knowledge-engine";
 import type { EntityId, LifeGraphContext } from "../../../core/life";
 import { DrizzleMemoryRepository } from "../../../core/memory-engine";
 
@@ -25,6 +25,8 @@ export interface InsightEvidenceItem {
  */
 export interface InsightExplanation {
   id: EntityId;
+  /** `insight.type` tal cual -- categoría real que Knowledge Engine ya asignó, nunca una clasificación nueva inventada para mostrar (ver `features/life/labels.ts`, `INSIGHT_TYPE_LABELS`). */
+  type: InsightType;
   /** La interpretación misma (`insight.description`), tal cual -- nunca reescrita ni reinterpretada aquí. */
   reason: string;
   /** Orden cronológico, la más antigua primero. */
@@ -91,6 +93,7 @@ export async function explainInsight(
 
   return {
     id: insight.id,
+    type: insight.type,
     reason: insight.description,
     evidence,
     evidenceCount: evidence.length,

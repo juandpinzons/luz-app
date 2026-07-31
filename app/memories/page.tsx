@@ -8,8 +8,10 @@ import {
   searchMemories,
   type MemoryTimeGroup,
 } from "@/features/memories/services/search-memories";
-import { listValidatedInsights } from "@/features/knowledge/services/list-validated-insights";
-import type { InsightExplanation } from "@/features/knowledge/services/explain-insight";
+import {
+  listValidatedInsights,
+  type ValidatedInsights,
+} from "@/features/knowledge/services/list-validated-insights";
 import { MemoryCard } from "@/features/memories/components/memory-card";
 import { InsightCard } from "@/features/memories/components/insight-card";
 
@@ -52,7 +54,7 @@ export default async function MemoriesPage({
    * que no se pide durante `searchTerm` (misma disciplina de no
    * mostrar algo fuera de lugar que ya usa el resto de la página).
    */
-  let insights: InsightExplanation[] = [];
+  let insights: ValidatedInsights = { items: [], total: 0, byType: {} };
 
   if (lifeGraphContext) {
     try {
@@ -64,7 +66,7 @@ export default async function MemoriesPage({
         listAllGoals(db, lifeGraphContext),
         listAllProjects(db, lifeGraphContext),
         searchTerm
-          ? Promise.resolve([])
+          ? Promise.resolve<ValidatedInsights>({ items: [], total: 0, byType: {} })
           : listValidatedInsights(db, lifeGraphContext),
       ]);
       groups = memoryGroups;
@@ -114,16 +116,22 @@ export default async function MemoriesPage({
           </button>
         </form>
 
-        {insights.length > 0 && (
+        {insights.items.length > 0 && (
           <section className="animate-fade-in mt-8">
             <h2 className="text-sm font-medium text-zinc-400">
-              Lo que he entendido
+              Lo que he entendido{" "}
+              <span className="text-xs text-zinc-600">{insights.total}</span>
             </h2>
             <ul className="mt-3 space-y-2">
-              {insights.map((insight, index) => (
+              {insights.items.map((insight, index) => (
                 <InsightCard key={insight.id} explanation={insight} index={index} />
               ))}
             </ul>
+            {insights.total > insights.items.length && (
+              <p className="mt-2 text-xs text-zinc-600">
+                Mostrando {insights.items.length} de {insights.total}.
+              </p>
+            )}
           </section>
         )}
 

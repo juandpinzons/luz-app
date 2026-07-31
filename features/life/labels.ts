@@ -3,6 +3,8 @@ import type {
   ProjectStatus,
   RelationshipType,
 } from "../../core/life";
+import type { MemoryType } from "../../core/memory-engine";
+import type { InsightType } from "../../core/knowledge-engine";
 
 /** Etiquetas en español para los value objects de Life — solo presentación, nunca una segunda fuente de verdad sobre el estado. */
 
@@ -30,4 +32,25 @@ export const RELATIONSHIP_TYPE_LABELS: Record<RelationshipType, string> = {
   mentee: "aprendiz",
   acquaintance: "conocido",
   other: "otro",
+};
+
+/** Vocabulario de `Memory.type` (`core/memory-engine`) -- la categoría real que Memory ya asigna a cada recuerdo, nunca una clasificación nueva inventada para mostrar. */
+export const MEMORY_TYPE_LABELS: Record<MemoryType, string> = {
+  fact: "Hechos",
+  pattern: "Patrones",
+  ritual: "Rituales",
+  preference: "Preferencias",
+  relationship: "Relaciones",
+  goal: "Objetivos",
+  event: "Eventos",
+  intention: "Intenciones",
+};
+
+/** Vocabulario de `Insight.type` (`core/knowledge-engine`) -- mismo criterio que `MEMORY_TYPE_LABELS`. */
+export const INSIGHT_TYPE_LABELS: Record<InsightType, string> = {
+  pattern: "Patrones",
+  preference: "Preferencias",
+  fact: "Hechos",
+  risk: "Riesgos",
+  recommendation: "Recomendaciones",
 };

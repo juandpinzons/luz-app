@@ -17,16 +17,17 @@ import {
   listAllRelationships,
   type RelationshipWithDisplayName,
 } from "@/features/life/services/list-all-relationships";
-import { getLifeTimeline } from "@/features/life/services/get-life-timeline";
+import { getLifeTimeline, type LifeTimeline } from "@/features/life/services/get-life-timeline";
 import { assembleLifeGraph } from "@/features/life/services/build-life-graph";
-import { listValidatedInsights } from "@/features/knowledge/services/list-validated-insights";
-import type { InsightExplanation } from "@/features/knowledge/services/explain-insight";
+import {
+  listValidatedInsights,
+  type ValidatedInsights,
+} from "@/features/knowledge/services/list-validated-insights";
 import {
   GOAL_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
   RELATIONSHIP_TYPE_LABELS,
 } from "@/features/life/labels";
-import type { Memory } from "@/core/memory-engine";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 
@@ -88,8 +89,8 @@ export default async function LifePage() {
   let projects: Project[] = [];
   let habits: Habit[] = [];
   let relationships: RelationshipWithDisplayName[] = [];
-  let timeline: Memory[] = [];
-  let insights: InsightExplanation[] = [];
+  let timeline: LifeTimeline = { items: [], total: 0, byType: {} };
+  let insights: ValidatedInsights = { items: [], total: 0, byType: {} };
   let beliefs: Belief[] = [];
   let concepts: Concept[] = [];
 
@@ -245,7 +246,7 @@ export default async function LifePage() {
 
   const listView = (
     <div className="mx-auto w-full max-w-3xl space-y-10">
-      {!hasAnything && timeline.length === 0 && (
+      {!hasAnything && timeline.items.length === 0 && (
         <p className="animate-fade-in text-zinc-500">
           Todavía no tengo nada guardado sobre tu vida — a medida que
           hables conmigo, esto se va a ir llenando.
@@ -327,11 +328,11 @@ export default async function LifePage() {
         </section>
       )}
 
-      {timeline.length > 0 && (
+      {timeline.items.length > 0 && (
         <section>
           <h2 className="text-sm font-medium text-zinc-400">Cronología</h2>
           <ul className="mt-3 space-y-3 border-l border-luz/25 pl-4">
-            {timeline.map((memory, index) => (
+            {timeline.items.map((memory, index) => (
               <li
                 key={memory.id}
                 className="animate-fade-in text-sm"

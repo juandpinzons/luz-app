@@ -127,6 +127,8 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
   );
 
   const selectedBranch = branches.find((branch) => branch.id === selectedBranchId) ?? null;
+  /** Total real de la rama "recuerdos" -- `summary.timeline` es la lista ya recortada para exhibición, `.length` de esa lista NO es el total (mismo bug que ya se corrigió en `BranchDetailPanel`). */
+  const memoriesTotal = branches.find((branch) => branch.id === "recuerdos")?.count ?? summary.timeline.length;
 
   if (mode === "list") {
     return (
@@ -253,7 +255,7 @@ export function LifeGraphView({ personName, summary, listView }: LifeGraphViewPr
         {showMemories && summary.timeline.length > 0 && (
           <SidePanel
             title="Recuerdos"
-            count={summary.timeline.length}
+            count={memoriesTotal}
             onClose={() => setShowMemories(false)}
           >
             <ul className="space-y-3">
@@ -370,16 +372,44 @@ function BranchDetailPanel({
         </button>
       </div>
 
+      {/*
+        Desglose real por categoría (`Memory.type`/`Insight.type`) --
+        lo que le faltaba a "Recuerdos"/"Lo que he entendido" para
+        sentirse tan específico de esta persona como ya lo son
+        "Objetivos"/"Relaciones" (que sí distinguen tipo por subtítulo).
+        Solo se muestra cuando la rama trae categorías reales.
+      */}
+      {branch.categories && branch.categories.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {branch.categories.map((category) => (
+            <li
+              key={category.label}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400"
+            >
+              {category.label} <span className="text-zinc-600">{category.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {branch.items.length === 0 ? (
         <p className="mt-3 text-sm text-zinc-500">
           Todavía no hay nada aquí -- se va a ir llenando a medida que hablemos de esto.
         </p>
       ) : (
-        <ul className="mt-3 space-y-2">
-          {branch.items.map((item) => (
-            <ItemRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <>
+          <ul className="mt-3 space-y-2">
+            {branch.items.map((item) => (
+              <ItemRow key={item.id} item={item} />
+            ))}
+          </ul>
+          {/* `count` es el total real; `items` puede venir recortado a un tope de exhibición -- aclarar la diferencia en vez de dejar que parezca que "solo hay 5" cuando en realidad hay más. */}
+          {branch.count > branch.items.length && (
+            <p className="mt-2 text-xs text-zinc-600">
+              Mostrando {branch.items.length} de {branch.count}.
+            </p>
+          )}
+        </>
       )}
     </section>
   );
