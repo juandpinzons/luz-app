@@ -21,7 +21,7 @@ reusando la tabla `events` que ya existe para señales operacionales
 experience/
   domain/        ExperienceState y sus tipos (el contrato)
   services/       collect-candidates, score-candidates, apply-rotation,
-                   derive-tone, experience-signal-log
+                   derive-tone, detect-what-changed, experience-signal-log
   application/    buildExperienceState -- el único punto de entrada público
 ```
 
@@ -140,6 +140,34 @@ pasa de `high`, una celebración siempre es `low`) en vez de
 que Presence recalcule una urgencia independiente que podría
 contradecir la decisión de `primary`.
 
+## Fase 6: "¿Qué cambió?" (`detect-what-changed.ts`)
+
+Complementa `isNewPrimary` (que solo dice si LA TARJETA cambió) con
+`whatChanged: RealityChange[]` -- movimiento real en la vida de la
+persona, aunque `primary` se mantenga igual. `buildRealityFingerprint`
+comprime `HomeState.lifeContext` (+ `memoriesStored`, que vive en
+`DashboardSummary`, no en `HomeState`) en una `RealityFingerprint`
+compacta; `detectWhatChanged` compara la de hoy contra la de la visita
+anterior y solo reporta diffs positivos reales: memorias nuevas,
+goals/projects completados, observaciones nuevas, relaciones nuevas.
+
+La huella se guarda en el MISMO evento `experience_card_shown`
+(`metadata.fingerprint`, `experience-signal-log.ts`) -- ninguna tabla
+nueva, mismo criterio que ya justifica reusar `events` para toda esta
+misión. `getPreviousFingerprint` es una consulta separada de
+`getRecentPrimaryKeys` (mismo índice, mismo `limit(1)` barato) para no
+tocar el contrato de esa función ya existente.
+
+**Por qué "reuniones nuevas" y "vencidos nuevos" quedan fuera:**
+`HomeState` no expone IDs individuales de `calendar.today`/`overdue`
+para diffear contra la visita anterior -- solo `upcoming`/`calendar`
+como un todo. Diffear por CONTEO ahí habría producido falsos positivos
+constantes (el calendario de "hoy" es un conjunto distinto cada día
+aunque nadie agende nada nuevo), exactamente la "novedad fabricada"
+que esta misión prohíbe. Alcance futuro documentado, no un olvido
+silencioso -- requeriría que `HomeState` exponga IDs estables de esas
+dos secciones.
+
 ## `ExperienceState`
 
 Ver [`domain/experience-state.ts`](domain/experience-state.ts) para el
@@ -156,5 +184,7 @@ reutilizando los fixtures de `features/home/tests/` y
 `features/presence/tests/` (nunca datos duplicados entre capas) más un
 historial de `experience_card_shown` sintético, y verifica: (a) que la
 misma tarjeta nunca gane `primary` un tercer día seguido cuando existe
-una alternativa real, y (b) que si de verdad no hay alternativa, se
-mantenga -- nunca varía por variar.
+una alternativa real, (b) que si de verdad no hay alternativa, se
+mantenga -- nunca varía por variar, y (c) que `whatChanged` reporte
+exactamente lo que cambió entre dos visitas simuladas, vacío cuando no
+hay huella previa o cuando de verdad nada cambió.

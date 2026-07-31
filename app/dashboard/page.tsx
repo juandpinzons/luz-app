@@ -25,6 +25,7 @@ import type { HomeState } from "@/features/home/domain/home-state";
 import { buildExperienceState } from "@/features/experience/application/build-experience-state";
 import type { ExperienceState } from "@/features/experience/domain/experience-state";
 import {
+  getPreviousFingerprint,
   getRecentPrimaryKeys,
   recordExperienceCardShown,
 } from "@/features/experience/services/experience-signal-log";
@@ -165,6 +166,34 @@ export default async function DashboardPage() {
   }
 
   /**
+   * Resumen del Dashboard (Sprint Alpha-1a: Dashboard) — datos reales
+   * únicamente, nunca placeholders. Igual que `lifeGraphContext` arriba,
+   * si esto falla la página se degrada (secciones ocultas) en vez de
+   * romperse — mismo criterio de tolerancia a fallos de todo el archivo.
+   * Movido antes de `homeState`/`experience` (adición "¿qué cambió?"):
+   * `summary.memoriesStored` alimenta `RealityFingerprint`
+   * (`buildExperienceState`), así que tiene que existir para ese
+   * momento -- mismo dato, ninguna consulta nueva, solo antes en el
+   * orden de este archivo.
+   */
+  let summary: DashboardSummary | null = null;
+  try {
+    const userContext = await getUserContext();
+    if (userContext) {
+      summary = await buildDashboardSummary(db, userContext, lifeGraphContext);
+    }
+  } catch (error) {
+    logger.log({
+      event: "dashboard.summary_failed",
+      severity: "error",
+      requestId,
+      route: ROUTE,
+      userId: session.user.id,
+      ...describeError(error),
+    });
+  }
+
+  /**
    * El mismo `HomeState` que `features/home/` ya sabía componer
    * (Presence + Calendar Foundation + Life Graph) -- antes nunca se
    * conectaba a ninguna pantalla real (ver `features/home/README.md`,
@@ -269,20 +298,29 @@ export default async function DashboardPage() {
   /**
    * Fases 1-5 de "Experience Intelligence V1" (ver
    * `features/experience/README.md`): de todo lo que `homeState` ya
-   * decidió, cuál ES la experiencia de hoy. `getRecentPrimaryKeys`
-   * nunca lanza por sí sola (select simple); si falla, todo el bloque
-   * se degrada a "sin experiencia arbitrada hoy" en vez de romper la
-   * página, mismo criterio que el resto de este archivo.
-   * `recordExperienceCardShown` es tolerante a fallos por dentro
-   * (reusa `recordEvent`), así que nunca necesita su propio catch.
+   * decidió, cuál ES la experiencia de hoy. `getRecentPrimaryKeys`/
+   * `getPreviousFingerprint` nunca lanzan por sí solas (selects
+   * simples); si fallan, todo el bloque se degrada a "sin experiencia
+   * arbitrada hoy" en vez de romper la página, mismo criterio que el
+   * resto de este archivo. `recordExperienceCardShown` es tolerante a
+   * fallos por dentro (reusa `recordEvent`), así que nunca necesita su
+   * propio catch.
    */
   let experience: ExperienceState | null = null;
   if (homeState) {
     try {
-      const recentPrimaryKeys = await getRecentPrimaryKeys(db, session.user.id);
-      experience = buildExperienceState(homeState, recentPrimaryKeys);
+      const [recentPrimaryKeys, previousFingerprint] = await Promise.all([
+        getRecentPrimaryKeys(db, session.user.id),
+        getPreviousFingerprint(db, session.user.id),
+      ]);
+      experience = buildExperienceState(
+        homeState,
+        recentPrimaryKeys,
+        summary?.memoriesStored ?? 0,
+        previousFingerprint,
+      );
       if (experience.primary) {
-        await recordExperienceCardShown(db, session.user.id, experience.primary);
+        await recordExperienceCardShown(db, session.user.id, experience.primary, experience.fingerprint);
       }
     } catch (error) {
       logger.log({
@@ -319,29 +357,6 @@ export default async function DashboardPage() {
         ...describeError(error),
       });
     }
-  }
-
-  /**
-   * Resumen del Dashboard (Sprint Alpha-1a: Dashboard) — datos reales
-   * únicamente, nunca placeholders. Igual que `lifeGraphContext` arriba,
-   * si esto falla la página se degrada (secciones ocultas) en vez de
-   * romperse — mismo criterio de tolerancia a fallos de todo el archivo.
-   */
-  let summary: DashboardSummary | null = null;
-  try {
-    const userContext = await getUserContext();
-    if (userContext) {
-      summary = await buildDashboardSummary(db, userContext, lifeGraphContext);
-    }
-  } catch (error) {
-    logger.log({
-      event: "dashboard.summary_failed",
-      severity: "error",
-      requestId,
-      route: ROUTE,
-      userId: session.user.id,
-      ...describeError(error),
-    });
   }
 
   const daysSinceLastMessage = summary?.lastMessageAt
@@ -438,6 +453,20 @@ export default async function DashboardPage() {
           isNew={experience.isNewPrimary}
         />
       )}
+
+      {/*
+        "¿Qué cambió desde tu última visita?" -- solo hechos reales
+        detectados contra la huella de la visita anterior
+        (`detect-what-changed.ts`), nunca novedad fabricada; vacío en
+        la primera visita real (no hay "antes" contra qué comparar) y
+        en cualquier visita donde de verdad no cambió nada.
+      */}
+      {experience && experience.whatChanged.length > 0 && (
+        <p className="animate-fade-in mt-3 text-xs text-zinc-500" style={{ animationDelay: "140ms" }}>
+          {experience.whatChanged.map((change) => change.summary).join(" ")}
+        </p>
+      )}
+
       {experience && experience.secondary.length > 0 && (
         <SecondaryExperienceList cards={experience.secondary} />
       )}
