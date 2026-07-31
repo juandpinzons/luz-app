@@ -1,0 +1,5 @@
+CREATE INDEX "conversation_messages_conversation_id_created_at_idx" ON "conversation_messages" USING btree ("conversation_id","created_at");--> statement-breakpoint
+CREATE INDEX "conversations_user_id_created_at_idx" ON "conversations" USING btree ("user_id","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "memories_life_graph_id_status_rank_created_idx" ON "memories" USING btree ("life_graph_id","status","rank_score" DESC NULLS LAST,"created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "memories_life_graph_id_status_created_idx" ON "memories" USING btree ("life_graph_id","status","created_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "memories_life_graph_id_status_occurred_created_idx" ON "memories" USING btree ("life_graph_id","status","occurred_at" DESC NULLS LAST,"created_at" DESC NULLS LAST);

@@ -135,6 +135,55 @@ export const memories = pgTable(
     index("memories_life_graph_id_idx").on(table.lifeGraphId),
     index("memories_person_id_idx").on(table.personId),
     index("memories_status_idx").on(table.status),
+    /**
+     * Index Optimization (evidencia medida, no "por si acaso" -- las tres
+     * que siguen comparten el mismo prefijo `(life_graph_id, status)` pero
+     * cada una sirve un ORDER BY real distinto que un índice compartido no
+     * puede cubrir a la vez; confirmado con las tres activas al mismo
+     * tiempo, ninguna sirve a las otras).
+     *
+     * `structured-memory-retrieval-strategy.ts` -- la recuperación de
+     * memoria que arma el contexto de CADA mensaje de chat:
+     * `WHERE life_graph_id=$1 AND status='active' ORDER BY rank_score DESC
+     * NULLS LAST, created_at DESC LIMIT ≤150`. Medido con un LifeGraph
+     * sintético de 5000 memorias (uso diario de casi un año, el caso real
+     * que el producto busca): cost 537.08→37.83, 1.516ms→0.139ms, `Sort`
+     * eliminado del plan.
+     */
+    index("memories_life_graph_id_status_rank_created_idx").on(
+      table.lifeGraphId,
+      table.status,
+      table.rankScore.desc().nullsLast(),
+      table.createdAt.desc(),
+    ),
+    /**
+     * `get-recent-memory-highlight.ts` -- el teaser "lo último que
+     * recuerdo" de CADA visita a `/dashboard`:
+     * `WHERE life_graph_id=$1 AND status='active' ORDER BY created_at DESC
+     * LIMIT 1`. Mismo LifeGraph sintético: cost 383.10→0.54,
+     * 0.660ms→0.029ms.
+     */
+    index("memories_life_graph_id_status_created_idx").on(
+      table.lifeGraphId,
+      table.status,
+      table.createdAt.desc(),
+    ),
+    /**
+     * `search-memories.ts` (`listRecentActiveMemories`) -- listado
+     * cronológico de `/memories`:
+     * `WHERE life_graph_id=$1 AND status='active' ORDER BY occurred_at DESC
+     * NULLS LAST, created_at DESC LIMIT 100`. Mismo LifeGraph sintético:
+     * cost 524.53→25.79, 0.767ms→0.095ms. Visita menos frecuente que las
+     * dos anteriores (navegación explícita a `/memories`, no cada sesión)
+     * -- incluido de todas formas porque la mejora medida es real, no
+     * porque "podría servir".
+     */
+    index("memories_life_graph_id_status_occurred_created_idx").on(
+      table.lifeGraphId,
+      table.status,
+      table.occurredAt.desc().nullsLast(),
+      table.createdAt.desc(),
+    ),
     check(
       "memories_rank_score_range",
       sql`${table.rankScore} IS NULL OR (${table.rankScore} >= 0 AND ${table.rankScore} <= 100)`,
