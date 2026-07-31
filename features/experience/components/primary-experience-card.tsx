@@ -1,6 +1,8 @@
+import Link from "next/link";
 import type { PresenceUrgencyLevel } from "../../presence/domain/presence-state";
 import type { ExperienceCard } from "../domain/experience-state";
 import { EXPERIENCE_CATEGORY_LABELS } from "../labels";
+import { ACTION_LABEL, actionHref } from "../services/entity-link";
 
 /** Mismo espíritu que `TONE_CEILING` en `derive-tone.ts`: el color es proporcional al tono, nunca decorativo por categoría. */
 const TONE_BORDER: Record<PresenceUrgencyLevel, string> = {
@@ -25,6 +27,8 @@ interface PrimaryExperienceCardProps {
  * apoya" (Fase 1).
  */
 export function PrimaryExperienceCard({ card, tone, isNew }: PrimaryExperienceCardProps) {
+  const href = actionHref(card.action);
+
   return (
     <section className={`animate-fade-in mt-8 rounded-2xl border ${TONE_BORDER[tone]} bg-zinc-900/60 px-5 py-5`}>
       <div className="flex items-center gap-2">
@@ -39,6 +43,14 @@ export function PrimaryExperienceCard({ card, tone, isNew }: PrimaryExperienceCa
       </div>
       <p className="mt-2 text-lg text-zinc-100">{card.title}</p>
       <p className="mt-1 text-sm text-zinc-400">{card.detail}</p>
+      {href && card.action && (
+        <Link
+          href={href}
+          className="mt-4 inline-block rounded-full border border-zinc-700 px-4 py-1.5 text-sm text-zinc-200 transition hover:border-luz/50 hover:text-luz"
+        >
+          {ACTION_LABEL[card.action.kind]}
+        </Link>
+      )}
     </section>
   );
 }

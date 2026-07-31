@@ -173,6 +173,29 @@ dos secciones.
 Ver [`domain/experience-state.ts`](domain/experience-state.ts) para el
 contrato completo y el porqué de cada campo (JSDoc, fuente de verdad).
 
+## UI: acciones reales y `postponed` (continuación de la misión, "sigue desarrollando UX")
+
+Dos huecos entre lo ya construido y lo que la UI mostraba:
+
+- **`card.action` nunca llevaba a ningún lado.** `HomeState.quickActions`
+  y `card.action` (`DashboardAction`) ya cargaban `targetEntity`, pero
+  ninguna pantalla los traducía a una URL real -- el vocabulario de
+  `DashboardEntityReference.kind` (goal/project/habit/person/relationship/domain)
+  nunca se tradujo al vocabulario PLURAL de la ruta real de detalle
+  (`app/life/[kind]/[id]/`, `KINDS`). `services/entity-link.ts`
+  (`actionHref`) cierra esa traducción -- `person`/`domain` siguen sin
+  ruta propia hoy (`null`, nunca un enlace roto), `acknowledge` nunca
+  enlaza (no hay nada que abrir, solo reconocer lo que la tarjeta ya
+  muestra). `PrimaryExperienceCard` y `SecondaryExperienceList` ya lo
+  usan -- **no** se agregó una sección separada de "Quick Actions": la
+  acción vive integrada en la tarjeta que ya la origina, evitando
+  reintroducir el patrón de "widget aislado" que esta misión existe
+  para eliminar.
+- **`ExperienceState.postponed` se calculaba pero nunca se mostraba.**
+  `PostponedExperienceNote` lo expone como una nota discreta bajo
+  `secondary` -- nunca una tercera lista con el mismo peso visual,
+  coherente con "posponer, no perder" (Fase 3).
+
 ## Escenarios sintéticos
 
 ```bash

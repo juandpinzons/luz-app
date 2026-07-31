@@ -2,6 +2,7 @@ import { createEntityId } from "../../../core/life";
 import type { FollowUpRecommendation } from "../../dashboard/services/build-follow-up-recommendations";
 import type { HomeState } from "../../home/domain/home-state";
 import { buildExperienceState } from "../application/build-experience-state";
+import { actionHref } from "../services/entity-link";
 
 /**
  * Script standalone con datos sintéticos, ejecutable con
@@ -181,6 +182,40 @@ runScenario("¿qué cambió? detecta memorias/goals/observaciones nuevas entre v
   // Día 3: nada cambió desde el día 2 -- whatChanged debe volver a estar vacío, nunca repetir el mismo cambio dos veces.
   const day3 = buildExperienceState(day2HomeState, [day2.primary!.key, day1.primary!.key], 5, day2.fingerprint);
   assert(day3.whatChanged.length === 0, "día 3 (nada cambió desde el día 2): whatChanged debía venir vacío");
+});
+
+runScenario("actionHref -- enlaza kinds con ruta real, nunca fabrica una que no existe", () => {
+  const entityOf = (kind: "goal" | "project" | "habit" | "person" | "relationship", id: string) => ({
+    kind,
+    id: createEntityId(id),
+    title: id,
+  });
+
+  assert(
+    actionHref({ kind: "open_entity", targetEntity: entityOf("goal", "goal-1") }) === "/life/goals/goal-1",
+    "goal debía enlazar a /life/goals/{id}",
+  );
+  assert(
+    actionHref({ kind: "update_status", targetEntity: entityOf("project", "project-1") }) === "/life/projects/project-1",
+    "project debía enlazar a /life/projects/{id}",
+  );
+  assert(
+    actionHref({ kind: "schedule_check_in", targetEntity: entityOf("relationship", "rel-1") }) === "/life/relationships/rel-1",
+    "relationship debía enlazar a /life/relationships/{id}",
+  );
+  assert(
+    actionHref({ kind: "open_entity", targetEntity: entityOf("person", "person-1") }) === null,
+    "person no tiene ruta propia -- nunca un enlace roto",
+  );
+  assert(
+    actionHref({ kind: "open_entity", targetEntity: { kind: "domain", domain: "career", title: "Carrera" } }) === null,
+    "domain no tiene id -- nunca un enlace roto",
+  );
+  assert(
+    actionHref({ kind: "acknowledge", targetEntity: entityOf("goal", "goal-2") }) === null,
+    "acknowledge no tiene nada que abrir -- nunca un botón que no lleva a ningún lado",
+  );
+  assert(actionHref(undefined) === null, "sin acción, sin enlace");
 });
 
 if (hasFailure) {

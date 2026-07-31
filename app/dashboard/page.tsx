@@ -31,6 +31,7 @@ import {
 } from "@/features/experience/services/experience-signal-log";
 import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
 import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
+import { PostponedExperienceNote } from "@/features/experience/components/postponed-experience-note";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
@@ -469,6 +470,10 @@ export default async function DashboardPage() {
 
       {experience && experience.secondary.length > 0 && (
         <SecondaryExperienceList cards={experience.secondary} />
+      )}
+
+      {experience && experience.postponed.length > 0 && (
+        <PostponedExperienceNote cards={experience.postponed} />
       )}
 
       {/*
