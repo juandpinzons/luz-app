@@ -8,6 +8,7 @@ import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { renderIdentityAsSystemPrompt } from "../../../core/persona";
 import { recordEvent } from "../../../core/observability/record-event";
 import { assembleRealitySnapshot } from "./assemble-reality-snapshot";
+import { deriveOrbPalette, type OrbPaletteName } from "./orb-palette";
 
 /**
  * Debajo de esto, la relación apenas empieza -- el orbe se muestra
@@ -29,12 +30,11 @@ const UPCOMING_DEADLINE_DAYS = 3;
 export type OrbMaturityStage = "spark" | "steady" | "radiant";
 
 /**
- * Todo lo que la interfaz necesita para pintar el orbe -- nunca un
- * color arbitrario ni aleatorio, cada campo se deriva de una señal
- * real (ver `deriveOrbSignature`). Deliberadamente no incluye un
- * `hue`: la luz de LUZ es siempre la misma (`--color-luz`, ámbar de
- * marca) -- lo que cambia con el tiempo y la persona es su calidez y
- * su ritmo, nunca su identidad de color.
+ * Todo lo que la interfaz necesita para pintar el orbe -- cada campo
+ * se deriva de una señal real (ver `deriveOrbSignature`) o, en el caso
+ * de `paletteName`, de una identidad estable por persona (ver
+ * `deriveOrbPalette`) -- nunca un color arbitrario que cambie entre
+ * visitas.
  */
 export interface OrbVisualSignature {
   maturityStage: OrbMaturityStage;
@@ -44,6 +44,8 @@ export interface OrbVisualSignature {
   rhythmMs: number;
   /** Hay una hipótesis en formación, una pregunta pendiente o algo por vencer pronto -- nunca decorativo, siempre trazable a una señal real. */
   anticipation: boolean;
+  /** Identidad visual estable de esta persona -- ver docblock de `OrbPaletteName`. */
+  paletteName: OrbPaletteName;
 }
 
 export interface WelcomeSignature {
@@ -109,10 +111,12 @@ function isWithinDays(date: Date, days: number): boolean {
 /**
  * Deliberadamente determinista y sin IO extra: reutiliza exactamente
  * lo que `assembleRealitySnapshot` ya trajo, nunca una segunda
- * consulta. `hue` no existe a propósito -- ver docblock de
- * `OrbVisualSignature`.
+ * consulta. `paletteName` es la única excepción a "todo viene del
+ * snapshot" -- depende de `personId`, no de actividad reciente, a
+ * propósito (ver `deriveOrbPalette`).
  */
 function deriveOrbSignature(
+  personId: string,
   totalMessageCount: number,
   snapshot: Awaited<ReturnType<typeof assembleRealitySnapshot>>,
 ): OrbVisualSignature {
@@ -142,6 +146,7 @@ function deriveOrbSignature(
     warmth,
     rhythmMs: anticipation ? 3200 : 4200,
     anticipation,
+    paletteName: deriveOrbPalette(personId),
   };
 }
 
@@ -159,7 +164,7 @@ export async function generateWelcome(
   input: GenerateWelcomeInput,
 ): Promise<WelcomeSignature> {
   const snapshot = await assembleRealitySnapshot(db, lifeGraphContext);
-  const orb = deriveOrbSignature(input.totalMessageCount, snapshot);
+  const orb = deriveOrbSignature(lifeGraphContext.personId, input.totalMessageCount, snapshot);
 
   const facts: string[] = [
     `Momento del día: ${timeOfDayBucket(nowInBogota())}.`,
