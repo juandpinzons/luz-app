@@ -60,10 +60,14 @@ export class DeterministicContextFilterStrategy implements ContextFilterStrategy
         relevanceScore: 0,
       })),
       // Sin id propio (`ExternalSignal`, `core/reality`) — `sourceId`
-      // queda `undefined`, tal como documenta `ContextItem`.
+      // queda `undefined`, tal como documenta `ContextItem`. `dueDate`
+      // sí viaja cuando la señal lo trae (p. ej. la hora de un evento
+      // de calendario) -- mismo campo que ya usa `life`, misma
+      // urgencia genérica en `DeterministicContextScoringStrategy`.
       ...snapshot.signals.signals.map((signal) => ({
         source: "signal" as const,
         label: signal.content,
+        dueDate: signal.dueDate,
         relevanceScore: 0,
       })),
     ];

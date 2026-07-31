@@ -18,6 +18,16 @@ export interface ExternalSignal {
   source: ExternalSignalSource;
   content: string;
   occurredAt: Date;
+  /**
+   * Para cuándo importa esta señal, si aplica (p. ej. la hora de
+   * inicio de un evento de calendario) -- mismo criterio que
+   * `LifeStateItem.dueDate`. Alimenta la misma urgencia genérica de
+   * `DeterministicContextScoringStrategy` (`core/context-engine`), ya
+   * indiferente a la fuente -- ninguna lógica de scoring nueva hace
+   * falta para que una reunión en 20 minutos pese más que una de la
+   * próxima semana.
+   */
+  dueDate?: Date;
 }
 
 export interface ExternalSignalSnapshot {

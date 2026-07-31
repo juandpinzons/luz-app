@@ -17,6 +17,7 @@ import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine
 import { DrizzleCuriosityQuestionRepository } from "../../../core/curiosity-engine";
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
+import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
 /**
@@ -110,6 +111,7 @@ export async function assembleRealitySnapshot(
     reasoningConclusions,
     pendingCuriosityQuestion,
     contradictions,
+    calendarSignals,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -133,6 +135,12 @@ export async function assembleRealitySnapshot(
     new DrizzleReasoningRepository(db).list(context),
     new DrizzleCuriosityQuestionRepository(db).getPending(context),
     new DrizzleContradictionRepository(db).list(context),
+    // Calendario en la conversación (misión "conecta calendario con
+    // conversación") -- `getCalendarSignalsForConversation` nunca
+    // lanza (degrada a `[]` ante cualquier falla), así que puede vivir
+    // en el mismo `Promise.all` que el resto sin arriesgar el
+    // ensamblado completo por un problema de calendario.
+    getCalendarSignalsForConversation(db, context),
   ]);
 
   const relevantMemories = focusedMemory
@@ -297,9 +305,14 @@ export async function assembleRealitySnapshot(
         type: insight.type,
       })),
     },
-    // Sin Connectors implementados todavía (ADR-0015) — vacío,
-    // indefinidamente, tal como ADR-0013 ya esperaba.
-    signals: { signals: [] },
+    // Calendar Foundation (`features/reality/`) llena el punto de
+    // extensión que este campo ya reservaba (`external-signal-snapshot.ts`:
+    // "calendar" como fuente esperada) -- document/email/sensor siguen
+    // vacíos indefinidamente (ADR-0015, sin Connectors implementados
+    // todavía). Sin calendario conectado, `getCalendarSignalsForConversation`
+    // ya devuelve `[]` -- mismo criterio de ausencia real que el resto
+    // de este ensamblador.
+    signals: { signals: calendarSignals },
     knowledgeGaps: { domains: rankKnowledgeGaps(signalsByDomain) },
     // Comprensión de segundo orden (Knowledge Engine V2, Reasoning
     // Engine) -- síntesis ya validada sobre varios insights a la vez,
