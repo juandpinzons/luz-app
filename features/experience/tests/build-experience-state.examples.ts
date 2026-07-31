@@ -42,8 +42,11 @@ function makeRecommendation(id: string, priority: FollowUpRecommendation["priori
   };
 }
 
-/** `HomeState` mínimo válido con solo `attentionNeeded` poblado -- todo lo demás en su valor "nada que decidir", igual que el escenario "empty account" de Home/Presence. */
-function makeHomeState(attentionNeeded: FollowUpRecommendation[]): HomeState {
+/** `HomeState` mínimo válido con solo `attentionNeeded` poblado -- todo lo demás en su valor "nada que decidir", igual que el escenario "empty account" de Home/Presence. `lifeContext` es parcialmente sobreescribible para el escenario de "¿qué cambió?" (necesita variar `goalsByStatus.completed`/`observationCount`/`relationships.total` entre visitas simuladas, todo lo demás igual). */
+function makeHomeState(
+  attentionNeeded: FollowUpRecommendation[],
+  lifeContextOverrides: Partial<HomeState["lifeContext"]> = {},
+): HomeState {
   return {
     asOf: NOW,
     greeting: "Buenos días.",
@@ -53,6 +56,7 @@ function makeHomeState(attentionNeeded: FollowUpRecommendation[]): HomeState {
       relationships: { total: 0, byType: {} },
       observationCount: 0,
       recommendationCount: attentionNeeded.length,
+      ...lifeContextOverrides,
     },
     currentFocus: { primary: null, secondary: null },
     attentionNeeded,
@@ -147,6 +151,36 @@ runScenario("recomendaciones con título genérico -- título/detalle deben dife
   for (const card of cards) {
     assert(!card.detail.includes("["), `detail no debía exponer evidencia cruda entre corchetes: "${card.detail}"`);
   }
+});
+
+runScenario("¿qué cambió? detecta memorias/goals/observaciones nuevas entre visitas, nunca fabrica novedad", () => {
+  const issue = makeRecommendation("goal-persistente", "medium", "Objetivo de siempre");
+
+  // Día 1: primera visita real con historial -- sin huella previa, `whatChanged` debe venir vacío (no hay "antes" contra qué comparar), aunque memoriesStored/observationCount no sean 0.
+  const day1HomeState = makeHomeState([issue], {
+    totals: { goalsByStatus: { active: 1, paused: 0, completed: 0, abandoned: 0 }, projectsByStatus: { planning: 0, active: 0, on_hold: 0, completed: 0, cancelled: 0 }, activeHabits: 0, inactiveHabits: 0 },
+    observationCount: 1,
+  });
+  const day1 = buildExperienceState(day1HomeState, [], 2, null);
+  assert(day1.whatChanged.length === 0, "día 1 (sin huella previa): whatChanged debía venir vacío, nunca fabricado");
+
+  // Día 2: misma cuenta, la realidad avanzó de verdad -- 3 memorias nuevas, 1 goal completado, 2 observaciones nuevas.
+  const day2HomeState = makeHomeState([issue], {
+    totals: { goalsByStatus: { active: 0, paused: 0, completed: 1, abandoned: 0 }, projectsByStatus: { planning: 0, active: 0, on_hold: 0, completed: 0, cancelled: 0 }, activeHabits: 0, inactiveHabits: 0 },
+    observationCount: 3,
+  });
+  const day2 = buildExperienceState(day2HomeState, [day1.primary!.key], 5, day1.fingerprint);
+
+  const byType = new Map(day2.whatChanged.map((change) => [change.type, change.count]));
+  assert(byType.get("new_memories") === 3, `día 2: se esperaban 3 memorias nuevas, hubo ${byType.get("new_memories")}`);
+  assert(byType.get("goal_completed") === 1, `día 2: se esperaba 1 goal completado, hubo ${byType.get("goal_completed")}`);
+  assert(byType.get("new_observation") === 2, `día 2: se esperaban 2 observaciones nuevas, hubo ${byType.get("new_observation")}`);
+  assert(!byType.has("project_completed"), "día 2: ningún project cambió, no debía reportarse");
+  assert(!byType.has("new_relationship"), "día 2: ninguna relación cambió, no debía reportarse");
+
+  // Día 3: nada cambió desde el día 2 -- whatChanged debe volver a estar vacío, nunca repetir el mismo cambio dos veces.
+  const day3 = buildExperienceState(day2HomeState, [day2.primary!.key, day1.primary!.key], 5, day2.fingerprint);
+  assert(day3.whatChanged.length === 0, "día 3 (nada cambió desde el día 2): whatChanged debía venir vacío");
 });
 
 if (hasFailure) {

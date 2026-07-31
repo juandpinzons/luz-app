@@ -2,6 +2,58 @@ import type { DashboardAction } from "../../dashboard/services/build-follow-up-r
 import type { PresenceUrgencyLevel } from "../../presence/domain/presence-state";
 
 /**
+ * "¿Qué cambió desde tu última visita?" -- el complemento de
+ * `isNewPrimary` (que solo dice si LA TARJETA cambió) para la parte de
+ * la misión que pide detectar movimiento real en la vida de la persona,
+ * no solo en qué gana `primary`. Ver `services/detect-what-changed.ts`.
+ *
+ * Cinco de los seis tipos que sugiere la misión, con conteos reales
+ * (nunca por-entidad): memorias nuevas, goals/projects completados,
+ * observaciones nuevas, relaciones nuevas. "Reuniones nuevas" y
+ * "nuevos vencidos" quedan fuera a propósito -- `HomeState` no expone
+ * IDs individuales de `calendar.today`/`overdue` para diffear con la
+ * visita anterior, y diffear por CONTEO ahí produciría falsos
+ * positivos constantes (el calendario de "hoy" cambia de fecha cada
+ * día aunque nada nuevo se haya agendado) -- exactamente la "novedad
+ * fabricada" que esta misión prohíbe. Documentado como alcance futuro
+ * en el README, no un olvido silencioso.
+ */
+export const REALITY_CHANGE_TYPES = [
+  "new_memories",
+  "goal_completed",
+  "project_completed",
+  "new_observation",
+  "new_relationship",
+] as const;
+
+export type RealityChangeType = (typeof REALITY_CHANGE_TYPES)[number];
+
+export interface RealityChange {
+  type: RealityChangeType;
+  /** Ya en español, plantilla + conteo real -- nunca prosa generada. */
+  summary: string;
+  count: number;
+}
+
+/**
+ * Huella compacta y determinística de "cuánta vida real hay" en el
+ * momento de una visita -- comparar dos huellas (`detectWhatChanged`)
+ * es lo único que hace falta para saber qué cambió, sin persistir un
+ * snapshot completo (Principio 6, RealitySnapshot es estado actual, no
+ * un log histórico -- esta huella tampoco lo es: se sobrescribe en
+ * cada visita, guardada en `metadata.fingerprint` del mismo evento
+ * `experience_card_shown` que ya existía, ver `experience-signal-log.ts`).
+ */
+export interface RealityFingerprint {
+  memoriesStored: number;
+  goalsCompleted: number;
+  projectsCompleted: number;
+  observationCount: number;
+  recommendationCount: number;
+  relationshipTotal: number;
+}
+
+/**
  * Categorías de tarjeta candidata -- una por cada fuente que Home ya
  * compone (`HomeState`). Ningún tipo nuevo de decisión: cada categoría
  * es una proyección de un campo que `HomeState` ya expone. La línea de
@@ -68,4 +120,10 @@ export interface ExperienceState {
 
   /** `true` cuando `primary.key` es distinto de la última tarjeta primaria registrada -- "qué cambió desde la última visita" (Fase 1). `true` también en la primera visita (no hay historial). */
   isNewPrimary: boolean;
+
+  /** Cambios reales detectados desde la visita anterior (ver `RealityChange`) -- vacío en la primera visita o cuando de verdad no cambió nada, nunca relleno. */
+  whatChanged: RealityChange[];
+
+  /** La huella de esta visita, para que quien llama pueda persistirla (`recordExperienceCardShown`) como punto de comparación de la próxima -- técnico, nunca se muestra. */
+  fingerprint: RealityFingerprint;
 }
