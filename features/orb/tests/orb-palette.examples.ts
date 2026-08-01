@@ -1,12 +1,11 @@
-import { ORB_PALETTE_NAMES, deriveOrbPalette } from "../services/orb-palette";
+import { ORB_PALETTE_NAMES, deriveOrbPalette } from "../domain/orb-palette";
 
 /**
  * Script standalone con datos sintéticos, ejecutable con
- * `npx tsx features/chat/tests/orb-palette.examples.ts` -- mismo
+ * `npx tsx features/orb/tests/orb-palette.examples.ts` -- mismo
  * criterio que el resto de las carpetas tests/ dentro de features/ en
  * este repo. Prueba `deriveOrbPalette`, pura y sin dependencias (ver
- * docblock de `orb-palette.ts` para por qué está separada de
- * `generate-welcome.ts`).
+ * docblock de `domain/orb-palette.ts`).
  */
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -49,7 +48,7 @@ runScenario("siempre un nombre válido de la paleta", () => {
 
 runScenario('"quiero ver ya una luz diferente" -- personas reales distintas obtienen paletas distintas', () => {
   // IDs sintéticos (nunca los reales) representando el caso concreto que motivó
-  // esta misión: varias personas usando la misma cuenta familiar de LUZ.
+  // la personalización del orbe: varias personas usando la misma cuenta familiar de LUZ.
   const juan = deriveOrbPalette("person-juan");
   const veronica = deriveOrbPalette("person-veronica");
   const alejandro = deriveOrbPalette("person-alejandro");

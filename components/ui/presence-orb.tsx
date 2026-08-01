@@ -1,4 +1,4 @@
-import type { OrbMaturityStage } from "@/features/chat/services/generate-welcome";
+import type { OrbMaturityStage } from "@/features/orb/domain/orb-state";
 
 /**
  * Versión pequeña y estática (sin coreografía de apertura, sin texto)

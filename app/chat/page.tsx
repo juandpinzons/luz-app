@@ -5,10 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
-import {
-  ConversationOpeningRitual,
-  type RitualOrbSignature,
-} from "@/features/chat/components/conversation-opening-ritual";
+import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
+import type { OrbVisualState } from "@/features/orb/domain/orb-visual-state";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
 import type { GetWelcomeResponse } from "@/app/api/chat/welcome/route";
 import type {
@@ -165,7 +163,7 @@ function ChatPageContent() {
   const [historicalLabel, setHistoricalLabel] = useState<string | null>(null);
   const [welcomeCue, setWelcomeCue] = useState<string | undefined>();
   const [welcomeGreeting, setWelcomeGreeting] = useState<string | null>(null);
-  const [orbSignature, setOrbSignature] = useState<RitualOrbSignature | undefined>();
+  const [orbSignature, setOrbSignature] = useState<OrbVisualState | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);

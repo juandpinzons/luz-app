@@ -7,53 +7,18 @@ import { conversationMessages } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { renderIdentityAsSystemPrompt } from "../../../core/persona";
 import { recordEvent } from "../../../core/observability/record-event";
+import { buildOrbVisualState } from "../../orb/application/build-orb-state";
+import type { OrbVisualState } from "../../orb/domain/orb-visual-state";
 import { assembleRealitySnapshot } from "./assemble-reality-snapshot";
-import { deriveOrbPalette, type OrbPaletteName } from "./orb-palette";
-
-/**
- * Debajo de esto, la relación apenas empieza -- el orbe se muestra
- * "spark" (pequeño, tenue). Encima de `RADIANT_THRESHOLD`, hay una
- * historia real detrás -- "radiant" (pleno, con una segunda capa de
- * luz). Umbrales sobre mensajes reales, nunca inventados: el mismo
- * conteo que ya usa `app/admin/page.tsx` para "Mensajes".
- *
- * Exportados (Auditoría de Experiencia V1, hallazgo H4): el Dashboard
- * reutiliza estos mismos cortes para su propio indicador de presencia
- * -- nunca un segundo umbral inventado aparte, para que "spark" o
- * "radiant" signifique exactamente lo mismo en cualquier pantalla.
- */
-export const STEADY_THRESHOLD = 15;
-export const RADIANT_THRESHOLD = 100;
-/** Ventana para considerar una fecha límite "próxima" -- ni tan corta que casi nunca aplique, ni tan larga que deje de sentirse inminente. */
-const UPCOMING_DEADLINE_DAYS = 3;
-
-export type OrbMaturityStage = "spark" | "steady" | "radiant";
-
-/**
- * Todo lo que la interfaz necesita para pintar el orbe -- cada campo
- * se deriva de una señal real (ver `deriveOrbSignature`) o, en el caso
- * de `paletteName`, de una identidad estable por persona (ver
- * `deriveOrbPalette`) -- nunca un color arbitrario que cambie entre
- * visitas.
- */
-export interface OrbVisualSignature {
-  maturityStage: OrbMaturityStage;
-  /** 0 (apenas empezando) a 1 (relación asentada) -- intensidad/saturación del brillo. */
-  warmth: number;
-  /** Duración de un ciclo de respiración, en ms -- más corto cuando hay algo real que LUZ tiene presente. */
-  rhythmMs: number;
-  /** Hay una hipótesis en formación, una pregunta pendiente o algo por vencer pronto -- nunca decorativo, siempre trazable a una señal real. */
-  anticipation: boolean;
-  /** Identidad visual estable de esta persona -- ver docblock de `OrbPaletteName`. */
-  paletteName: OrbPaletteName;
-}
+import { getCalendarContextForConversation } from "./get-calendar-signals-for-conversation";
+import { gatherOrbLifeSignals } from "./orb-life-signals";
 
 export interface WelcomeSignature {
   /** 1-3 palabras para el trazo del ritual de apertura -- reemplaza el "Welcome" fijo. */
   cue: string;
   /** 1-2 frases, la primera cosa que la persona lee al llegar. */
   greeting: string;
-  orb: OrbVisualSignature;
+  orb: OrbVisualState;
 }
 
 const welcomeSchema = z.object({
@@ -75,6 +40,9 @@ export interface GenerateWelcomeInput {
   msSinceLastMessage: number | null;
   totalMessageCount: number;
 }
+
+/** Ventana para considerar una fecha límite "próxima" en el texto -- misma ventana que usa `deriveMaturity` (`features/orb/services/derive-maturity.ts`) para `anticipation`, nunca un segundo número inventado aparte. */
+const UPCOMING_DEADLINE_DAYS = 3;
 
 function timeOfDayBucket(nowInBogota: Date): string {
   const hour = nowInBogota.getHours();
@@ -108,46 +76,13 @@ function isWithinDays(date: Date, days: number): boolean {
   return diff >= 0 && diff <= days * 24 * 60 * 60 * 1000;
 }
 
-/**
- * Deliberadamente determinista y sin IO extra: reutiliza exactamente
- * lo que `assembleRealitySnapshot` ya trajo, nunca una segunda
- * consulta. `paletteName` es la única excepción a "todo viene del
- * snapshot" -- depende de `personId`, no de actividad reciente, a
- * propósito (ver `deriveOrbPalette`).
- */
-function deriveOrbSignature(
-  personId: string,
-  totalMessageCount: number,
-  snapshot: Awaited<ReturnType<typeof assembleRealitySnapshot>>,
-): OrbVisualSignature {
-  const maturityStage: OrbMaturityStage =
-    totalMessageCount >= RADIANT_THRESHOLD
-      ? "radiant"
-      : totalMessageCount >= STEADY_THRESHOLD
-        ? "steady"
-        : "spark";
+/** La fecha límite activa más próxima entre goals/projects, si hay alguna -- para `MaturityInputs.nearestDeadlineAt` (`features/orb/services/derive-maturity.ts`), que decide por su cuenta si cuenta como "próxima". */
+function nearestDeadline(snapshot: Awaited<ReturnType<typeof assembleRealitySnapshot>>): Date | null {
+  const dates = [...snapshot.life.activeGoals, ...snapshot.life.activeProjects]
+    .map((item) => item.dueDate)
+    .filter((date): date is Date => date !== undefined);
 
-  const messageWarmth = Math.min(totalMessageCount / RADIANT_THRESHOLD, 1);
-  const understandingWarmth = snapshot.communicationStyle.items.length > 0 ? 0.15 : 0;
-  const warmth = Math.min(0.25 + messageWarmth * 0.6 + understandingWarmth, 1);
-
-  const hasUpcomingDeadline = [
-    ...snapshot.life.activeGoals,
-    ...snapshot.life.activeProjects,
-  ].some((item) => item.dueDate && isWithinDays(item.dueDate, UPCOMING_DEADLINE_DAYS));
-
-  const anticipation =
-    snapshot.growingBeliefs.items.length > 0 ||
-    snapshot.curiosity.pendingQuestion !== null ||
-    hasUpcomingDeadline;
-
-  return {
-    maturityStage,
-    warmth,
-    rhythmMs: anticipation ? 3200 : 4200,
-    anticipation,
-    paletteName: deriveOrbPalette(personId),
-  };
+  return dates.length === 0 ? null : new Date(Math.min(...dates.map((date) => date.getTime())));
 }
 
 /**
@@ -157,6 +92,12 @@ function deriveOrbSignature(
  * consultas que puedan desincronizarse entre sí. Nunca puede romper
  * `/chat`: cualquier fallo del proveedor de IA cae a
  * `buildDeterministicFallback`, nunca una excepción hacia arriba.
+ *
+ * El orbe (`features/orb/`) se construye a partir de esta misma
+ * `RealitySnapshot` más dos lecturas puntuales adicionales (calendario,
+ * vía la misma caché que ya usa `assembleRealitySnapshot`; y
+ * logros/reencuentros recientes, `orb-life-signals.ts`) -- nunca una
+ * segunda foto de la realidad independiente.
  */
 export async function generateWelcome(
   db: Database,
@@ -164,7 +105,30 @@ export async function generateWelcome(
   input: GenerateWelcomeInput,
 ): Promise<WelcomeSignature> {
   const snapshot = await assembleRealitySnapshot(db, lifeGraphContext);
-  const orb = deriveOrbSignature(lifeGraphContext.personId, input.totalMessageCount, snapshot);
+
+  const [calendar, lifeSignals] = await Promise.all([
+    getCalendarContextForConversation(db, lifeGraphContext),
+    gatherOrbLifeSignals(db, lifeGraphContext),
+  ]);
+
+  const orb = buildOrbVisualState({
+    personId: lifeGraphContext.personId,
+    now: new Date(),
+    maturity: {
+      totalMessageCount: input.totalMessageCount,
+      hasCommunicationStyleSignal: snapshot.communicationStyle.items.length > 0,
+      hasGrowingBelief: snapshot.growingBeliefs.items.length > 0,
+      hasPendingCuriosityQuestion: snapshot.curiosity.pendingQuestion !== null,
+      nearestDeadlineAt: nearestDeadline(snapshot),
+    },
+    moment: {
+      mostRecentMemoryAt: snapshot.memory.items[0]?.occurredAt ?? null,
+      msSinceLastMessage: input.msSinceLastMessage,
+      calendar,
+      mostRecentCompletionAt: lifeSignals.mostRecentCompletionAt,
+      mostRecentRelationshipTouchAt: lifeSignals.mostRecentRelationshipTouchAt,
+    },
+  });
 
   const facts: string[] = [
     `Momento del día: ${timeOfDayBucket(nowInBogota())}.`,

@@ -4,6 +4,7 @@ import type { LifeGraphContext } from "../../../core/life";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import type { ExternalSignal } from "../../../core/reality";
+import type { HomeCalendarContext } from "../../home/domain/home-state";
 import { buildCalendarSignals } from "./calendar-signals";
 
 /**
@@ -17,9 +18,15 @@ import { buildCalendarSignals } from "./calendar-signals";
  * extensión #2). Sin este límite, cada mensaje de una conversación
  * activa dispararía su propia sincronización completa contra un
  * servidor externo -- exactamente el tipo de latencia añadida que la
- * misión "mejora la apertura del chat" (turno anterior) pidió eliminar,
- * y un riesgo real de límite de tasa contra la cuenta de iCloud de la
- * persona.
+ * misión "mejora la apertura del chat" pidió eliminar, y un riesgo
+ * real de límite de tasa contra la cuenta de iCloud de la persona.
+ *
+ * Se cachea el `HomeCalendarContext` crudo, no ya-traducido a señales
+ * -- misión "Orb Experience V1" (Objetivo B) también necesita leer el
+ * calendario (para "reunión importante pronto"), y debe compartir
+ * exactamente esta misma sincronización cacheada en vez de disparar
+ * una segunda (`getCalendarSignalsForConversation` abajo es ahora un
+ * envoltorio delgado sobre `getCalendarContextForConversation`).
  *
  * Caché en memoria del proceso, nunca persistida -- funciona mejor en
  * una instancia tibia de Vercel, se pierde en una fría (degrada a una
@@ -28,36 +35,44 @@ import { buildCalendarSignals } from "./calendar-signals";
  * para no repetir la sincronización en cada turno de una charla activa.
  */
 const CACHE_TTL_MS = 3 * 60 * 1000;
-const cache = new Map<string, { expiresAt: number; signals: ExternalSignal[] }>();
+const cache = new Map<string, { expiresAt: number; calendar: HomeCalendarContext | null }>();
 
 /**
  * Nunca lanza -- una falla real de calendario (credenciales
  * expiradas, CalDAV caído) no debe tumbar el resto de
- * `RealitySnapshot`; se degrada a "sin señales de calendario esta
+ * `RealitySnapshot`/`OrbState`; se degrada a "sin calendario esta
  * vez", mismo criterio de tolerancia a fallos que ya usa
  * `getLiveCalendarContext` para sus propios estados esperados.
  */
-export async function getCalendarSignalsForConversation(
+export async function getCalendarContextForConversation(
   db: Database,
   context: LifeGraphContext,
-): Promise<ExternalSignal[]> {
+): Promise<HomeCalendarContext | null> {
   const cached = cache.get(context.lifeGraphId);
   if (cached && cached.expiresAt > Date.now()) {
-    return cached.signals;
+    return cached.calendar;
   }
 
   try {
     const outcome = await getLiveCalendarContext(db, context.lifeGraphId);
-    const signals = outcome.status === "connected" ? buildCalendarSignals(outcome.calendarContext) : [];
-    cache.set(context.lifeGraphId, { expiresAt: Date.now() + CACHE_TTL_MS, signals });
-    return signals;
+    const calendar = outcome.status === "connected" ? outcome.calendarContext : null;
+    cache.set(context.lifeGraphId, { expiresAt: Date.now() + CACHE_TTL_MS, calendar });
+    return calendar;
   } catch (error) {
     logger.log({
-      event: "chat.calendar_signals_failed",
+      event: "chat.calendar_context_failed",
       severity: "error",
       lifeGraphId: context.lifeGraphId,
       ...describeError(error),
     });
-    return cached?.signals ?? [];
+    return cached?.calendar ?? null;
   }
+}
+
+/** Envoltorio sobre `getCalendarContextForConversation` -- para `assembleRealitySnapshot`, que solo necesita las señales, no el contexto crudo. */
+export async function getCalendarSignalsForConversation(
+  db: Database,
+  context: LifeGraphContext,
+): Promise<ExternalSignal[]> {
+  return buildCalendarSignals(await getCalendarContextForConversation(db, context));
 }
