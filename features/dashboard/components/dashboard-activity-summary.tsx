@@ -1,9 +1,6 @@
 import Link from "next/link";
-import {
-  RADIANT_THRESHOLD,
-  STEADY_THRESHOLD,
-  type OrbMaturityStage,
-} from "@/features/chat/services/generate-welcome";
+import { RADIANT_THRESHOLD, STEADY_THRESHOLD } from "@/features/orb/services/derive-maturity";
+import type { OrbMaturityStage } from "@/features/orb/domain/orb-state";
 import { PresenceOrb, type PresenceOrbSignature } from "@/components/ui/presence-orb";
 import type { DashboardSummary } from "../services/build-dashboard-summary";
 

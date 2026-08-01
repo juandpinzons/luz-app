@@ -6,6 +6,7 @@ import {
   getLastMessageAt,
 } from "@/features/chat/services/generate-welcome";
 import type { WelcomeSignature } from "@/features/chat/services/generate-welcome";
+import { NEUTRAL_ORB_VISUAL_STATE } from "@/features/orb/application/build-orb-state";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
 import { db } from "@/core/db/client";
@@ -50,7 +51,7 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({
       cue: "Aquí estoy",
       greeting: "Cuéntame lo que quieras, sin apuro.",
-      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false, paletteName: "amber" },
+      orb: NEUTRAL_ORB_VISUAL_STATE,
     } satisfies GetWelcomeResponse);
   }
 
@@ -93,7 +94,7 @@ export async function GET(): Promise<Response> {
     return NextResponse.json({
       cue: "Aquí estoy",
       greeting: "Cuéntame lo que quieras, sin apuro.",
-      orb: { maturityStage: "spark", warmth: 0.25, rhythmMs: 4200, anticipation: false, paletteName: "amber" },
+      orb: NEUTRAL_ORB_VISUAL_STATE,
     } satisfies GetWelcomeResponse);
   }
 }

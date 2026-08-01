@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { NEUTRAL_ORB_VISUAL_STATE } from "../../orb/application/build-orb-state";
+import type { OrbVisualState } from "../../orb/domain/orb-visual-state";
+import { OrbSphere } from "../../orb/components/orb-sphere";
 
 /**
  * Toda la coreografía deriva de estos cuatro números, nunca de
@@ -12,7 +15,7 @@ import { useEffect, useState } from "react";
  *
  * Ajustado (queja real de producto: "la esfera toma mucho tiempo,
  * debe respirar 0.5 a 1 segundo") -- el total bajó de 2750ms a
- * 1900ms mantiendo las mismas proporciones entre fases, para que
+ * 1900ms manteniendo las mismas proporciones entre fases, para que
  * siga leyéndose como una sola respiración, solo más corta. La causa
  * real de la demora percibida no era esta coreografía fija sino que
  * `ready` en `/chat` esperaba una llamada a IA real antes de empezar
@@ -35,39 +38,6 @@ function prefersReducedMotion(): boolean {
   );
 }
 
-/**
- * Todo lo que el ritual necesita para pintar el orbe como una
- * presencia real, no decorativa -- ver
- * `features/chat/services/generate-welcome.ts` (`OrbVisualSignature`),
- * la única fuente de estos valores. Nunca se define un segundo lugar
- * que decida calidez/ritmo/madurez por su cuenta.
- */
-export type RitualOrbPaletteName = "amber" | "rose_gold" | "copper" | "honey" | "coral" | "champagne";
-
-export interface RitualOrbSignature {
-  maturityStage: "spark" | "steady" | "radiant";
-  warmth: number;
-  rhythmMs: number;
-  anticipation: boolean;
-  paletteName: RitualOrbPaletteName;
-}
-
-/**
- * Familia de tonos cálidos "de marca" -- variaciones de `--color-luz`
- * (227, 177, 104), nunca un color frío o ajeno a LUZ. `amber` es
- * literalmente el mismo valor que `--color-luz` ya usa en el resto de
- * la interfaz -- quien no tiene todavía un `paletteName` real (`NEUTRAL_ORB`)
- * ve exactamente el mismo orbe de siempre, nunca uno nuevo por accidente.
- */
-const ORB_PALETTE_RGB: Record<RitualOrbPaletteName, string> = {
-  amber: "227, 177, 104",
-  rose_gold: "224, 158, 149",
-  copper: "214, 141, 92",
-  honey: "222, 186, 96",
-  coral: "222, 139, 118",
-  champagne: "206, 193, 158",
-};
-
 export interface ConversationOpeningRitualProps {
   children: React.ReactNode;
   /**
@@ -89,8 +59,8 @@ export interface ConversationOpeningRitualProps {
    * orbe respira igual, sin texto, nunca con un placeholder genérico.
    */
   cue?: string;
-  /** Ver `RitualOrbSignature`. `undefined` usa una presencia neutral (mismo look de siempre) -- nunca bloquea el ritual. */
-  orb?: RitualOrbSignature;
+  /** Ver `features/orb/domain/orb-visual-state.ts`. `undefined` usa `NEUTRAL_ORB_VISUAL_STATE` (mismo look de siempre) -- nunca bloquea el ritual. */
+  orb?: OrbVisualState;
   /**
    * Clases del contenedor real de `children` -- este componente no
    * conoce el layout interno de quien lo use (`flex flex-col`, grid,
@@ -119,9 +89,12 @@ export interface ConversationOpeningRitualProps {
  *
  * Desacoplado a propósito: no sabe nada de mensajes, conversaciones ni
  * `/chat` -- envuelve cualquier `children` y decide únicamente cuándo
- * mostrarlo. Reutilizable en cualquier otra pantalla que quiera el
- * mismo ritual de apertura (`/conversations/[id]`, a futuro) sin
- * duplicar esta lógica.
+ * mostrarlo. Tampoco sabe nada de CÓMO se ve el orbe (Misión "Orb
+ * Experience V1", Objetivo E): solo decide CUÁNDO mostrarlo y con qué
+ * animación de transición (`pulsing`), delegando el render real a
+ * `OrbSphere` (`features/orb/components/`). Reutilizable en cualquier
+ * otra pantalla que quiera el mismo ritual de apertura
+ * (`/conversations/[id]`, a futuro) sin duplicar esta lógica.
  *
  * `prefers-reduced-motion` se respeta en dos capas: aquí, el ritual
  * completo se salta (el contenido aparece de inmediato, sin ninguna
@@ -134,7 +107,7 @@ export function ConversationOpeningRitual({
   children,
   ready = true,
   cue,
-  orb,
+  orb = NEUTRAL_ORB_VISUAL_STATE,
   contentClassName = "flex h-full flex-col",
 }: ConversationOpeningRitualProps) {
   // Inicializador perezoso, no un efecto: se resuelve durante el primer
@@ -172,83 +145,26 @@ export function ConversationOpeningRitual({
 
   return (
     <div className="relative h-full">
-      {showSphere && <WelcomeSphere pulsing={isPulsing} cue={cue} orb={orb} />}
+      {showSphere && (
+        <div
+          aria-hidden="true"
+          className={`absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-black ${
+            isPulsing ? "animate-veil-dissolve" : ""
+          }`}
+        >
+          <OrbSphere state={orb} pulsing={isPulsing} />
+          {cue && (
+            <span
+              className="animate-script-reveal font-script text-4xl text-white/80 sm:text-5xl"
+              style={{ animationDelay: `${BREATHE_BEFORE_TEXT_MS}ms` }}
+            >
+              {cue}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className={`${contentClassName} ${contentAnimationClass}`}>{children}</div>
-    </div>
-  );
-}
-
-/** Presencia neutral cuando todavía no hay una `RitualOrbSignature` real (p. ej. mientras `/api/chat/welcome` sigue en vuelo) -- mismo look que el orbe siempre tuvo, nunca un estado roto. `amber` porque es literalmente el mismo tono que `--color-luz` ya usa en el resto de la interfaz. */
-const NEUTRAL_ORB: RitualOrbSignature = {
-  maturityStage: "steady",
-  warmth: 0.45,
-  rhythmMs: 4200,
-  anticipation: false,
-  paletteName: "amber",
-};
-
-function WelcomeSphere({
-  pulsing,
-  cue,
-  orb = NEUTRAL_ORB,
-}: {
-  pulsing: boolean;
-  cue?: string;
-  orb?: RitualOrbSignature;
-}) {
-  // Tamaño real, no solo un multiplicador cosmético -- una relación
-  // más asentada literalmente ocupa más espacio. `radiant` gana además
-  // una segunda capa de luz interior (ver abajo), nunca solo más
-  // grande.
-  const sizeClass =
-    orb.maturityStage === "spark"
-      ? "h-20 w-20 sm:h-24 sm:w-24"
-      : orb.maturityStage === "radiant"
-        ? "h-32 w-32 sm:h-36 sm:w-36"
-        : "h-28 w-28 sm:h-32 sm:w-32";
-
-  const glowAlpha = 0.18 + orb.warmth * 0.22;
-  const glowSpread = orb.anticipation ? 24 : 18;
-  const coreStop = orb.anticipation ? 60 : 55;
-  const rgb = ORB_PALETTE_RGB[orb.paletteName];
-
-  return (
-    <div
-      aria-hidden="true"
-      className={`absolute inset-0 z-20 flex flex-col items-center justify-center gap-6 bg-black ${
-        pulsing ? "animate-veil-dissolve" : ""
-      }`}
-    >
-      <div className="relative flex items-center justify-center">
-        {orb.maturityStage === "radiant" && (
-          <div
-            className={`absolute rounded-full ${sizeClass} scale-125 ${pulsing ? "" : "animate-sphere-breathe"}`}
-            style={{
-              background: `radial-gradient(circle at 50% 50%, rgba(${rgb}, ${glowAlpha * 0.5}) 0%, transparent 70%)`,
-              animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
-            }}
-          />
-        )}
-        <div
-          className={`flex-shrink-0 rounded-full ${sizeClass} ${
-            pulsing ? "animate-light-pulse" : "animate-sphere-breathe"
-          }`}
-          style={{
-            background: `radial-gradient(circle at 35% 30%, #ffffff 0%, rgb(${rgb}) ${coreStop}%, rgba(${rgb}, 0.15) 100%)`,
-            boxShadow: `0 0 ${60 + orb.warmth * 20}px ${glowSpread}px rgba(${rgb}, ${glowAlpha})`,
-            animationDuration: pulsing ? undefined : `${orb.rhythmMs}ms`,
-          }}
-        />
-      </div>
-      {cue && (
-        <span
-          className="animate-script-reveal font-script text-4xl text-white/80 sm:text-5xl"
-          style={{ animationDelay: `${BREATHE_BEFORE_TEXT_MS}ms` }}
-        >
-          {cue}
-        </span>
-      )}
     </div>
   );
 }
