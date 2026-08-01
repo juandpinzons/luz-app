@@ -78,6 +78,22 @@ function deriveChapter(loop: ContinuityLoop, now: Date): NarrativeChapter {
     : { stage: "developing", since: loop.createdAt };
 }
 
+/**
+ * `arc:${entityKey}` de la PRIMERA entidad relacionada, o
+ * `arc:thread:${loop.id}` si el loop no trae ninguna -- ver el docblock
+ * de `NarrativeArc` (`domain/narrative-arc.ts`) para por qué agrupar por
+ * la primera entidad (no un cierre transitivo completo) es la
+ * simplificación correcta aquí. Calculable por thread de forma
+ * independiente -- dos threads que comparten entidad principal producen
+ * la MISMA clave sin necesitar verse entre sí, así que `build-arcs.ts`
+ * solo necesita agrupar por esta clave, nunca reimplementar la
+ * correlación.
+ */
+function deriveArcKey(loop: ContinuityLoop): string {
+  const primary = loop.relatedEntities[0];
+  return primary ? `arc:${relatedEntityKey(primary)}` : `arc:thread:${loop.id}`;
+}
+
 export interface BuildThreadsFromLoopsInput {
   readonly loops: readonly ContinuityLoop[];
   readonly now: Date;
@@ -106,6 +122,8 @@ export function buildThreadsFromLoops(input: BuildThreadsFromLoopsInput): Narrat
     const ageDays = daysBetween(loop.createdAt, input.now);
 
     const isCelebration = loop.state === "resolved" && loop.resolution?.outcome?.kind === "positive";
+    const endedAsSetback =
+      (loop.state === "resolved" && loop.resolution?.outcome?.kind !== "positive") || loop.state === "abandoned";
     const isLongRunningOpen = !terminal && ageDays >= LONG_RUNNING_THRESHOLD_DAYS;
     const isFadingWithoutEvidence =
       !terminal &&
@@ -163,7 +181,9 @@ export function buildThreadsFromLoops(input: BuildThreadsFromLoopsInput): Narrat
       ageDays,
       isLongRunning: isLongRunningOpen,
       isFadingWithoutEvidence,
+      endedAsSetback,
       relatedEntities: loop.relatedEntities,
+      arcKey: deriveArcKey(loop),
     };
     return thread;
   });

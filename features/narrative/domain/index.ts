@@ -3,6 +3,8 @@ export * from "./narrative-priority";
 export * from "./narrative-reason";
 export * from "./narrative-related-entity";
 export * from "./narrative-thread";
+export * from "./narrative-arc";
+export * from "./narrative-silence";
 export * from "./narrative-moment";
 export * from "./narrative-candidate";
 export * from "./narrative-continuation";

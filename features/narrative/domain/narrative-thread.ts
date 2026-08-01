@@ -49,6 +49,27 @@ export interface NarrativeThread {
    * `isLongRunning` para exponerlo aparte de `reason`.
    */
   readonly isFadingWithoutEvidence: boolean;
+  /**
+   * `true` cuando este capítulo cerró SIN un desenlace positivo --
+   * `state === "resolved"` con `outcome.kind !== "positive"`, o
+   * `state === "abandoned"`. Deliberadamente NO incluye `archived`
+   * (el sistema simplemente dejó de rastrear, sin desenlace ni bueno ni
+   * malo -- ver `LoopState`) ni `transformed` (el asunto siguió
+   * adelante como otra cosa, no es un revés). Único hecho que
+   * `services/build-arcs.ts` necesita para reconocer un intento
+   * posterior como recuperación (Principio 7) -- nunca una lectura de
+   * cómo se siente la persona, solo de qué desenlace real capturó
+   * Continuity.
+   */
+  readonly endedAsSetback: boolean;
   /** Passthrough exacto de `ContinuityLoop.relatedEntities`. */
   readonly relatedEntities: readonly NarrativeRelatedEntity[];
+  /**
+   * Identidad del `NarrativeArc` al que pertenece este capítulo -- ver
+   * `domain/narrative-arc.ts` y `services/build-arcs.ts`. Siempre
+   * presente: un thread sin ninguna entidad relacionada en común con
+   * otro forma un arco de un solo capítulo (`arc:thread:${id}`), nunca
+   * queda huérfano.
+   */
+  readonly arcKey: string;
 }

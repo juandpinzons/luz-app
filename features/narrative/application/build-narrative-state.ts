@@ -8,6 +8,7 @@ import type { ExperienceState } from "../../experience/domain/experience-state";
 import type { HomeState } from "../../home/domain/home-state";
 import type { CalendarSnapshot, EmailSnapshot } from "../../reality/domain";
 import type { NarrativeState } from "../domain/narrative-state";
+import { buildArcs } from "../services/build-arcs";
 import { buildCelebrationCandidates } from "../services/build-celebration-candidates";
 import { buildContinuation } from "../services/build-continuation";
 import { buildMoments } from "../services/build-moments";
@@ -26,6 +27,15 @@ export interface BuildNarrativeStateInput {
   readonly homeState: HomeState;
   /** `whatChanged` ya resuelve "Recent Changes" -- ver `NarrativeState.recentChanges`. */
   readonly experienceState: ExperienceState;
+  /**
+   * Ventana COMPLETA de loops -- pasados (resueltos/archivados/
+   * abandonados) Y presentes, no solo los actualmente abiertos. `NarrativeArc`
+   * (`services/build-arcs.ts`) necesita ver meses atrás para conectar
+   * capítulos de un mismo asunto real ("connect events months apart") --
+   * pasar solo loops abiertos degradaría cada arco a un único capítulo,
+   * perdiendo recuperación (Principio 7) y ecos temporales (Principio 8)
+   * en silencio, sin ningún error visible.
+   */
   readonly loops: readonly ContinuityLoop[];
   /** Lista COMPLETA, sin recortar -- a diferencia de `homeState.attentionNeeded`/`recentProgress.items`, que Presence ya acotó a 2-3 por sección. */
   readonly recommendations: readonly FollowUpRecommendation[];
@@ -33,6 +43,17 @@ export interface BuildNarrativeStateInput {
   readonly lifeDashboardSnapshot: LifeDashboardSnapshot;
   readonly calendar: CalendarSnapshot | null;
   readonly email: EmailSnapshot | null;
+  /**
+   * `NarrativeThread.id` de los capítulos ya narrados en visitas
+   * recientes, más reciente primero -- mismo rol que
+   * `recentPrimaryKeys` en `buildExperienceState`
+   * (`features/experience/`), consumido de la misma forma no invasiva:
+   * un parámetro opcional, sin que Narrative posea ninguna tabla nueva.
+   * Alimenta el silencio por repetición (Principio 3/9, ver
+   * `services/select-primary-narrative.ts`). `[]` por defecto -- sin
+   * historial, nada se silencia por repetición todavía.
+   */
+  readonly recentlyNarratedThreadIds?: readonly string[];
   /**
    * Aceptado por completitud de la misión ("Reality Snapshot" es una de
    * las nueve fuentes permitidas) pero NO se usa hoy más allá de aceptar
@@ -71,16 +92,25 @@ export function buildNarrativeState(input: BuildNarrativeStateInput): NarrativeS
     email: input.email,
   });
 
-  const currentActiveStory = selectPrimaryNarrative(threads);
+  const arcs = buildArcs(threads, now);
+  const { primary: currentActiveStory, silenced: silencedCandidate } = selectPrimaryNarrative(
+    arcs,
+    input.recentlyNarratedThreadIds ?? [],
+  );
   const categorized = categorizeThreads(threads);
   const celebrationCandidates = buildCelebrationCandidates(threads, moments);
+  const recurringArcs = arcs.filter((arc) => arc.chapters.length >= 2);
+  const dormantArcs = arcs.filter((arc) => arc.state === "dormant");
 
   return {
     asOf: now,
     currentActiveStory,
+    silencedCandidate,
     continuation: buildContinuation(currentActiveStory),
     recentChanges: input.experienceState.whatChanged,
     celebrationCandidates,
     ...categorized,
+    recurringArcs,
+    dormantArcs,
   };
 }

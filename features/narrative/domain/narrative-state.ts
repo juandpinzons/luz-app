@@ -1,6 +1,8 @@
 import type { RealityChange } from "../../experience/domain/experience-state";
+import type { NarrativeArc } from "./narrative-arc";
 import type { NarrativeContinuation } from "./narrative-continuation";
 import type { NarrativeMoment } from "./narrative-moment";
+import type { NarrativeSilenceDecision } from "./narrative-silence";
 import type { NarrativeThread } from "./narrative-thread";
 
 /**
@@ -26,14 +28,23 @@ export interface NarrativeState {
   readonly asOf: Date;
 
   /**
-   * "Current Active Story" -- la única historia que debería liderar
-   * ahora mismo, o `null` cuando de verdad no hay ninguna (cuenta vacía,
-   * cero `ContinuityLoop` reales). Nunca se fabrica una para llenar el
-   * espacio -- mismo principio que `ExperienceState.primary`. Solo puede
-   * salir de un `NarrativeThread` real (ver `NarrativeCandidate`): un
-   * momento de un solo instante nunca es "la historia activa".
+   * "Current Active Story" -- el ARCO (no solo el capítulo de hoy) que
+   * debería liderar ahora mismo, o `null` cuando de verdad no hay
+   * ninguno elegible (cuenta vacía, o todo lo elegible quedó en
+   * `silencedCandidate`). Nunca se fabrica uno para llenar el espacio --
+   * mismo principio que `ExperienceState.primary`. Un `NarrativeMoment`
+   * de un solo instante nunca puede ganar esto: no tiene arco.
    */
-  readonly currentActiveStory: NarrativeThread | null;
+  readonly currentActiveStory: NarrativeArc | null;
+
+  /**
+   * El mejor arco que calificaba pero fue deliberadamente silenciado
+   * (Principio 3) -- `null` cuando no hubo ninguna decisión de silencio
+   * esta visita, NO cuando no había nada que decir (eso es
+   * `currentActiveStory === null` sin `silencedCandidate`). Ver
+   * `NarrativeSilenceDecision`.
+   */
+  readonly silencedCandidate: NarrativeSilenceDecision | null;
 
   /** Cómo retomar `currentActiveStory` -- `null` únicamente cuando `currentActiveStory` también lo es. Ver `NarrativeContinuation`. */
   readonly continuation: NarrativeContinuation | null;
@@ -82,4 +93,19 @@ export interface NarrativeState {
 
   /** "Stories Waiting Quietly" -- capítulo exactamente `waiting`. */
   readonly storiesWaitingQuietly: readonly NarrativeThread[];
+
+  /**
+   * Arcos con 2 o más capítulos -- evidencia real de que esto no es la
+   * primera vez (Principio 6: "a story that repeats itself across time
+   * is more meaningful than any single chapter alone"). Incluye arcos en
+   * cualquier estado, no solo `active`/`recovering`.
+   */
+  readonly recurringArcs: readonly NarrativeArc[];
+
+  /**
+   * Arcos en estado `dormant` -- "revisit forgotten things". Elegibles
+   * para una revisita futura si aparece evidencia nueva sobre la misma
+   * entidad; nunca presentados como fracaso (Principio 11).
+   */
+  readonly dormantArcs: readonly NarrativeArc[];
 }

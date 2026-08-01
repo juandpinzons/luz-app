@@ -13,6 +13,15 @@ export const CALENDAR_PROXIMITY_WINDOW_HOURS = 48;
 export const CELEBRATION_SCORE_FLOOR = 2;
 
 /**
+ * Bono del cuarto grupo, "arc resonance" -- ver `applyArcResonance`. Mismo
+ * tope +1 que los otros tres grupos, aplicado DESPUÉS de `computeNarrativeScore`
+ * (a nivel de arco, no de capítulo individual) porque `recovering`/`echo`
+ * son hechos que solo existen una vez que `services/build-arcs.ts` agrupó
+ * los capítulos -- un capítulo aislado no puede saberlo por sí solo.
+ */
+export const ARC_RESONANCE_BONUS = 1;
+
+/**
  * Entradas normalizadas del ranking -- la misma forma sirve para un
  * `NarrativeThread` (respaldado por un `ContinuityLoop`) y para un
  * `NarrativeMoment` (sin loop propio), para que el peso de cada señal se
@@ -57,7 +66,12 @@ function clampScore(value: number): number {
  * Los nueve nombres de señal que sugiere la misión (importance,
  * freshness, continuity, recency, emotional weight, user attention,
  * calendar proximity, follow-up urgency, story age) se agrupan en TRES
- * bits honestos, no nueve sumandos independientes -- así ninguna
+ * bits honestos a nivel de capítulo (esta función) -- un cuarto grupo,
+ * "arc resonance" (recuperación tras un revés real, o un eco temporal),
+ * se aplica DESPUÉS a nivel de arco (`applyArcResonance`, más abajo),
+ * porque esos dos hechos solo existen una vez agrupados los capítulos --
+ * ver `services/build-arcs.ts`. Cuatro grupos en total, nunca nueve
+ * sumandos independientes -- así ninguna
  * combinación accidental de señales débiles puede empujar una candidata
  * irrelevante por encima de una genuinamente importante:
  *
@@ -105,6 +119,28 @@ export function computeNarrativeScore(input: NarrativeScoreInput): number {
   const score = clampScore(raw);
 
   return input.isCelebration ? Math.max(score, CELEBRATION_SCORE_FLOOR) : score;
+}
+
+/**
+ * Cuarto grupo de modificadores, "arc resonance" -- +1 como máximo
+ * (misma disciplina que los otros tres) cuando el ARCO completo (no el
+ * capítulo aislado) trae uno de dos hechos reales:
+ *
+ * - `isReturningAfterSetback` (Principio 7): un capítulo anterior del
+ *   mismo arco terminó `negative`/`unknown`/`abandoned`, y este es un
+ *   segundo intento real -- ver `services/build-arcs.ts`.
+ * - `hasEcho` (Principio 8, "time itself is evidence"): un capítulo
+ *   pasado de este mismo arco cae en la fecha de hoy -- ver
+ *   `services/compute-echo.ts`.
+ *
+ * Aplicado sobre el score YA calculado del capítulo actual (nunca lo
+ * reduce, nunca lo recalcula desde cero) -- el arco puede ver más lejos
+ * que un capítulo aislado, pero nunca puede saber MENOS de lo que ese
+ * capítulo ya demostró por sí mismo.
+ */
+export function applyArcResonance(chapterScore: number, isReturningAfterSetback: boolean, hasEcho: boolean): number {
+  const resonance = isReturningAfterSetback || hasEcho;
+  return resonance ? clampScore(chapterScore + ARC_RESONANCE_BONUS) : chapterScore;
 }
 
 /**

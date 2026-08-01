@@ -1,10 +1,14 @@
+import type { NarrativeArc } from "../domain/narrative-arc";
 import type { NarrativePriority } from "../domain/narrative-priority";
-import type { NarrativeThread } from "../domain/narrative-thread";
 
 export interface NarrativePresenceSignal {
   readonly threadId: string;
   readonly title: string;
   readonly priority: NarrativePriority;
+  /** Passthrough de `NarrativeArc.isReturningAfterSetback` -- señal real de que esto es un segundo intento, no un asunto nuevo (Principio 7). */
+  readonly isReturningAfterSetback: boolean;
+  /** `true` cuando `NarrativeArc.echo` está presente -- señal real de que hoy coincide con la fecha de un capítulo pasado (Principio 8). */
+  readonly hasEcho: boolean;
 }
 
 /**
@@ -16,7 +20,13 @@ export interface NarrativePresenceSignal {
  * `toPresenceSignals` (`features/continuity/integrations/`): contrato
  * listo, sin wiring todavía.
  */
-export function toPresenceContinuitySignal(currentActiveStory: NarrativeThread | null): NarrativePresenceSignal | null {
+export function toPresenceContinuitySignal(currentActiveStory: NarrativeArc | null): NarrativePresenceSignal | null {
   if (!currentActiveStory) return null;
-  return { threadId: currentActiveStory.id, title: currentActiveStory.title, priority: currentActiveStory.priority };
+  return {
+    threadId: currentActiveStory.current.id,
+    title: currentActiveStory.current.title,
+    priority: currentActiveStory.priority,
+    isReturningAfterSetback: currentActiveStory.isReturningAfterSetback,
+    hasEcho: currentActiveStory.echo !== null,
+  };
 }
