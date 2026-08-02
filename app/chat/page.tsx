@@ -8,6 +8,8 @@ import { TypingIndicator } from "@/components/ui/typing-indicator";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
 import type { OrbVisualState } from "@/features/orb/domain/orb-visual-state";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
+import type { AvatarMoodSignal } from "@/features/avatar";
+import { PresenceAvatar } from "@/features/avatar/components/presence-avatar";
 import type { GetWelcomeResponse } from "@/app/api/chat/welcome/route";
 import type {
   GetLatestConversationResponse,
@@ -16,6 +18,29 @@ import type {
 
 /** Sin llamada de red -- se usa solo al reanudar una conversación histórica puntual, donde el gesto es "volver a algo", nunca la bienvenida completa generada por IA (esa es solo para empezar de cero). */
 const RESUME_CUE = "De vuelta";
+
+/**
+ * Avatar V1 -- `/chat` recibe la capa de interacción en vivo completa
+ * (respiración/parpadeo/listen/think/sleep, todos reales), pero NO el
+ * `mood` de fondo de los cuatro motores (Presence+Experience+Narrative+
+ * Identity): ese cálculo ya existe en este mismo repo
+ * (`assembleReconnectionContext.ts`) y está deliberadamente gateado
+ * detrás de `isFirstContact` + un vacío real de horas -- "caro
+ * comparado con el resto del turno", en sus propias palabras --
+ * precisamente para no pagarlo en cada apertura/mensaje de chat. Traer
+ * ese mismo costo aquí, sin ese gate, sería exactamente la latencia que
+ * `features/orb/README.md` ya documentó evitar para esta misma
+ * pantalla. Mood rico en `/chat` puede ser un fast-follow real
+ * reutilizando ese mismo gate -- fuera de alcance de V1.
+ */
+const NEUTRAL_AVATAR_MOOD: AvatarMoodSignal = {
+  emotion: "calm",
+  intensity: 0.25,
+  gaze: "user",
+  focusRef: null,
+  reason: "Sin mood de fondo en /chat todavía (V1) -- la interacción en vivo sigue completamente activa.",
+  asOf: new Date(),
+};
 
 type Message = {
   role: "user" | "assistant";
@@ -164,6 +189,8 @@ function ChatPageContent() {
   const [welcomeCue, setWelcomeCue] = useState<string | undefined>();
   const [welcomeGreeting, setWelcomeGreeting] = useState<string | null>(null);
   const [orbSignature, setOrbSignature] = useState<OrbVisualState | undefined>();
+  /** Avatar V1 -- última actividad real (tecla presionada, mensaje enviado), nunca decorativa: alimenta `msSinceLastActivity` (`usePresenceAvatarState`), la misma métrica que decide `sleep`. */
+  const [lastActivityAt, setLastActivityAt] = useState(() => new Date());
   const inputRef = useRef<HTMLInputElement>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
@@ -410,6 +437,7 @@ function ChatPageContent() {
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;
 
+    setLastActivityAt(new Date());
     const userMessage = message;
 
     // Enviar siempre ancla abajo, sin importar dónde estaba el scroll —
@@ -569,7 +597,14 @@ function ChatPageContent() {
         {!isLoadingHistory && (
           <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
             <div className="flex items-center justify-between gap-3">
-              <div>
+              <div className="flex items-center gap-3">
+                <PresenceAvatar
+                  mood={NEUTRAL_AVATAR_MOOD}
+                  isAiResponding={isThinking}
+                  isUserTyping={message.trim() !== ""}
+                  lastActivityAt={lastActivityAt}
+                  size="xs"
+                />
                 {historicalLabel && (
                   <p className="text-sm text-zinc-500">{historicalLabel}</p>
                 )}
@@ -669,7 +704,10 @@ function ChatPageContent() {
               aria-label="Escribe un mensaje para LUZ"
               value={message}
               disabled={isSending}
-              onChange={(e) => setMessage(e.target.value)}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                setLastActivityAt(new Date());
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
                   sendMessage();
