@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PresenceAvatarState } from "../domain/presence-avatar-state";
-import { LuzCharacter } from "./luz-character";
+import { AvatarVisual } from "./avatar-visual";
 
 const SIZE_CLASS = {
   xs: "h-10 w-10",
@@ -78,12 +78,13 @@ export function Avatar({ state, size = "md", className = "" }: AvatarProps) {
 
   return (
     <div className={`${SIZE_CLASS[size]} ${className}`} title={state.reason}>
-      <LuzCharacter
+      <AvatarVisual
         emotion={state.emotion}
         animation={state.animation}
         intensity={state.intensity}
         gaze={state.gaze}
         blinking={blinking}
+        size={size}
       />
     </div>
   );
