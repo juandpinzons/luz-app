@@ -51,3 +51,22 @@ export const logger = { log: write };
 export function createRequestId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
+
+/**
+ * `Date.now()` envuelto -- un Server Component (`.tsx`) no puede
+ * llamar `Date.now()` directamente en su cuerpo (regla
+ * `react-hooks/purity` de este proyecto: "Cannot call impure function
+ * during render"), pero SÍ puede llamar una función importada que lo
+ * haga por dentro -- mismo criterio que ya permite `createRequestId()`
+ * (que llama `Math.random()` internamente) en `app/dashboard/page.tsx`.
+ * Los Route Handlers (`route.ts`) no son componentes y nunca
+ * necesitaron este envoltorio -- siguen usando `Date.now()` directo.
+ */
+export function nowMs(): number {
+  return Date.now();
+}
+
+/** `nowMs() - startedAt`, para el patrón `durationMs` que ya usa el resto del repo -- ver docblock de `nowMs`. */
+export function elapsedMs(startedAt: number): number {
+  return nowMs() - startedAt;
+}

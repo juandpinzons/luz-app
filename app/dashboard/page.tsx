@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
@@ -34,7 +35,7 @@ import { SecondaryExperienceList } from "@/features/experience/components/second
 import { PostponedExperienceNote } from "@/features/experience/components/postponed-experience-note";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
 import { describeError } from "@/core/observability/describe-error";
-import { createRequestId, logger } from "@/core/observability/logger";
+import { createRequestId, elapsedMs, logger, nowMs } from "@/core/observability/logger";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
 
 /**
@@ -133,8 +134,66 @@ export default async function DashboardPage() {
 
   // Un solo id por render, para poder correlacionar todas las líneas
   // de log de esta carga del Dashboard entre sí (mismo patrón que
-  // app/api/chat/route.ts).
+  // app/api/chat/route.ts). `renderStartedAt` alimenta el log de
+  // duración al final -- ver "Latencia" más abajo.
   const requestId = createRequestId();
+  const renderStartedAt = nowMs();
+  // Capturado una sola vez, fuera de cualquier cierre -- evita
+  // cualquier duda sobre si el angostamiento de tipos de TypeScript
+  // (`session.user.id` ya no puede ser `undefined` tras el `redirect`
+  // de arriba) sigue vigente dentro de las funciones anidadas de abajo.
+  const userId = session.user.id;
+  const userName = session.user.name;
+
+  /**
+   * LATENCIA (misión "que LUZ sea más rápida"): antes, cada una de las
+   * piezas de abajo (resumen, Life Graph completo, línea de
+   * continuidad generada por IA, sincronización real de Google
+   * Calendar, memoria reciente) se esperaba una detrás de otra con
+   * `await` secuenciales, aunque NINGUNA depende del resultado de
+   * ninguna otra -- todas solo necesitan `lifeGraphContext`/`userId`,
+   * ya resueltos. Encadenadas así, el tiempo total era la SUMA de las
+   * cinco (la llamada real a IA de `buildMorningBrief` y la
+   * sincronización real con Google Calendar de `getLiveCalendarContext`
+   * son, con diferencia, las dos más lentas) -- el origen real de "la
+   * transición a 'hoy' toma varios segundos". Correrlas en paralelo
+   * (`Promise.all`) hace que el tiempo total sea el MÁXIMO de las
+   * cinco, no la suma -- sin cambiar ni una regla de negocio, ni un
+   * mensaje de error, ni el criterio de tolerancia a fallos de cada
+   * una (cada función interna conserva su propio `try/catch` y su
+   * propio evento de log, exactamente como antes).
+   */
+
+  async function loadConversationCount(): Promise<number> {
+    const [row] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(conversations)
+      .where(eq(conversations.userId, userId));
+    return row.n;
+  }
+
+  async function loadLifeGraphContext() {
+    try {
+      return await getLifeGraphContext();
+    } catch (error) {
+      logger.log({
+        event: "dashboard.life_graph_context_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        ...describeError(error),
+      });
+      return null;
+    }
+  }
+
+  // Independientes entre sí -- ninguna necesita el resultado de la
+  // otra, ambas solo necesitan `userId` (ya resuelto por `auth()`).
+  const [conversationCount, lifeGraphContext] = await Promise.all([
+    loadConversationCount(),
+    loadLifeGraphContext(),
+  ]);
 
   /**
    * Señal de "primera visita" (ONBOARDING_PLAN.md, hallazgo #5):
@@ -146,52 +205,30 @@ export default async function DashboardPage() {
    * "todavía no vivió nada con LUZ", así que se usa esa, no el evento
    * de login.
    */
-  const [conversationCount] = await db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(conversations)
-    .where(eq(conversations.userId, session.user.id));
-  const isFirstVisit = conversationCount.n === 0;
-
-  let lifeGraphContext = null;
-  try {
-    lifeGraphContext = await getLifeGraphContext();
-  } catch (error) {
-    logger.log({
-      event: "dashboard.life_graph_context_failed",
-      severity: "error",
-      requestId,
-      route: ROUTE,
-      userId: session.user.id,
-      ...describeError(error),
-    });
-  }
+  const isFirstVisit = conversationCount === 0;
 
   /**
    * Resumen del Dashboard (Sprint Alpha-1a: Dashboard) — datos reales
    * únicamente, nunca placeholders. Igual que `lifeGraphContext` arriba,
    * si esto falla la página se degrada (secciones ocultas) en vez de
    * romperse — mismo criterio de tolerancia a fallos de todo el archivo.
-   * Movido antes de `homeState`/`experience` (adición "¿qué cambió?"):
-   * `summary.memoriesStored` alimenta `RealityFingerprint`
-   * (`buildExperienceState`), así que tiene que existir para ese
-   * momento -- mismo dato, ninguna consulta nueva, solo antes en el
-   * orden de este archivo.
    */
-  let summary: DashboardSummary | null = null;
-  try {
-    const userContext = await getUserContext();
-    if (userContext) {
-      summary = await buildDashboardSummary(db, userContext, lifeGraphContext);
+  async function loadSummary(): Promise<DashboardSummary | null> {
+    try {
+      const userContext = await getUserContext();
+      if (!userContext) return null;
+      return await buildDashboardSummary(db, userContext, lifeGraphContext);
+    } catch (error) {
+      logger.log({
+        event: "dashboard.summary_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        ...describeError(error),
+      });
+      return null;
     }
-  } catch (error) {
-    logger.log({
-      event: "dashboard.summary_failed",
-      severity: "error",
-      requestId,
-      route: ROUTE,
-      userId: session.user.id,
-      ...describeError(error),
-    });
   }
 
   /**
@@ -205,23 +242,24 @@ export default async function DashboardPage() {
    * construye primero con `null` para no bloquear el resto del Life
    * Graph a que el calendario responda.
    */
-  let homeState: HomeState | null = null;
-  if (lifeGraphContext) {
+  async function loadHomeStateBase(): Promise<HomeState | null> {
+    if (!lifeGraphContext) return null;
     try {
       const snapshot = await buildLifeDashboardSnapshot(db, lifeGraphContext);
       const recommendations = buildFollowUpRecommendations(snapshot.observations, snapshot);
       const presence = buildPresenceState(snapshot.observations, snapshot, recommendations);
-      homeState = buildHomeState(snapshot, snapshot.observations, recommendations, presence, null);
+      return buildHomeState(snapshot, snapshot.observations, recommendations, presence, null);
     } catch (error) {
       logger.log({
         event: "dashboard.home_state_failed",
         severity: "error",
         requestId,
         route: ROUTE,
-        userId: session.user.id,
+        userId,
         lifeGraphId: lifeGraphContext.lifeGraphId,
         ...describeError(error),
       });
+      return null;
     }
   }
 
@@ -232,25 +270,21 @@ export default async function DashboardPage() {
    * protege a `lifeGraphContext` y `summary` en este archivo le
    * faltaba justo aquí. Corregido (bug real, encontrado en producción).
    */
-  let brief = null;
-  if (lifeGraphContext) {
+  async function loadMorningBrief() {
+    if (!lifeGraphContext) return null;
     try {
-      brief = await buildMorningBrief(
-        db,
-        lifeGraphContext,
-        session.user.name ?? "",
-        isFirstVisit,
-      );
+      return await buildMorningBrief(db, lifeGraphContext, userName ?? "", isFirstVisit);
     } catch (error) {
       logger.log({
         event: "dashboard.morning_brief_failed",
         severity: "error",
         requestId,
         route: ROUTE,
-        userId: session.user.id,
+        userId,
         lifeGraphId: lifeGraphContext.lifeGraphId,
         ...describeError(error),
       });
+      return null;
     }
   }
 
@@ -264,75 +298,33 @@ export default async function DashboardPage() {
    * `try/catch` de aquí solo cubre un fallo inesperado antes de eso
    * (p. ej. la propia consulta de la conexión guardada).
    */
-  let calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null = null;
-  if (lifeGraphContext) {
+  async function loadCalendarOutcome(): Promise<Awaited<ReturnType<typeof getLiveCalendarContext>> | null> {
+    if (!lifeGraphContext) return null;
     try {
-      calendarOutcome = await getLiveCalendarContext(db, lifeGraphContext.lifeGraphId);
-      if (calendarOutcome.status === "error") {
+      const outcome = await getLiveCalendarContext(db, lifeGraphContext.lifeGraphId);
+      if (outcome.status === "error") {
         logger.log({
           event: "dashboard.calendar_sync_failed",
           severity: "error",
           requestId,
           route: ROUTE,
-          userId: session.user.id,
+          userId,
           lifeGraphId: lifeGraphContext.lifeGraphId,
-          ...describeError(calendarOutcome.error),
+          ...describeError(outcome.error),
         });
       }
+      return outcome;
     } catch (error) {
       logger.log({
         event: "dashboard.calendar_failed",
         severity: "error",
         requestId,
         route: ROUTE,
-        userId: session.user.id,
+        userId,
         lifeGraphId: lifeGraphContext.lifeGraphId,
         ...describeError(error),
       });
-    }
-  }
-
-  if (homeState && calendarOutcome?.status === "connected") {
-    homeState = { ...homeState, calendar: calendarOutcome.calendarContext };
-  }
-
-  /**
-   * Fases 1-5 de "Experience Intelligence V1" (ver
-   * `features/experience/README.md`): de todo lo que `homeState` ya
-   * decidió, cuál ES la experiencia de hoy. `getRecentPrimaryKeys`/
-   * `getPreviousFingerprint` nunca lanzan por sí solas (selects
-   * simples); si fallan, todo el bloque se degrada a "sin experiencia
-   * arbitrada hoy" en vez de romper la página, mismo criterio que el
-   * resto de este archivo. `recordExperienceCardShown` es tolerante a
-   * fallos por dentro (reusa `recordEvent`), así que nunca necesita su
-   * propio catch.
-   */
-  let experience: ExperienceState | null = null;
-  if (homeState) {
-    try {
-      const [recentPrimaryKeys, previousFingerprint] = await Promise.all([
-        getRecentPrimaryKeys(db, session.user.id),
-        getPreviousFingerprint(db, session.user.id),
-      ]);
-      experience = buildExperienceState(
-        homeState,
-        recentPrimaryKeys,
-        summary?.memoriesStored ?? 0,
-        previousFingerprint,
-      );
-      if (experience.primary) {
-        await recordExperienceCardShown(db, session.user.id, experience.primary, experience.fingerprint);
-      }
-    } catch (error) {
-      logger.log({
-        event: "dashboard.experience_state_failed",
-        severity: "error",
-        requestId,
-        route: ROUTE,
-        userId: session.user.id,
-        lifeGraphId: lifeGraphContext?.lifeGraphId,
-        ...describeError(error),
-      });
+      return null;
     }
   }
 
@@ -343,22 +335,93 @@ export default async function DashboardPage() {
    * última memoria activa que LUZ capturó. Mismo criterio de
    * tolerancia a fallos que el resto de esta página.
    */
-  let recentMemory: Awaited<ReturnType<typeof getRecentMemoryHighlight>> = null;
-  if (lifeGraphContext) {
+  async function loadRecentMemory(): Promise<Awaited<ReturnType<typeof getRecentMemoryHighlight>>> {
+    if (!lifeGraphContext) return null;
     try {
-      recentMemory = await getRecentMemoryHighlight(db, lifeGraphContext);
+      return await getRecentMemoryHighlight(db, lifeGraphContext);
     } catch (error) {
       logger.log({
         event: "dashboard.recent_memory_failed",
         severity: "error",
         requestId,
         route: ROUTE,
-        userId: session.user.id,
+        userId,
         lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+      return null;
+    }
+  }
+
+  // Las siete solo necesitan `lifeGraphContext`/`userId`, ya resueltos
+  // arriba -- ninguna depende del resultado de otra, así que corren
+  // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
+  // dos `select` simples que antes solo se pedían DESPUÉS de tener
+  // `homeState` en mano, aunque nunca lo necesitaron a él tampoco.
+  const [summary, homeStateBase, brief, calendarOutcome, recentMemory, recentPrimaryKeys, previousFingerprint] =
+    await Promise.all([
+      loadSummary(),
+      loadHomeStateBase(),
+      loadMorningBrief(),
+      loadCalendarOutcome(),
+      loadRecentMemory(),
+      getRecentPrimaryKeys(db, userId),
+      getPreviousFingerprint(db, userId),
+    ]);
+
+  let homeState = homeStateBase;
+  if (homeState && calendarOutcome?.status === "connected") {
+    homeState = { ...homeState, calendar: calendarOutcome.calendarContext };
+  }
+
+  /**
+   * Fases 1-5 de "Experience Intelligence V1" (ver
+   * `features/experience/README.md`): de todo lo que `homeState` ya
+   * decidió, cuál ES la experiencia de hoy. Esta fase sí depende de
+   * `homeState` YA parcheado con el calendario, así que no puede unirse
+   * al `Promise.all` de arriba -- pero ya no espera ninguna consulta
+   * propia (`recentPrimaryKeys`/`previousFingerprint` ya están
+   * resueltos). `recordExperienceCardShown` es una escritura de
+   * analítica (qué tarjeta se mostró, para la rotación futura) que la
+   * persona no necesita esperar para ver la página -- programada con
+   * `after()` (mismo patrón ya establecido en `app/api/chat/route.ts`),
+   * corre después de que la respuesta ya salió, nunca antes.
+   */
+  let experience: ExperienceState | null = null;
+  if (homeState) {
+    try {
+      experience = buildExperienceState(
+        homeState,
+        recentPrimaryKeys,
+        summary?.memoriesStored ?? 0,
+        previousFingerprint,
+      );
+      if (experience.primary) {
+        const primaryCard = experience.primary;
+        const fingerprint = experience.fingerprint;
+        after(() => recordExperienceCardShown(db, userId, primaryCard, fingerprint));
+      }
+    } catch (error) {
+      logger.log({
+        event: "dashboard.experience_state_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        lifeGraphId: lifeGraphContext?.lifeGraphId,
         ...describeError(error),
       });
     }
   }
+
+  logger.log({
+    event: "dashboard.render_completed",
+    severity: "info",
+    requestId,
+    route: ROUTE,
+    userId,
+    durationMs: elapsedMs(renderStartedAt),
+  });
 
   const daysSinceLastMessage = summary?.lastMessageAt
     ? daysSince(summary.lastMessageAt, new Date())
