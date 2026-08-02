@@ -1,17 +1,32 @@
 # ADR-0022 Knowledge Relevance Redesign
 
-Status: Proposed — awaiting Founder review\
-Date: 2026-08-02 (Revision 5 — minimality, terminology, and principle pass)\
+Status: **Accepted — design frozen** (Founder, 2026-08-02)\
+Date: 2026-08-02 (Revision 5 — minimality, terminology, and principle pass; final)\
 Owner: Founder (decision), LEOS (proposal)\
 Depends on evidence from:
 `docs/engineering/investigations/2026-08-02_knowledge_engine_memory_rank_score.md`,
 `docs/engineering/investigations/2026-08-02_pipeline_loss_before_ranking.md`,
 `docs/engineering/investigations/2026-08-02_knowledge_job_to_insight_conversion.md`
 — all three read as prerequisites; this document does not re-derive
-their evidence, only designs against it.\
-**Nothing in this document has been implemented.** This is a proposal
-per `docs/legal/AI_DEVELOPMENT_POLICY.md`'s lifecycle — it moves to
-Accepted only on the Founder's explicit decision.
+their evidence, only designs against it.
+
+**Closure note (Founder, 2026-08-02):** "Considero ADR-0022 cerrada.
+No quiero más iteraciones ni más mejoras sobre este tema. Congela el
+diseño en el estado actual." Five revisions — proposal, an
+implementation-completeness pass, an architecture/policy separation
+pass, an adversarial pass, and a minimality/terminology/principle
+pass — end here. Revision 5's content is final; no further design
+changes are expected against this ADR.
+
+**Accepted means the design is settled, not that implementation is
+authorized.** Acceptance and an implementation go-ahead are two
+different decisions in this project's process
+(`docs/legal/AI_DEVELOPMENT_POLICY.md`'s lifecycle: Proposal →
+Technical Evaluation → Human Review → Acceptance → Integration).
+**Nothing in this document has been implemented.** Starting
+implementation — including Phase 0, the smallest and lowest-risk step
+in §5 — requires its own separate, explicit decision when that block
+of work begins; this closure is not that decision.
 
 **Revision 5 note — this one removes more than it adds.** Three
 questions drove it: is this the minimum architecture the investigations
