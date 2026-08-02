@@ -180,6 +180,12 @@ export async function buildMorningBrief(
       // (nunca en cooldown). Compartirlo con el chat es una extensión
       // futura razonable, fuera de alcance de este cambio.
       recentStrategyTypes: [],
+      // Mismo criterio que `recentStrategyTypes`: el Dashboard todavía
+      // no comparte la ventana de Conversational Variety del chat
+      // (`assemble-conversation-variety-context.ts`, userId-keyed) --
+      // `null` preserva el comportamiento anterior (Curiosity nunca
+      // excluye un dominio aquí).
+      fatiguedDomain: null,
     });
 
     if (OPENING_ELIGIBLE_STRATEGIES.has(directive.strategy)) {

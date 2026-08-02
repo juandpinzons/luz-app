@@ -75,6 +75,9 @@ async function selectStrategyFor(
     // tiene sus propios escenarios en `diversity` más abajo. `[]`
     // = sin historial, mismo criterio que "primera conversación real".
     recentStrategyTypes: [],
+    // Mismo criterio: sin Conversational Variety en juego en estos
+    // escenarios aislados, `null` = "ningún dominio fatigado".
+    fatiguedDomain: null,
   });
   return directive.strategy;
 }
@@ -375,6 +378,7 @@ export const conversationStrategyFlow: SmokeFlow = {
       contextItems: celebrateEngineContext.items,
       isFirstContact: false,
       recentStrategyTypes: ["celebrate", "celebrate"],
+      fatiguedDomain: null,
     });
     assert(
       suppressedCelebrate.strategy === "listen",
@@ -393,6 +397,7 @@ export const conversationStrategyFlow: SmokeFlow = {
       contextItems: celebrateEngineContext.items,
       isFirstContact: false,
       recentStrategyTypes: ["celebrate"],
+      fatiguedDomain: null,
     });
     assert(
       singleRepeatCelebrate.strategy === "celebrate",
@@ -411,10 +416,33 @@ export const conversationStrategyFlow: SmokeFlow = {
       contextItems: curiosityEngineContext.items,
       isFirstContact: false,
       recentStrategyTypes: ["curiosity", "curiosity"],
+      fatiguedDomain: null,
     });
     assert(
       suppressedCuriosity.strategy !== "curiosity",
       "'curiosity' en cooldown (2 seguidas, misma pregunta pendiente) debería suprimirse -- este es exactamente el caso que motivó el sistema de diversidad",
+    );
+
+    // F) Conversational Variety V1: si el dominio menos cubierto
+    // ('health', ver arriba) es también el que ha dominado las
+    // conversaciones recientes, Curiosity no debería insistir en él --
+    // debe seguir de largo hacia el siguiente dominio sin cobertura
+    // ('finances', el próximo en LIFE_DOMAIN_TYPES sin ningún goal/
+    // project/habit/belief/concept).
+    const varietyAdjustedCuriosity = createConversationStrategyEngine().select({
+      realitySnapshot: curiositySnapshot,
+      contextItems: curiosityEngineContext.items,
+      isFirstContact: false,
+      recentStrategyTypes: [],
+      fatiguedDomain: "health",
+    });
+    assert(
+      varietyAdjustedCuriosity.strategy === "curiosity",
+      `con 'health' fatigado todavía debería ganar 'curiosity' sobre otro dominio sin cobertura, dio '${varietyAdjustedCuriosity.strategy}'`,
+    );
+    assert(
+      !varietyAdjustedCuriosity.reason.includes("salud"),
+      `Curiosity no debería seguir apuntando a 'health' ('sus finanzas') cuando está fatigado -- reason fue: '${varietyAdjustedCuriosity.reason}'`,
     );
 
     const clarifySnapshot: RealitySnapshot = {

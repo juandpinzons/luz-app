@@ -7,6 +7,7 @@ import { createVoiceEngine } from "../../../core/voice-engine";
 import { span } from "../../../core/observability/trace";
 import { assembleRealitySnapshot } from "../services/assemble-reality-snapshot";
 import { assembleReconnectionContext } from "../services/assemble-reconnection-context";
+import { assembleConversationVarietyContext } from "../services/assemble-conversation-variety-context";
 import { getRecentConversationSignals } from "./conversation-signal-log";
 import { CONVERSATION_RULES } from "./conversation-rules";
 import type {
@@ -89,9 +90,14 @@ export async function buildContext(
   // consulta separada (`conversation-signal-log.ts`), nunca parte del
   // contrato de `RealitySnapshot` (ADR-0013): esto es meta-información
   // sobre lo que LUZ ya dijo, no sobre la vida de la persona.
-  const [realitySnapshot, recentSignals] = await Promise.all([
+  const [realitySnapshot, recentSignals, varietyContext] = await Promise.all([
     span("Reality", "engine", () => assembleRealitySnapshot(db, lifeGraphContext, { currentMessage })),
     span("Conversation.recentSignals", "repository", () => getRecentConversationSignals(db, userId)),
+    // Conversational Variety V1 (`features/conversational-variety`) --
+    // ¿ha dominado un dominio las conversaciones recientes? Misma
+    // ventana userId-keyed que `recentSignals`, consulta propia sobre
+    // `conversations.category` (no depende de `RealitySnapshot`).
+    span("Conversation.variety", "repository", () => assembleConversationVarietyContext(db, userId)),
   ]);
   const memories = realitySnapshot.memory.items;
   const recentStrategyTypes = recentSignals.map((signal) => signal.strategy);
@@ -115,6 +121,7 @@ export async function buildContext(
       contextItems,
       isFirstContact,
       recentStrategyTypes,
+      fatiguedDomain: varietyContext.fatiguedDomain,
     }),
   );
 
@@ -144,10 +151,16 @@ export async function buildContext(
   );
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
-    (rule) => rule.applies({ conversation, contextItems, reconnectionContext }),
+    (rule) =>
+      rule.applies({ conversation, contextItems, reconnectionContext, variety: varietyContext.ruleSignal }),
   ).map((rule) => ({
     ruleId: rule.id,
-    instruction: rule.directive({ conversation, contextItems, reconnectionContext }),
+    instruction: rule.directive({
+      conversation,
+      contextItems,
+      reconnectionContext,
+      variety: varietyContext.ruleSignal,
+    }),
   }));
 
   const responseIntent = determineResponseIntent(isFirstContact, memories);

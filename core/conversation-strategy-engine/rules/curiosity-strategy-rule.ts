@@ -1,4 +1,5 @@
 import { LIFE_DOMAIN_LABEL } from "../../life/value-objects/life-domain-label";
+import type { LifeDomainType } from "../../life/value-objects/life-domain-type";
 import type { RealityDomainCoverage } from "../../reality";
 import type { ConversationStrategyDirective } from "../entities/conversation-strategy-directive";
 import type { ConversationStrategyType } from "../value-objects/conversation-strategy-type";
@@ -25,17 +26,29 @@ const GAP_THRESHOLD = 25;
  */
 const MIN_TOTAL_COVERAGE = 1;
 
+/**
+ * `excludeDomain` (Conversational Variety V1, `features/conversational-variety`)
+ * -- el dominio menos cubierto podría, en el mismo turno, ser
+ * exactamente el que ha dominado las conversaciones recientes; sin
+ * esto, Curiosity podría profundizar en un vacío estructural real
+ * mientras, a la vez, satura ese mismo tema en la conversación.
+ * `rankKnowledgeGaps` siempre entrega las 8 `LifeDomainType` (ver su
+ * propio docblock), así que excluir una nunca deja el pool vacío.
+ */
 function leastCoveredDomain(
   domains: RealityDomainCoverage[],
+  excludeDomain: LifeDomainType | null,
 ): RealityDomainCoverage | undefined {
   // `rankKnowledgeGaps` ya entrega orden ascendente por convención
   // documentada, pero esta regla no depende de eso sin verificarlo --
   // un dato mal ordenado en un futuro cambio no debería producir la
   // pregunta equivocada en silencio.
-  return domains.reduce<RealityDomainCoverage | undefined>((min, current) => {
-    if (!min || current.coverageScore < min.coverageScore) return current;
-    return min;
-  }, undefined);
+  return domains
+    .filter((item) => item.domain !== excludeDomain)
+    .reduce<RealityDomainCoverage | undefined>((min, current) => {
+      if (!min || current.coverageScore < min.coverageScore) return current;
+      return min;
+    }, undefined);
 }
 
 const AVOID =
@@ -83,7 +96,14 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
       return false;
     }
 
-    if (input.realitySnapshot.curiosity.pendingQuestion) {
+    const pending = input.realitySnapshot.curiosity.pendingQuestion;
+    // Conversational Variety V1: una pregunta pendiente sobre el
+    // dominio que ya domina las conversaciones recientes repetiría
+    // exactamente el "LUZ obsesionada con un tema" que ese módulo
+    // existe para evitar -- se ignora aquí (no se descarta, sigue
+    // pendiente para cuando el dominio deje de estar fatigado) y se
+    // sigue de largo hacia el vacío estructural.
+    if (pending && pending.domain !== input.fatiguedDomain) {
       return true;
     }
 
@@ -93,13 +113,13 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
       return false;
     }
 
-    const weakest = leastCoveredDomain(domains);
+    const weakest = leastCoveredDomain(domains, input.fatiguedDomain);
     return weakest !== undefined && weakest.coverageScore < GAP_THRESHOLD;
   }
 
   explain(input: ConversationStrategyRuleInput): ConversationStrategyDirective {
     const pending = input.realitySnapshot.curiosity.pendingQuestion;
-    if (pending) {
+    if (pending && pending.domain !== input.fatiguedDomain) {
       const label = LIFE_DOMAIN_LABEL[pending.domain];
       return {
         strategy: this.id,
@@ -109,7 +129,10 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
       };
     }
 
-    const weakest = leastCoveredDomain(input.realitySnapshot.knowledgeGaps.domains);
+    const weakest = leastCoveredDomain(
+      input.realitySnapshot.knowledgeGaps.domains,
+      input.fatiguedDomain,
+    );
 
     if (!weakest) {
       throw new Error(

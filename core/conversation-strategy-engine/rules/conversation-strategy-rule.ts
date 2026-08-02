@@ -1,4 +1,5 @@
 import type { ContextItem } from "../../context-engine";
+import type { LifeDomainType } from "../../life";
 import type { RealitySnapshot } from "../../reality";
 import type { ConversationStrategyDirective } from "../entities/conversation-strategy-directive";
 import type { ConversationStrategyType } from "../value-objects/conversation-strategy-type";
@@ -32,6 +33,19 @@ export interface ConversationStrategyRuleInput {
    * que este mecanismo existe para arreglar.
    */
   recentStrategyTypes: readonly ConversationStrategyType[];
+  /**
+   * Conversational Variety V1 (`features/conversational-variety`) --
+   * el dominio de vida que ha dominado las conversaciones recientes,
+   * si alguno lo hace, o `null`. Primitivo reducido a propósito
+   * (nunca el snapshot completo de `features/conversational-variety`,
+   * que es `features/*`): este archivo es `core/*`, no puede importar
+   * un tipo de `features/*` -- mismo criterio que ya usa
+   * `core/reality/knowledge-gaps-snapshot.ts` frente a la forma más
+   * rica de `core/knowledge-gaps`. Aditivo: solo `CuriosityStrategyRule`
+   * lo lee hoy, las demás reglas lo ignoran sin cambiar de
+   * comportamiento.
+   */
+  fatiguedDomain: LifeDomainType | null;
 }
 
 /**

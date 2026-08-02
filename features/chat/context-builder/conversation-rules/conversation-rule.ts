@@ -1,6 +1,7 @@
 import type { ContextItem } from "../../../../core/context-engine";
 import type { ConversationTurn } from "../context";
 import type { ReconnectionContext } from "../../services/assemble-reconnection-context";
+import type { ConversationVarietyRuleSignal } from "../../../conversational-variety";
 
 /**
  * Lo mínimo que una regla necesita para decidir si aplica y qué decir.
@@ -22,6 +23,16 @@ export interface ConversationRuleInput {
    * ya existían antes de esto lo ignoran y no cambian de comportamiento.
    */
   reconnectionContext: ReconnectionContext | null;
+  /**
+   * Conversational Variety V1 -- ¿ha dominado un solo dominio de vida
+   * las conversaciones recientes? (`features/conversational-variety`,
+   * ensamblado por `features/chat/services/assemble-conversation-variety-context.ts`).
+   * Aditivo, mismo criterio que `reconnectionContext`: las reglas que
+   * ya existían antes de esto lo ignoran y no cambian de
+   * comportamiento. No reemplaza Narrative ni Identity Evolution --
+   * solo evita monotonía.
+   */
+  variety: ConversationVarietyRuleSignal | null;
 }
 
 /**
