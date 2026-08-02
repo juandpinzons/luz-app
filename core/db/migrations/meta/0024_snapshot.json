@@ -1,6 +1,6 @@
 {
-  "id": "abe21963-f1aa-4eba-b340-7281d25ce880",
-  "prevId": "e9ea5026-1bf5-4153-921c-2250d9bf9b58",
+  "id": "ef6a18ec-ba40-4599-a8b1-7bc1c7b9c87e",
+  "prevId": "5aabce84-3775-4930-be95-cc24b2634b07",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5002,6 +5002,368 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.continuity_loop_history": {
+      "name": "continuity_loop_history",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "life_graph_id": {
+          "name": "life_graph_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "loop_id": {
+          "name": "loop_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "from_state": {
+          "name": "from_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "to_state": {
+          "name": "to_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_kind": {
+          "name": "evidence_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_description": {
+          "name": "evidence_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_source_id": {
+          "name": "evidence_source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "continuity_loop_history_life_graph_id_idx": {
+          "name": "continuity_loop_history_life_graph_id_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "continuity_loop_history_loop_id_idx": {
+          "name": "continuity_loop_history_loop_id_idx",
+          "columns": [
+            {
+              "expression": "loop_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "continuity_loop_history_life_graph_id_life_graphs_id_fk": {
+          "name": "continuity_loop_history_life_graph_id_life_graphs_id_fk",
+          "tableFrom": "continuity_loop_history",
+          "tableTo": "life_graphs",
+          "columnsFrom": [
+            "life_graph_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "continuity_loop_history_loop_id_continuity_loops_id_fk": {
+          "name": "continuity_loop_history_loop_id_continuity_loops_id_fk",
+          "tableFrom": "continuity_loop_history",
+          "tableTo": "continuity_loops",
+          "columnsFrom": [
+            "loop_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.continuity_loops": {
+      "name": "continuity_loops",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "life_graph_id": {
+          "name": "life_graph_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_source_id": {
+          "name": "trigger_source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_summary": {
+          "name": "trigger_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "trigger_detected_at": {
+          "name": "trigger_detected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "priority": {
+          "name": "priority",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'medium'"
+        },
+        "related_entities": {
+          "name": "related_entities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "next_follow_up_at": {
+          "name": "next_follow_up_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "follow_up_attempts": {
+          "name": "follow_up_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_evidence_kind": {
+          "name": "resolution_evidence_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_evidence_description": {
+          "name": "resolution_evidence_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resolution_evidence_source_id": {
+          "name": "resolution_evidence_source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome_kind": {
+          "name": "outcome_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome_summary": {
+          "name": "outcome_summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transformed_into_loop_id": {
+          "name": "transformed_into_loop_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "continuity_loops_life_graph_id_idx": {
+          "name": "continuity_loops_life_graph_id_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "continuity_loops_life_graph_id_state_idx": {
+          "name": "continuity_loops_life_graph_id_state_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "continuity_loops_life_graph_id_next_follow_up_idx": {
+          "name": "continuity_loops_life_graph_id_next_follow_up_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "next_follow_up_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "continuity_loops_life_graph_id_life_graphs_id_fk": {
+          "name": "continuity_loops_life_graph_id_life_graphs_id_fk",
+          "tableFrom": "continuity_loops",
+          "tableTo": "life_graphs",
+          "columnsFrom": [
+            "life_graph_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "continuity_loops_follow_up_attempts_range": {
+          "name": "continuity_loops_follow_up_attempts_range",
+          "value": "\"continuity_loops\".\"follow_up_attempts\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.account_identities": {
       "name": "account_identities",
       "schema": "",
@@ -5280,122 +5642,6 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
-    },
-    "public.seen_prompts": {
-      "name": "seen_prompts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "life_graph_id": {
-          "name": "life_graph_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_type": {
-          "name": "subject_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject_id": {
-          "name": "subject_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "seen_prompt_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'seen'"
-        },
-        "first_seen_at": {
-          "name": "first_seen_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "responded_at": {
-          "name": "responded_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "seen_prompts_life_graph_id_idx": {
-          "name": "seen_prompts_life_graph_id_idx",
-          "columns": [
-            {
-              "expression": "life_graph_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "seen_prompts_subject_idx": {
-          "name": "seen_prompts_subject_idx",
-          "columns": [
-            {
-              "expression": "life_graph_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "subject_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "seen_prompts_life_graph_id_life_graphs_id_fk": {
-          "name": "seen_prompts_life_graph_id_life_graphs_id_fk",
-          "tableFrom": "seen_prompts",
-          "tableTo": "life_graphs",
-          "columnsFrom": [
-            "life_graph_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -5556,16 +5802,6 @@
       "values": [
         "pending",
         "resolved",
-        "dismissed"
-      ]
-    },
-    "public.seen_prompt_status": {
-      "name": "seen_prompt_status",
-      "schema": "public",
-      "values": [
-        "seen",
-        "accepted",
-        "edited",
         "dismissed"
       ]
     }

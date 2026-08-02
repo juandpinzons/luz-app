@@ -166,15 +166,22 @@
     {
       "idx": 23,
       "version": "7",
-      "when": 1785525699179,
-      "tag": "0023_conversation_signal_shown_event_type",
+      "when": 1785545637106,
+      "tag": "0023_futuristic_snowbird",
       "breakpoints": true
     },
     {
       "idx": 24,
       "version": "7",
-      "when": 1785525700179,
-      "tag": "0024_seen_prompts",
+      "when": 1785545638106,
+      "tag": "0024_conversation_signal_shown_event_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785545639106,
+      "tag": "0025_seen_prompts",
       "breakpoints": true
     }
   ]

@@ -1,6 +1,6 @@
 {
-  "id": "5aabce84-3775-4930-be95-cc24b2634b07",
-  "prevId": "d051c249-19cf-481d-a925-fe6f5c686d01",
+  "id": "19592611-268c-4093-823f-434ee4f231d9",
+  "prevId": "ef6a18ec-ba40-4599-a8b1-7bc1c7b9c87e",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -5642,6 +5642,122 @@
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
+    },
+    "public.seen_prompts": {
+      "name": "seen_prompts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "life_graph_id": {
+          "name": "life_graph_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_type": {
+          "name": "subject_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "subject_id": {
+          "name": "subject_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "seen_prompt_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'seen'"
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "responded_at": {
+          "name": "responded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "seen_prompts_life_graph_id_idx": {
+          "name": "seen_prompts_life_graph_id_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "seen_prompts_subject_idx": {
+          "name": "seen_prompts_subject_idx",
+          "columns": [
+            {
+              "expression": "life_graph_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "subject_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "seen_prompts_life_graph_id_life_graphs_id_fk": {
+          "name": "seen_prompts_life_graph_id_life_graphs_id_fk",
+          "tableFrom": "seen_prompts",
+          "tableTo": "life_graphs",
+          "columnsFrom": [
+            "life_graph_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
     }
   },
   "enums": {
@@ -5764,7 +5880,8 @@
         "error",
         "message_attempted",
         "message_sent",
-        "experience_card_shown"
+        "experience_card_shown",
+        "conversation_signal_shown"
       ]
     },
     "public.feedback_remembers_me": {
@@ -5801,6 +5918,16 @@
       "values": [
         "pending",
         "resolved",
+        "dismissed"
+      ]
+    },
+    "public.seen_prompt_status": {
+      "name": "seen_prompt_status",
+      "schema": "public",
+      "values": [
+        "seen",
+        "accepted",
+        "edited",
         "dismissed"
       ]
     }
