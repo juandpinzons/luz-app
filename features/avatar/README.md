@@ -62,16 +62,57 @@ Orden deliberado: una urgencia crítica real siempre lidera (algo necesita a la 
 
 ## Reglas de resolución -- interacción en vivo siempre gana sobre el mood de fondo
 
-`services/resolve-avatar-state.ts`:
+`services/resolve-avatar-state.ts`, jerarquía estricta de interrupción:
 
 | Prioridad | Condición real | `animation` | Nota |
 |---|---|---|---|
-| 1 | `interaction.isAiResponding` | `think` | `emotion`/`gaze`/`focusRef` de fondo se conservan -- la cara sigue mostrando el mood real mientras el cuerpo "piensa" |
-| 2 | `interaction.isUserTyping` | `listen` | `gaze` siempre `"user"`, sin importar qué mood hubiera elegido |
-| 3 | Silencio real (≥5 min) en horas de la noche (0-5h local) | `sleep` | `emotion` se relaja a `calm` -- dormir con una celebración activa no es coherente |
-| -- | Ninguna de las anteriores | `jump` (celebrating) / `nod` (attentive) / `idle` (el resto) | Animación ambiente derivada de `mood.emotion` |
+| 1 | `interaction.reducedMotion` | `idle` | Nunca un gesto, sin importar todo lo demás -- accesibilidad primero |
+| 2 | `interaction.isAiResponding` | `think` | `emotion`/`gaze`/`focusRef` de fondo se conservan -- la cara sigue mostrando el mood real mientras el cuerpo "piensa". Interrumpe un gesto en curso sin esperar a que termine |
+| 3 | `interaction.isUserTyping` | `listen` | `gaze` siempre `"user"`. Misma prioridad de interrupción que 2 |
+| 4 | Silencio real (≥5 min) en horas de la noche (0-5h local) **Y `mood.emotion !== "attentive"`** | `sleep` | `emotion` se relaja a `calm` -- pero NUNCA cuando hay una urgencia real pendiente (ver "Qué nunca debe ocurrir") |
+| 5 | Ninguna de las anteriores, Y `interaction.previousEmotion !== mood.emotion` (la emoción ACABA de cambiar) | `jump` (celebrating) / `nod` (attentive) / `idle` (el resto) | El gesto de entrada, UNA SOLA VEZ |
+| -- | Ninguna de las anteriores | `idle` | La emoción se sostiene, el gesto ya se disparó antes -- nunca se repite |
 
 `breathe`/`blink` (del boceto original) no son estados que este backend elija -- son micro-loops involuntarios, ver más abajo.
+
+## Seis preguntas de diseño, respondidas
+
+### ¿Cuánto dura una sonrisa?
+
+Dos respuestas distintas para dos cosas distintas:
+
+- **`emotion` (la cara)** dura exactamente lo que dura la evidencia real detrás -- sin temporizador propio, nunca un "muéstrala 5 segundos y luego apágala" artificial (eso sería fabricar un límite que la evidencia no tiene, Principio 1 del motor). Mientras `narrative.celebrationCandidates` siga teniendo algo real, la cara sigue celebrando.
+- **`animation` de tipo gesto (`jump`/`nod`/`wave`/`hug`)** SÍ tiene una duración corta y acotada (`AVATAR_GESTURE_DURATION_MS`, advisoria) -- un gesto es un momento de énfasis, no el estado de reposo. Después de reproducirse, el cuerpo vuelve a `idle` mientras la cara sigue mostrando la emoción real.
+
+### ¿Cuándo termina?
+
+La emoción termina en el próximo recálculo real (`buildPresenceAvatarState` vuelto a llamar con datos frescos) en el que la evidencia ya no la respalde -- nunca en un fundido por reloj. El gesto termina siempre después de su propia duración corta, sin importar si la emoción de fondo sigue vigente (no se salta en el sitio para siempre mientras dure la celebración).
+
+### ¿Cuándo no debe animarse?
+
+Dos casos reales, ambos con señal real detrás (nunca "porque la conversación se siente seria" -- este módulo no lee contenido de conversación, no tiene esa señal, y fingir que la tiene violaría el mismo principio de nunca inferir estado emocional de un texto):
+
+1. `interaction.reducedMotion` -- accesibilidad, gana sobre cualquier otra regla.
+2. Cualquier gesto (`wave`/`jump`/`hug`/`nod`) se suprime automáticamente en cuanto hay una interacción real en curso (`think`/`listen`) -- nunca coexisten un gesto expresivo y una interacción real.
+
+### ¿Qué pasa si el usuario escribe durante una celebración?
+
+La cara SIGUE celebrando (`emotion` no cambia -- Presence Avatar no le apaga la alegría a alguien por escribir), pero el cuerpo cambia inmediatamente a `listen` y la mirada se fija en `"user"`, sin importar si un gesto (`jump`) estaba a mitad de reproducirse. Verificado en "la persona escribiendo interrumpe un gesto en curso, sin esperar a que termine" (`tests/`).
+
+### ¿Qué interrumpe qué?
+
+Orden estricto, de mayor a menor: `reducedMotion` > `think` (IA respondiendo) > `listen` (persona escribiendo) > `sleep` (silencio real de noche, salvo `attentive`) > gesto de entrada > `idle` sostenido. Cualquier nivel superior interrumpe inmediatamente a los inferiores, incluyendo un gesto a mitad de reproducirse -- nunca hay cola, nunca se espera a que algo termine.
+
+### ¿Qué nunca debe ocurrir?
+
+1. Nunca más de una `emotion` a la vez (el modelo es un enum único, no una mezcla).
+2. Nunca un gesto se repite en cada render mientras la emoción no cambia -- se dispara UNA VEZ, en la transición (`interaction.previousEmotion`).
+3. Nunca un gesto expresivo coexiste con `think`/`listen` -- la interacción real siempre gana, sin excepción.
+4. Nunca `sleep` deja "dormida" a LUZ sobre una urgencia crítica real (`mood.emotion === "attentive"` la suprime).
+5. Nunca se fabrica un `focusRef` sin evidencia real detrás.
+6. Nunca `intensity` sale de `[0, 1]`.
+7. Nunca este módulo infiere contenido o sentimiento de una conversación real -- todo `emotion` viene de hechos que Presence/Experience/Narrative/Identity ya decidieron, nunca de texto interpretado aquí.
+8. Nunca `reducedMotion` se ignora -- ninguna regla de gesto se evalúa siquiera si está activo.
 
 ## Validación
 
@@ -79,7 +120,7 @@ Orden deliberado: una urgencia crítica real siempre lidera (algo necesita a la 
 npx tsx features/avatar/tests/build-presence-avatar-state.examples.ts
 ```
 
-16 escenarios, todos pasando: las cinco reglas de mood individualmente, dos de conflicto de prioridad explícito (urgencia crítica vs. celebración; celebración vs. urgencia alta), las tres reglas de interacción en vivo, animación ambiente sin interacción, y determinismo (misma entrada -> mismo JSON byte a byte). `tsc --noEmit` y `eslint features/avatar` limpios.
+22 escenarios, todos pasando: las cinco reglas de mood individualmente, dos de conflicto de prioridad explícito (urgencia crítica vs. celebración; celebración vs. urgencia alta), las cuatro reglas de interacción en vivo (`think`/`listen`/`sleep`/`reducedMotion`), el ciclo completo de un gesto (se dispara en la transición, nunca se repite sostenido, un cambio real dispara uno nuevo), interrupción de un gesto en curso, el invariante "nunca duerme sobre una urgencia crítica", y determinismo (misma entrada -> mismo JSON byte a byte). `tsc --noEmit` y `eslint features/avatar` limpios.
 
 ---
 
@@ -102,11 +143,15 @@ const avatarState = buildPresenceAvatarState({
     isUserTyping,
     msSinceLastActivity,
     localHour: new Date().getHours(),
+    previousEmotion: lastAvatarState?.emotion, // OBLIGATORIO guardar esto entre renders -- ver más abajo
+    reducedMotion: prefersReducedMotion,
   },
 });
 ```
 
 `presence`/`experience`/`narrative` ya se calculan hoy en el pipeline de `/dashboard`; `identity` es una capacidad nueva (`features/identity-evolution/`, esta misma sesión) sin consumidor real todavía -- **esta es la primera vez que tendría uno**. Un hook cliente (`usePresenceAvatarState()`) que recalcule `interaction` en cada tick/evento y vuelva a llamar `buildPresenceAvatarState` con el mismo `mood` (cacheado, recalculado solo cuando cambian los cuatro estados de fondo) es razonable -- separar "recalcular mood" (caro, una vez por carga de página) de "resolver interacción" (barato, en cada cambio de `isTyping`/`isAiResponding`) evita rehacer el trabajo agregado en cada tecla.
+
+**Responsabilidad obligatoria de I7: `previousEmotion`.** Este backend es puro -- no recuerda nada entre llamadas. Sin `previousEmotion`, no hay forma honesta de saber si un gesto (`jump`/`nod`) ya se mostró o no, y CADA render repetiría el gesto (el bug concreto que "¿cuánto dura una sonrisa?" expone). El patrón correcto: guardar `avatarState.emotion` en una `ref`/estado local después de cada resolución, y pasarlo de vuelta como `previousEmotion` en la siguiente llamada -- mismo patrón ya establecido en este repo para "¿esto es nuevo?" (`ExperienceState.isNewPrimary`, `recentlyNarratedThreadIds` de Narrative).
 
 ### 2. Mapeo expresión <-> `emotion`
 
@@ -124,14 +169,14 @@ El boceto ya trae 6 caras en el panel "EXPRESSIONS" -- mapeo sugerido a los 5 va
 
 | `animation` | Pose del boceto | Disparo |
 |---|---|---|
-| `idle` | Postura de reposo | Ambiente, sin interacción real |
+| `idle` | Postura de reposo | Ambiente -- sin interacción real, y también DESPUÉS de que un gesto ya se disparó (la emoción se sostiene, el cuerpo descansa) |
 | `wave` | "Hello!" | Sugerido para el PRIMER render de una sesión (equivalente al ritual de bienvenida que hoy cubre `features/orb/` en `/chat`) -- no lo decide este backend, es un trigger de entrada del lado del cliente |
-| `jump` | "Yay!" | `emotion === "celebrating"` sin interacción real encima |
+| `jump` | "Yay!" | `emotion` ACABA de cambiar a `celebrating` (`previousEmotion !== "celebrating"`), sin interacción real encima. Un solo disparo -- nunca se repite mientras `celebrating` se sostiene |
 | `hug` | (no está en el boceto de poses -- libre para I7) | Disponible para un momento de consuelo/cierre real, sin regla de disparo automática todavía (ver "Extensiones futuras") |
-| `nod` | "You got this!" | `emotion === "attentive"` sin interacción real encima |
-| `listen` | -- | `interaction.isUserTyping` |
-| `think` | "Thinking..." | `interaction.isAiResponding` |
-| `sleep` | -- | Silencio real + noche |
+| `nod` | "You got this!" | `emotion` ACABA de cambiar a `attentive`, sin interacción real encima. Mismo criterio de un solo disparo que `jump` |
+| `listen` | -- | `interaction.isUserTyping` -- interrumpe cualquier gesto en curso |
+| `think` | "Thinking..." | `interaction.isAiResponding` -- máxima prioridad, interrumpe todo lo demás |
+| `sleep` | -- | Silencio real + noche, EXCEPTO si `emotion === "attentive"` (nunca duerme sobre una urgencia real) |
 
 `breathe`/`blink` (mencionados en el boceto original) se recomiendan como micro-loops involuntarios con su propio temporizador aleatorio de UI (ej. parpadear cada 3-6s), activos EN CUALQUIER `animation`, nunca como un valor que este backend deba elegir -- igual que un parpadeo real no depende de en qué esté pensando la persona.
 
@@ -161,7 +206,8 @@ Home, `/chat`, `/dashboard` -- las tres superficies que la misión nombra. `focu
 - **`wave` (saludo de entrada) no tiene trigger en este módulo.** Es, a propósito, una decisión de sesión/cliente ("¿es la primera vez que se monta el componente hoy?"), no algo derivable de un snapshot agregado -- documentado como responsabilidad de integración, no un olvido.
 - **Sin wiring real todavía.** Ningún componente, página ni hook consume `buildPresenceAvatarState` hoy (cero import cruzado desde `app/`/`components/`, verificado) -- arquitectura y estado listos, integración visual pendiente por diseño de esta misión.
 - **`identity` (Identity Evolution) requiere `assembleIdentityEvolution`, que toca la base de datos.** En un render de servidor esto es una consulta más por page load -- razonable para home/dashboard (ya hacen varias), a evaluar en `/chat` si la latencia de apertura vuelve a ser una restricción dura (mismo problema de fondo que ya documentó `features/orb/README.md` para su propio caso).
-- **Constantes de primera iteración** (`SLEEP_INACTIVITY_MS`, umbrales de intensidad) -- razonadas, no verificadas contra uso real todavía, mismo criterio que `features/identity-evolution/`.
+- **Constantes de primera iteración** (`SLEEP_INACTIVITY_MS`, umbrales de intensidad, `AVATAR_GESTURE_DURATION_MS`) -- razonadas, no verificadas contra uso real todavía, mismo criterio que `features/identity-evolution/`.
+- **`previousEmotion` depende de que I7 lo maneje correctamente.** Este backend no puede hacer cumplir que el cliente guarde y reenvíe `emotion` entre renders -- si se olvida, el efecto es benigno pero real (un gesto podría repetirse en cada recálculo, el mismo bug que este diseño evita cuando se usa bien). Documentado explícitamente en la guía de integración, no una garantía del tipo en sí.
 
 ## Extensiones futuras (máximo 5)
 
@@ -169,4 +215,4 @@ Home, `/chat`, `/dashboard` -- las tres superficies que la misión nombra. `focu
 2. **Regla de disparo real para `hug`** si aparece una señal distinguible de "esto amerita consuelo" en un motor futuro.
 3. **Decisión de producto sobre `features/orb/`**: ¿el ritual de apertura de `/chat` migra a este personaje, o conviven?
 4. **`AvatarInteractionSignal` más rico** (ej. reacción a un evento de calendario que empieza AHORA) si la práctica lo pide.
-5. **Persistir la última `emotion` mostrada** (mismo patrón que `recentlyNarratedThreadIds` en Narrative) si se necesita evitar una transición brusca entre dos renders muy seguidos con mood distinto.
+5. **Gesto de entrada propio para `curious`/`happy`** (hoy se asientan directo en `idle` sin un gesto de transición) si en la práctica se siente demasiado plano.

@@ -1,4 +1,5 @@
 import type { AvatarAnimation } from "../domain/avatar-animation";
+import type { AvatarEmotion } from "../domain/avatar-emotion";
 import type { AvatarInteractionSignal } from "../domain/avatar-interaction-signal";
 import type { AvatarMoodSignal } from "../domain/avatar-mood-signal";
 import type { PresenceAvatarState } from "../domain/presence-avatar-state";
@@ -12,61 +13,73 @@ function isSleepTime(interaction: AvatarInteractionSignal): boolean {
   return interaction.msSinceLastActivity >= SLEEP_INACTIVITY_MS && SLEEP_HOURS.has(interaction.localHour);
 }
 
-/** Animación de reposo/disparo por defecto para cada emoción -- ver docblock de `AvatarAnimation` para por qué esto no incluye `breathe`/`blink` (loops involuntarios que I7 controla aparte). */
-function ambientAnimationFor(emotion: AvatarMoodSignal["emotion"]): AvatarAnimation {
+/** El gesto de un solo disparo que corresponde a ENTRAR a esta emoción -- `null` para las que no tienen uno propio todavía (`calm`/`happy`/`curious` se asientan directo en `idle`, sin fingir un gesto que la misión no pidió). */
+function gestureFor(emotion: AvatarEmotion): AvatarAnimation | null {
   if (emotion === "celebrating") return "jump";
   if (emotion === "attentive") return "nod";
-  return "idle";
+  return null;
+}
+
+function baseState(
+  mood: AvatarMoodSignal,
+  animation: AvatarAnimation,
+  overrides: { gaze?: PresenceAvatarState["gaze"]; reasonSuffix?: string } = {},
+): PresenceAvatarState {
+  return {
+    emotion: mood.emotion,
+    animation,
+    intensity: mood.intensity,
+    gaze: overrides.gaze ?? mood.gaze,
+    focusRef: mood.focusRef,
+    reason: overrides.reasonSuffix ? `${mood.reason} (${overrides.reasonSuffix}).` : mood.reason,
+  };
 }
 
 /**
  * Combina la mitad determinística (`AvatarMoodSignal`, agregado de
  * días/meses) con la mitad en vivo (`AvatarInteractionSignal`, esta
  * sesión, ahora mismo) en el contrato final que un componente de
- * render consume. Prioridad, de mayor a menor:
+ * render consume. Jerarquía de interrupción estricta, de mayor a
+ * menor prioridad -- documentada en detalle en el README ("¿Qué
+ * interrumpe qué?"):
  *
- * 1. La IA está respondiendo ahora mismo -> `animation: "think"` --
- *    esto SIEMPRE se nota, sin importar qué tan calmo o urgente sea el
- *    resto del día.
- * 2. La persona está escribiendo -> `animation: "listen"`, mirada
- *    siempre en `"user"` (escuchar de verdad significa mirar a quien
- *    habla, sin importar qué `gaze` hubiera elegido `mood`).
- * 3. Silencio real Y hora de la noche -> `animation: "sleep"`, emoción
- *    se relaja a `"calm"` (dormir con una expresión de celebración
- *    activa se vería incoherente).
- * 4. Nada de lo anterior -> la animación ambiente que corresponde a
- *    `mood.emotion` (ver `ambientAnimationFor`).
+ * 1. `reducedMotion` -- nunca un gesto, sin importar todo lo demás.
+ * 2. La IA está respondiendo -> `think`. Interrumpe cualquier gesto en
+ *    curso sin esperar a que termine.
+ * 3. La persona está escribiendo -> `listen`, mirada siempre en
+ *    `"user"`. Misma prioridad de interrupción que 2.
+ * 4. Silencio real de noche -> `sleep`, emoción se relaja a `calm` --
+ *    EXCEPTO cuando `mood.emotion === "attentive"` (una urgencia real
+ *    pendiente nunca se deja "dormir": ver README, "Qué nunca debe
+ *    ocurrir").
+ * 5. Nada de lo anterior: si la emoción ACABA de cambiar
+ *    (`interaction.previousEmotion !== mood.emotion`), el gesto de
+ *    entrada correspondiente (`gestureFor`) se dispara UNA VEZ; si ya
+ *    se sostenía, se queda en `idle` -- nunca se repite un gesto en
+ *    cada render mientras la emoción no cambia.
  *
  * Puro y determinístico -- mismos `mood` + `interaction` siempre
- * producen el mismo `PresenceAvatarState`.
+ * producen el mismo `PresenceAvatarState`. No corre ningún temporizador
+ * propio: la duración de un gesto (`AVATAR_GESTURE_DURATION_MS`) es
+ * responsabilidad de I7, nunca de este backend.
  */
 export function resolveAvatarState(
   mood: AvatarMoodSignal,
   interaction: AvatarInteractionSignal,
 ): PresenceAvatarState {
+  if (interaction.reducedMotion) {
+    return baseState(mood, "idle", { reasonSuffix: "movimiento reducido activo" });
+  }
+
   if (interaction.isAiResponding) {
-    return {
-      emotion: mood.emotion,
-      animation: "think",
-      intensity: mood.intensity,
-      gaze: mood.gaze,
-      focusRef: mood.focusRef,
-      reason: `${mood.reason} (generando una respuesta ahora mismo).`,
-    };
+    return baseState(mood, "think", { reasonSuffix: "generando una respuesta ahora mismo" });
   }
 
   if (interaction.isUserTyping) {
-    return {
-      emotion: mood.emotion,
-      animation: "listen",
-      intensity: mood.intensity,
-      gaze: "user",
-      focusRef: mood.focusRef,
-      reason: `${mood.reason} (escuchando activamente).`,
-    };
+    return baseState(mood, "listen", { gaze: "user", reasonSuffix: "escuchando activamente" });
   }
 
-  if (isSleepTime(interaction)) {
+  if (isSleepTime(interaction) && mood.emotion !== "attentive") {
     return {
       emotion: "calm",
       animation: "sleep",
@@ -77,12 +90,8 @@ export function resolveAvatarState(
     };
   }
 
-  return {
-    emotion: mood.emotion,
-    animation: ambientAnimationFor(mood.emotion),
-    intensity: mood.intensity,
-    gaze: mood.gaze,
-    focusRef: mood.focusRef,
-    reason: mood.reason,
-  };
+  const justEntered = interaction.previousEmotion === undefined || interaction.previousEmotion !== mood.emotion;
+  const gesture = justEntered ? gestureFor(mood.emotion) : null;
+
+  return baseState(mood, gesture ?? "idle");
 }

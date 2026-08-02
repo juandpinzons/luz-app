@@ -171,12 +171,89 @@ runScenario("interacción: silencio real de noche -> animation sleep, emotion ca
   assert(state.emotion === "calm", `dormir con una emoción activa no es coherente, fue "${state.emotion}"`);
 });
 
-runScenario("sin interacción real -> animación ambiente derivada del mood", () => {
+runScenario("sin interacción real Y sin historial (primer render) -> el gesto de entrada se dispara", () => {
   const state = buildPresenceAvatarState({
     ...CALM_INPUT,
     narrative: makeNarrativeState({ celebrationCandidates: [makeNarrativeMoment()] }),
   });
-  assert(state.animation === "jump", `una celebración real de fondo debía animar "jump", fue "${state.animation}"`);
+  assert(state.animation === "jump", `primer render con una celebración real de fondo debía animar "jump", fue "${state.animation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// Duración / repetición de gestos -- "¿cuánto dura una sonrisa?"
+// ---------------------------------------------------------------------------
+
+runScenario("un gesto NUNCA se repite en cada render mientras la emoción no cambia", () => {
+  const input = {
+    ...CALM_INPUT,
+    narrative: makeNarrativeState({ celebrationCandidates: [makeNarrativeMoment()] }),
+  };
+  const first = buildPresenceAvatarState({ ...input, interaction: { isAiResponding: false, isUserTyping: false, msSinceLastActivity: 0, localHour: 12 } });
+  assert(first.animation === "jump", `primera entrada a "celebrating" debía disparar "jump", fue "${first.animation}"`);
+
+  const second = buildPresenceAvatarState({
+    ...input,
+    interaction: { isAiResponding: false, isUserTyping: false, msSinceLastActivity: 0, localHour: 12, previousEmotion: first.emotion },
+  });
+  assert(second.animation === "idle", `la MISMA emoción sostenida nunca debía repetir el gesto, fue "${second.animation}"`);
+  assert(second.emotion === "celebrating", "la cara debía seguir mostrando la emoción real mientras el cuerpo vuelve a idle");
+});
+
+runScenario("un cambio real de emoción SÍ dispara un nuevo gesto", () => {
+  const state = buildPresenceAvatarState({
+    ...CALM_INPUT,
+    presence: makePresenceState({ urgency: "critical", attentionNeeded: [makeRecommendation()] }),
+    interaction: { isAiResponding: false, isUserTyping: false, msSinceLastActivity: 0, localHour: 12, previousEmotion: "celebrating" },
+  });
+  assert(state.emotion === "attentive", `se esperaba "attentive", fue "${state.emotion}"`);
+  assert(state.animation === "nod", `pasar de celebrating a attentive debía disparar "nod", fue "${state.animation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// Interrupción -- "¿qué interrumpe qué?" / "¿qué pasa si escribe durante una celebración?"
+// ---------------------------------------------------------------------------
+
+runScenario("la persona escribiendo interrumpe un gesto en curso, sin esperar a que termine", () => {
+  const state = buildPresenceAvatarState({
+    ...CALM_INPUT,
+    narrative: makeNarrativeState({ celebrationCandidates: [makeNarrativeMoment()] }),
+    interaction: { isAiResponding: false, isUserTyping: true, msSinceLastActivity: 0, localHour: 12 },
+  });
+  assert(state.animation === "listen", `escribir siempre interrumpe un gesto, fue "${state.animation}"`);
+  assert(state.emotion === "celebrating", "la cara debía seguir feliz mientras el cuerpo escucha -- escuchar no borra el mood real");
+});
+
+runScenario("la IA respondiendo interrumpe incluso un gesto recién disparado", () => {
+  const state = buildPresenceAvatarState({
+    ...CALM_INPUT,
+    narrative: makeNarrativeState({ celebrationCandidates: [makeNarrativeMoment()] }),
+    interaction: { isAiResponding: true, isUserTyping: false, msSinceLastActivity: 0, localHour: 12 },
+  });
+  assert(state.animation === "think", `la IA respondiendo siempre gana, fue "${state.animation}"`);
+});
+
+// ---------------------------------------------------------------------------
+// "Qué nunca debe ocurrir" -- invariantes explícitos
+// ---------------------------------------------------------------------------
+
+runScenario("nunca se duerme sobre una urgencia crítica real", () => {
+  const state = buildPresenceAvatarState({
+    ...CALM_INPUT,
+    presence: makePresenceState({ urgency: "critical", attentionNeeded: [makeRecommendation()] }),
+    interaction: { isAiResponding: false, isUserTyping: false, msSinceLastActivity: 10 * 60 * 1000, localHour: 3 },
+  });
+  assert(state.animation !== "sleep", `una urgencia crítica real nunca debía dejarse "dormir", fue "${state.animation}"`);
+  assert(state.emotion === "attentive", `se esperaba que la emoción real (attentive) se mantuviera, fue "${state.emotion}"`);
+});
+
+runScenario("movimiento reducido -- nunca un gesto, sin importar el mood", () => {
+  const state = buildPresenceAvatarState({
+    ...CALM_INPUT,
+    narrative: makeNarrativeState({ celebrationCandidates: [makeNarrativeMoment()] }),
+    interaction: { isAiResponding: false, isUserTyping: false, msSinceLastActivity: 0, localHour: 12, reducedMotion: true },
+  });
+  assert(state.animation === "idle", `con movimiento reducido nunca debía animar un gesto, fue "${state.animation}"`);
+  assert(state.emotion === "celebrating", "la emoción real sigue intacta -- solo se suprime el movimiento expresivo, no el mood");
 });
 
 // ---------------------------------------------------------------------------
