@@ -5,6 +5,8 @@ import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createPresenceEngine } from "../../../core/presence-engine";
 import { createVoiceEngine } from "../../../core/voice-engine";
 import { assembleRealitySnapshot } from "../services/assemble-reality-snapshot";
+import { assembleReconnectionContext } from "../services/assemble-reconnection-context";
+import { getRecentConversationSignals } from "./conversation-signal-log";
 import { CONVERSATION_RULES } from "./conversation-rules";
 import type {
   Context,
@@ -72,6 +74,7 @@ export async function buildContext(
   db: Database,
   lifeGraphContext: LifeGraphContext,
   conversation: ConversationTurn[],
+  userId: string,
 ): Promise<Context> {
   // P0 (cierre del Alpha): el último turno es el mensaje que se está
   // respondiendo (docblock de arriba) — se pasa explícito para que
@@ -79,12 +82,21 @@ export async function buildContext(
   // no las de mayor rank global (`selectContextualMemories`).
   const currentMessage = conversation.at(-1)?.content;
   const isFirstContact = conversation.length <= 1;
-  const realitySnapshot = await assembleRealitySnapshot(db, lifeGraphContext, {
-    currentMessage,
-  });
+  // Diversidad conversacional (redesign del pipeline conversacional,
+  // Beta): qué decidió LUZ en las últimas conversaciones -- en
+  // paralelo con Reality Snapshot, misma tabla `events` pero una
+  // consulta separada (`conversation-signal-log.ts`), nunca parte del
+  // contrato de `RealitySnapshot` (ADR-0013): esto es meta-información
+  // sobre lo que LUZ ya dijo, no sobre la vida de la persona.
+  const [realitySnapshot, recentSignals] = await Promise.all([
+    assembleRealitySnapshot(db, lifeGraphContext, { currentMessage }),
+    getRecentConversationSignals(db, userId),
+  ]);
   const memories = realitySnapshot.memory.items;
+  const recentStrategyTypes = recentSignals.map((signal) => signal.strategy);
+  const recentContextItemKeys = recentSignals.map((signal) => signal.topContextItemKeys);
 
-  const engineContext = await createContextEngine(db).build(
+  const engineContext = await createContextEngine(db, recentContextItemKeys).build(
     realitySnapshot,
     lifeGraphContext,
   );
@@ -99,6 +111,7 @@ export async function buildContext(
     realitySnapshot,
     contextItems,
     isFirstContact,
+    recentStrategyTypes,
   });
 
   // Presence (Fase II): nunca pasa `allowSilence` — el chat es
@@ -112,11 +125,23 @@ export async function buildContext(
   // puramente CÓMO suena, la responsabilidad exclusiva de Voice.
   const voice = createVoiceEngine().speak(presence, realitySnapshot.communicationStyle);
 
+  // "Qué cambió" + "qué capítulo vive" (redesign del pipeline
+  // conversacional, Beta) -- no-op barato (`isFirstContact` es la
+  // primera condición que revisa) en el caso común de una conversación
+  // en curso; solo consulta de verdad al reabrir.
+  const reconnectionContext = await assembleReconnectionContext(
+    db,
+    lifeGraphContext,
+    userId,
+    isFirstContact,
+    realitySnapshot,
+  );
+
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
-    (rule) => rule.applies({ conversation, contextItems }),
+    (rule) => rule.applies({ conversation, contextItems, reconnectionContext }),
   ).map((rule) => ({
     ruleId: rule.id,
-    instruction: rule.directive({ conversation, contextItems }),
+    instruction: rule.directive({ conversation, contextItems, reconnectionContext }),
   }));
 
   const responseIntent = determineResponseIntent(isFirstContact, memories);

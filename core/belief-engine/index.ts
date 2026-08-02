@@ -1,6 +1,7 @@
 // Entities
 export * from "./entities/belief";
 export * from "./entities/belief-evidence";
+export * from "./entities/belief-evidence-with-status";
 export * from "./entities/belief-history-entry";
 
 // Repositories

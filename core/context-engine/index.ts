@@ -3,6 +3,7 @@ export * from "./value-objects/context-item-source";
 
 // Entities
 export * from "./entities/context";
+export * from "./context-item-key";
 
 // Repositories
 export * from "./repositories/context.repository";

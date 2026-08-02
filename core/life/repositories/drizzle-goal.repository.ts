@@ -1,4 +1,4 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, gte, notInArray } from "drizzle-orm";
 import type { Database, Transaction } from "../../db/client";
 import { type GoalRow, lifeGoals } from "../../db/schema";
 import type { Goal } from "../entities/goal";
@@ -55,6 +55,33 @@ export class DrizzleGoalRepository implements GoalRepository {
         and(
           eq(lifeGoals.lifeGraphId, context.lifeGraphId),
           notInArray(lifeGoals.status, [...INACTIVE_GOAL_STATUSES]),
+        ),
+      );
+
+    return rows.map(toGoal);
+  }
+
+  /**
+   * `status = 'completed'` Y `updatedAt` dentro de `since` -- a
+   * diferencia de `listActive`, `status` solo no basta: un Goal
+   * completado hace un año y nunca reconocido no debería "acabar de
+   * pasar" la primera vez que este mecanismo corre (redesign del
+   * pipeline conversacional, Beta -- `AcknowledgeClosureStrategyRule`).
+   * `updatedAt` es el momento real de la transición de estado (`update()`
+   * siempre lo toca), no una aproximación.
+   */
+  async listRecentlyCompleted(
+    context: LifeGraphContext,
+    since: Date,
+  ): Promise<Goal[]> {
+    const rows = await this.db
+      .select()
+      .from(lifeGoals)
+      .where(
+        and(
+          eq(lifeGoals.lifeGraphId, context.lifeGraphId),
+          eq(lifeGoals.status, "completed"),
+          gte(lifeGoals.updatedAt, since),
         ),
       );
 

@@ -5,6 +5,7 @@ import type {
   ConversationStrategyRule,
   ConversationStrategyRuleInput,
 } from "./conversation-strategy-rule";
+import { isStrategyOnCooldown } from "./diversity-cooldown";
 
 /** A partir de cuántas horas una memoria deja de sentirse "recién pasó". */
 const FRESH_MEMORY_HOURS = 48;
@@ -34,6 +35,9 @@ export class CelebrateStrategyRule implements ConversationStrategyRule {
   readonly priority = 45;
 
   appliesTo(input: ConversationStrategyRuleInput): boolean {
+    if (isStrategyOnCooldown(this.id, input.recentStrategyTypes)) {
+      return false;
+    }
     return Boolean(topFreshMemory(input));
   }
 

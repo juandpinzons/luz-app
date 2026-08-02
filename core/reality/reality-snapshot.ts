@@ -2,8 +2,11 @@ import type { EntityId } from "../life/value-objects/entity-id";
 import type { CommunicationPreferenceSnapshot } from "./communication-preference-snapshot";
 import type { ContradictionContextSnapshot } from "./contradiction-snapshot";
 import type { CuriosityContextSnapshot } from "./curiosity-snapshot";
+import type { ClosureSnapshot } from "./closure-snapshot";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
+import type { FadingBeliefSnapshot } from "./fading-belief-snapshot";
 import type { GrowingBeliefSnapshot } from "./growing-belief-snapshot";
+import type { ReopenCandidateSnapshot } from "./reopen-candidate-snapshot";
 import type { InsightContextSnapshot } from "./insight-context-snapshot";
 import type { KnowledgeGapsSnapshot } from "./knowledge-gaps-snapshot";
 import type { LifeStateSnapshot } from "./life-state-snapshot";
@@ -42,4 +45,10 @@ export interface RealitySnapshot {
   communicationStyle: CommunicationPreferenceSnapshot;
   /** `core/belief-engine` -- una hipótesis sobre la persona todavía en formación (confianza 30-54), candidata a confirmarse de forma orgánica, si hay una. */
   growingBeliefs: GrowingBeliefSnapshot;
+  /** `core/belief-engine` -- la creencia que más recientemente dejó de sostenerse (`expired`/`retracted`), si hay una. La respuesta concreta a "qué ya dejó de definir a esta persona". */
+  fadingBeliefs: FadingBeliefSnapshot;
+  /** `core/memory-engine` (`type: "intention"`) filtrado por `seen_prompts` -- una intención sin resolver que retomar al reabrir una conversación, si hay una. */
+  reopenCandidates: ReopenCandidateSnapshot;
+  /** `core/life` (Goal/Project `status: "completed"`, recientes) filtrado por `seen_prompts` -- un cierre real todavía sin reconocer, si hay uno. */
+  closures: ClosureSnapshot;
 }

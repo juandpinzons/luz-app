@@ -4,6 +4,7 @@ import type {
   ConversationStrategyRule,
   ConversationStrategyRuleInput,
 } from "./conversation-strategy-rule";
+import { isStrategyOnCooldown } from "./diversity-cooldown";
 
 /**
  * Fast User Understanding: una hipótesis sobre la persona todavía en
@@ -32,6 +33,9 @@ export class ConfirmStrategyRule implements ConversationStrategyRule {
 
   appliesTo(input: ConversationStrategyRuleInput): boolean {
     if (input.isFirstContact) {
+      return false;
+    }
+    if (isStrategyOnCooldown(this.id, input.recentStrategyTypes)) {
       return false;
     }
     return input.realitySnapshot.growingBeliefs.items.length > 0;

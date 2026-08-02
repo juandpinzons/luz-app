@@ -31,6 +31,17 @@ const STRATEGY_TO_PRESENCE: Record<ConversationStrategyType, PresenceMode> = {
   clarify: "listen",
   curiosity: "listen",
   confirm: "listen",
+  /**
+   * `release` (Identity Evolution audible) es, como `reflect`, sostener
+   * a la persona en algo real sobre su vida -- en este caso, algo que
+   * ya soltó -- nunca dirigirla ni celebrar el cambio como una
+   * victoria que no le pidió a nadie.
+   */
+  release: "accompany",
+  /** `reopen` sostiene una intención sin resolver -- misma familia que `follow_up`/`reflect`, nunca dirige. */
+  reopen: "accompany",
+  /** `acknowledge_closure` es, como `celebrate`, en sí mismo un modo relacional -- un cierre real merece el mismo reconocimiento directo. */
+  acknowledge_closure: "celebrate",
 };
 
 const RATIONALE_BY_MODE: Record<PresenceMode, string> = {

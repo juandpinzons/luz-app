@@ -8,4 +8,7 @@ export * from "./curiosity-snapshot";
 export * from "./contradiction-snapshot";
 export * from "./communication-preference-snapshot";
 export * from "./growing-belief-snapshot";
+export * from "./fading-belief-snapshot";
+export * from "./reopen-candidate-snapshot";
+export * from "./closure-snapshot";
 export * from "./reality-snapshot";

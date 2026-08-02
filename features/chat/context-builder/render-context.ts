@@ -28,6 +28,9 @@ const STRATEGY_LABEL: Record<ConversationStrategyType, string> = {
   curiosity: "Curiosity",
   reflect: "Reflect",
   confirm: "Confirm",
+  release: "Release",
+  reopen: "Reopen",
+  acknowledge_closure: "AcknowledgeClosure",
 };
 
 /**

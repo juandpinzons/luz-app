@@ -63,6 +63,8 @@ export * from "./services/title-similarity";
 export * from "./services/list-active-goals";
 export * from "./services/list-active-projects";
 export * from "./services/list-active-habits";
+export * from "./services/list-recently-completed-goals";
+export * from "./services/list-recently-completed-projects";
 export * from "./services/find-or-create-goal";
 export * from "./services/find-or-create-project";
 export * from "./services/find-or-create-habit";

@@ -1,5 +1,6 @@
 import type { ContextItem } from "../../../../core/context-engine";
 import type { ConversationTurn } from "../context";
+import type { ReconnectionContext } from "../../services/assemble-reconnection-context";
 
 /**
  * Lo mínimo que una regla necesita para decidir si aplica y qué decir.
@@ -13,6 +14,14 @@ import type { ConversationTurn } from "../context";
 export interface ConversationRuleInput {
   conversation: ConversationTurn[];
   contextItems: ContextItem[];
+  /**
+   * "Qué cambió" + "qué capítulo vive" (redesign del pipeline
+   * conversacional, Beta) -- `null` salvo que de verdad haya un vacío
+   * real desde la última vez que se habló, ya resuelto por la capa de
+   * aplicación (`assembleReconnectionContext`). Aditivo: las reglas que
+   * ya existían antes de esto lo ignoran y no cambian de comportamiento.
+   */
+  reconnectionContext: ReconnectionContext | null;
 }
 
 /**

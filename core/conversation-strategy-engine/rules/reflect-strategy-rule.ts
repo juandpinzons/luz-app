@@ -4,6 +4,7 @@ import type {
   ConversationStrategyRule,
   ConversationStrategyRuleInput,
 } from "./conversation-strategy-rule";
+import { isStrategyOnCooldown } from "./diversity-cooldown";
 
 /**
  * LUZ ya llegó a una comprensión real sobre la persona -- combinando
@@ -32,6 +33,9 @@ export class ReflectStrategyRule implements ConversationStrategyRule {
 
   appliesTo(input: ConversationStrategyRuleInput): boolean {
     if (input.isFirstContact) {
+      return false;
+    }
+    if (isStrategyOnCooldown(this.id, input.recentStrategyTypes)) {
       return false;
     }
     return input.realitySnapshot.reasoning.items.length > 0;

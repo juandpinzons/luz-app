@@ -18,6 +18,20 @@ export interface ConversationStrategyRuleInput {
   realitySnapshot: RealitySnapshot;
   contextItems: ContextItem[];
   isFirstContact: boolean;
+  /**
+   * La estrategia ganadora de cada una de las últimas conversaciones,
+   * más reciente primero (redesign del pipeline conversacional, Beta;
+   * ver `getRecentConversationSignals`) -- aditivo: las reglas que ya
+   * existían antes de esto no lo leen y no cambian de comportamiento.
+   * Solo las posturas "de nota oportunista" (Celebrate/Reflect/Confirm/
+   * Curiosity/Release) lo usan para no ganar el turno más de
+   * `MAX_CONSECUTIVE_STRATEGY_REPEATS` veces seguidas -- Challenge/
+   * Encourage/Plan/Remind/FollowUp disparan sobre condiciones que
+   * siguen siendo ciertas (un riesgo real, una fecha próxima), y
+   * repetirlas mientras la condición siga viva es correcto, no el bug
+   * que este mecanismo existe para arreglar.
+   */
+  recentStrategyTypes: readonly ConversationStrategyType[];
 }
 
 /**

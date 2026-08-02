@@ -2,11 +2,13 @@ import type { ConversationRule } from "./conversation-rule";
 import { PrioritizeUnderstandingRule } from "./prioritize-understanding-rule";
 import { FavorPrioritizedContextRule } from "./favor-prioritized-context-rule";
 import { AvoidRepeatingKnownInfoRule } from "./avoid-repeating-known-info-rule";
+import { FrameReconnectionRule } from "./frame-reconnection-rule";
 
 export type { ConversationRule, ConversationRuleInput } from "./conversation-rule";
 export { PrioritizeUnderstandingRule } from "./prioritize-understanding-rule";
 export { FavorPrioritizedContextRule } from "./favor-prioritized-context-rule";
 export { AvoidRepeatingKnownInfoRule } from "./avoid-repeating-known-info-rule";
+export { FrameReconnectionRule } from "./frame-reconnection-rule";
 
 /**
  * Registro de reglas activas — mismo patrón que `auth/providers/index.ts`:
@@ -25,4 +27,5 @@ export const CONVERSATION_RULES: readonly ConversationRule[] = [
   new PrioritizeUnderstandingRule(),
   new FavorPrioritizedContextRule(),
   new AvoidRepeatingKnownInfoRule(),
+  new FrameReconnectionRule(),
 ];

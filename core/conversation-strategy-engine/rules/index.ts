@@ -10,6 +10,9 @@ import { CuriosityStrategyRule } from "./curiosity-strategy-rule";
 import { ReflectStrategyRule } from "./reflect-strategy-rule";
 import { ClarifyStrategyRule } from "./clarify-strategy-rule";
 import { ListenStrategyRule } from "./listen-strategy-rule";
+import { ReleaseStrategyRule } from "./release-strategy-rule";
+import { ReopenStrategyRule } from "./reopen-strategy-rule";
+import { AcknowledgeClosureStrategyRule } from "./acknowledge-closure-strategy-rule";
 
 export type { ConversationStrategyRule, ConversationStrategyRuleInput } from "./conversation-strategy-rule";
 export { ChallengeStrategyRule } from "./challenge-strategy-rule";
@@ -23,6 +26,9 @@ export { CuriosityStrategyRule } from "./curiosity-strategy-rule";
 export { ReflectStrategyRule } from "./reflect-strategy-rule";
 export { ClarifyStrategyRule } from "./clarify-strategy-rule";
 export { ListenStrategyRule } from "./listen-strategy-rule";
+export { ReleaseStrategyRule } from "./release-strategy-rule";
+export { ReopenStrategyRule } from "./reopen-strategy-rule";
+export { AcknowledgeClosureStrategyRule } from "./acknowledge-closure-strategy-rule";
 
 /**
  * Registro de reglas activas, en el orden en que se declaran aquí —
@@ -46,4 +52,7 @@ export const CONVERSATION_STRATEGY_RULES: readonly ConversationStrategyRule[] = 
   new ReflectStrategyRule(),
   new ClarifyStrategyRule(),
   new ListenStrategyRule(),
+  new ReleaseStrategyRule(),
+  new ReopenStrategyRule(),
+  new AcknowledgeClosureStrategyRule(),
 ];

@@ -6,6 +6,7 @@ import type {
   ConversationStrategyRule,
   ConversationStrategyRuleInput,
 } from "./conversation-strategy-rule";
+import { isStrategyOnCooldown } from "./diversity-cooldown";
 
 /**
  * Por debajo de esto, un dominio cuenta como "sin explorar" -- mismo
@@ -69,6 +70,16 @@ export class CuriosityStrategyRule implements ConversationStrategyRule {
 
   appliesTo(input: ConversationStrategyRuleInput): boolean {
     if (input.isFirstContact) {
+      return false;
+    }
+
+    // Redesign del pipeline conversacional (Beta): sin esto, la MISMA
+    // `CuriosityQuestion` pendiente (que no cambia hasta que el
+    // dominio mejore o el cron genere otra, ver
+    // `generate-curiosity-question.ts`) puede ganar el turno semana
+    // tras semana -- exactamente el "LUZ sigue abriendo con lo mismo"
+    // que este redesign existe para arreglar.
+    if (isStrategyOnCooldown(this.id, input.recentStrategyTypes)) {
       return false;
     }
 

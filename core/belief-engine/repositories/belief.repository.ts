@@ -1,6 +1,7 @@
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import type { EntityId } from "../../life/value-objects/entity-id";
 import type { BeliefEvidence } from "../entities/belief-evidence";
+import type { BeliefEvidenceWithStatus } from "../entities/belief-evidence-with-status";
 import type { BeliefHistoryEntry } from "../entities/belief-history-entry";
 import type { Belief } from "../entities/belief";
 
@@ -22,6 +23,20 @@ export interface BeliefRepository {
     context: LifeGraphContext,
     evidence: BeliefEvidence,
   ): Promise<BeliefEvidence>;
+
+  /**
+   * Toda la evidencia del LifeGraph junto al `status` del Belief que
+   * respalda -- una sola consulta con join, pensada para el Context
+   * Engine (`DeterministicContextScoringStrategy`): saber si una
+   * memoria/insight sigue respaldando algo que la persona cree hoy
+   * (`active`) o algo que ya dejó de sostenerse (`expired`/`retracted`)
+   * es exactamente la alineación de identidad que ese scoring necesita,
+   * y cargarla de una vez evita N consultas por item puntuado (mismo
+   * criterio que `loadImportance()` en esa misma clase).
+   */
+  listEvidenceWithStatus(
+    context: LifeGraphContext,
+  ): Promise<BeliefEvidenceWithStatus[]>;
 
   /** Orden cronológico ascendente -- primera fila es la creación. */
   getHistory(

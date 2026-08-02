@@ -6,6 +6,8 @@ import {
   listActiveGoals,
   listActiveHabits,
   listActiveProjects,
+  listRecentlyCompletedGoals,
+  listRecentlyCompletedProjects,
   type EntityId,
   type LifeDomainType,
   type LifeGraphContext,
@@ -17,6 +19,7 @@ import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine
 import { DrizzleCuriosityQuestionRepository } from "../../../core/curiosity-engine";
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
+import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
@@ -55,6 +58,19 @@ const RELEVANT_CONTRADICTION_LIMIT = 1;
 const RELEVANT_COMMUNICATION_PREFERENCE_LIMIT = 2;
 /** Ver docblock de `GrowingBeliefSnapshot`: como máximo una hipótesis en formación a la vez. */
 const RELEVANT_GROWING_BELIEF_LIMIT = 1;
+/** Ver docblock de `FadingBeliefSnapshot`: como máximo un capítulo cerrado a la vez. */
+const RELEVANT_FADING_BELIEF_LIMIT = 1;
+/** Ver docblock de `ReopenCandidateSnapshot`: como máximo una intención sin resolver a la vez. */
+const RELEVANT_REOPEN_CANDIDATE_LIMIT = 1;
+/** Ver docblock de `ClosureSnapshot`: como máximo un cierre a la vez. */
+const RELEVANT_CLOSURE_LIMIT = 1;
+/**
+ * A partir de cuántos días un Goal/Project completado deja de sentirse
+ * "esto acaba de pasar" -- independiente de `seen_prompts`: un cierre
+ * de hace meses, nunca reconocido, no debería sentirse como noticia
+ * fresca la primera vez que este mecanismo corre para esa persona.
+ */
+const RECENTLY_COMPLETED_WINDOW_DAYS = 7;
 /**
  * Banda de confianza "en formación" -- por debajo de esto es apenas
  * una mención aislada (ruido, no vale la pena mencionar ni para
@@ -99,12 +115,18 @@ export async function assembleRealitySnapshot(
   // (p. ej. el Morning Brief del Dashboard, que no responde a un
   // mensaje puntual) se preserva el comportamiento anterior sin
   // cambios: ahí sí tiene sentido "lo más relevante en general".
+  const recentlyCompletedSince = new Date(
+    Date.now() - RECENTLY_COMPLETED_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const seenPromptRepository = new DrizzleSeenPromptRepository(db);
+
   const [
     candidateMemories,
     focusedMemory,
     activeGoals,
     activeProjects,
     activeHabits,
+    activeMemories,
     insights,
     beliefs,
     concepts,
@@ -112,6 +134,10 @@ export async function assembleRealitySnapshot(
     pendingCuriosityQuestion,
     contradictions,
     calendarSignals,
+    recentlyCompletedGoals,
+    recentlyCompletedProjects,
+    seenIntentionIds,
+    seenClosureIds,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -129,6 +155,12 @@ export async function assembleRealitySnapshot(
     listActiveGoals(db, context),
     listActiveProjects(db, context),
     listActiveHabits(db, context),
+    // `type: "intention"` filtrado en JS, no en SQL -- mismo criterio
+    // que `growingBeliefs`/`fadingBeliefs` sobre `beliefs.list()`:
+    // Memory Engine no expone un filtro por tipo todavía, y agregar
+    // uno nuevo para un solo consumidor no vale la pena antes de que
+    // un segundo lo necesite.
+    new DrizzleMemoryRepository(db).listActive(context),
     new DrizzleInsightRepository(db).list(context),
     new DrizzleBeliefRepository(db).list(context),
     new DrizzleConceptRepository(db).list(context),
@@ -141,6 +173,13 @@ export async function assembleRealitySnapshot(
     // en el mismo `Promise.all` que el resto sin arriesgar el
     // ensamblado completo por un problema de calendario.
     getCalendarSignalsForConversation(db, context),
+    listRecentlyCompletedGoals(db, context, recentlyCompletedSince),
+    listRecentlyCompletedProjects(db, context, recentlyCompletedSince),
+    seenPromptRepository.listSeenSubjectIds(
+      context,
+      SEEN_PROMPT_SUBJECT_TYPES.intentionFollowup,
+    ),
+    seenPromptRepository.listSeenSubjectIds(context, SEEN_PROMPT_SUBJECT_TYPES.goalClosure),
   ]);
 
   const relevantMemories = focusedMemory
@@ -234,6 +273,54 @@ export async function assembleRealitySnapshot(
     )
     .sort((a, b) => b.lastReinforcedAt.getTime() - a.lastReinforcedAt.getTime())
     .slice(0, RELEVANT_GROWING_BELIEF_LIMIT);
+
+  // Identity Evolution, hecha audible -- reutiliza el mismo `beliefs`
+  // ya obtenido arriba, cero consultas nuevas. `decay-stale-beliefs.ts`
+  // es el único lugar que transiciona un Belief fuera de `active`, y
+  // nunca vuelve a tocarlo después -- así que `updatedAt` es el
+  // instante real de la transición, nunca una aproximación. La más
+  // reciente primero: el capítulo que se cerró hace más tiempo ya dejó
+  // de ser noticia.
+  const fadingBeliefs = beliefs
+    .filter((belief) => belief.status === "expired" || belief.status === "retracted")
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, RELEVANT_FADING_BELIEF_LIMIT);
+
+  // Reapertura (redesign del pipeline conversacional, Beta) -- memorias
+  // tipo "intention" todavía sin seguimiento, filtradas contra
+  // `seen_prompts` en esta misma capa de aplicación (nunca dentro de
+  // la regla -- mismo criterio que el resto de este ensamblador). Más
+  // reciente primero.
+  const reopenCandidates = activeMemories
+    .filter((memory) => memory.type === "intention" && !seenIntentionIds.has(memory.id))
+    .sort((a, b) => (b.occurredAt?.getTime() ?? 0) - (a.occurredAt?.getTime() ?? 0))
+    .slice(0, RELEVANT_REOPEN_CANDIDATE_LIMIT);
+
+  // Cierres reales (redesign del pipeline conversacional, Beta) --
+  // Goal/Project completados dentro de la ventana de recencia,
+  // filtrados contra `seen_prompts`. Un Goal y un Project compiten por
+  // el mismo espacio -- el más recientemente completado gana, sin
+  // preferencia estructural por tipo.
+  const recentClosures = [
+    ...recentlyCompletedGoals
+      .filter((goal) => !seenClosureIds.has(goal.id))
+      .map((goal) => ({
+        id: goal.id,
+        title: goal.title,
+        kind: "goal" as const,
+        updatedAt: goal.updatedAt,
+      })),
+    ...recentlyCompletedProjects
+      .filter((project) => !seenClosureIds.has(project.id))
+      .map((project) => ({
+        id: project.id,
+        title: project.title,
+        kind: "project" as const,
+        updatedAt: project.updatedAt,
+      })),
+  ]
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, RELEVANT_CLOSURE_LIMIT);
 
   // Knowledge Gaps (Knowledge Engine V2) -- cuenta señales reales por
   // dominio, nunca inventa una para un dominio sin actividad todavía
@@ -372,6 +459,39 @@ export async function assembleRealitySnapshot(
         id: belief.id,
         statement: belief.statement,
         confidence: belief.confidence.score,
+      })),
+    },
+    // Identity Evolution -- la creencia que más recientemente dejó de
+    // sostenerse. Sin ninguna en `expired`/`retracted` todavía, `items`
+    // queda vacío a propósito, mismo criterio de ausencia real que el
+    // resto de este ensamblador.
+    fadingBeliefs: {
+      items: fadingBeliefs.map((belief) => ({
+        id: belief.id,
+        statement: belief.statement,
+        domain: belief.domain,
+        confidence: belief.confidence.score,
+        since: belief.updatedAt,
+      })),
+    },
+    // Continuidad al reabrir -- una intención sin resolver, si hay una
+    // que todavía no se retomó. Sin ninguna, `items` queda vacío a
+    // propósito, mismo criterio de ausencia real que el resto de este
+    // ensamblador.
+    reopenCandidates: {
+      items: reopenCandidates.map((memory) => ({
+        id: memory.id,
+        statement: memory.content,
+      })),
+    },
+    // Un cierre real todavía sin reconocer, si hay uno. Sin ninguno,
+    // `items` queda vacío a propósito, mismo criterio de ausencia real
+    // que el resto de este ensamblador.
+    closures: {
+      items: recentClosures.map((closure) => ({
+        id: closure.id,
+        title: closure.title,
+        kind: closure.kind,
       })),
     },
   };

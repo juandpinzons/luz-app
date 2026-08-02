@@ -171,6 +171,12 @@ export async function buildMorningBrief(
       realitySnapshot: snapshot,
       contextItems: context.items,
       isFirstContact: isFirstVisit,
+      // El Dashboard todavía no comparte el historial de diversidad del
+      // chat (`conversation-signal-log.ts`, `userId`-keyed) -- `[]`
+      // preserva exactamente el comportamiento anterior a este redesign
+      // (nunca en cooldown). Compartirlo con el chat es una extensión
+      // futura razonable, fuera de alcance de este cambio.
+      recentStrategyTypes: [],
     });
 
     if (OPENING_ELIGIBLE_STRATEGIES.has(directive.strategy)) {

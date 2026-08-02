@@ -11,6 +11,7 @@ import {
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
 import type { BeliefEvidence } from "../entities/belief-evidence";
+import type { BeliefEvidenceWithStatus } from "../entities/belief-evidence-with-status";
 import type { BeliefHistoryEntry } from "../entities/belief-history-entry";
 import type { Belief } from "../entities/belief";
 import type { BeliefRepository } from "./belief.repository";
@@ -188,6 +189,26 @@ export class DrizzleBeliefRepository implements BeliefRepository {
     }
 
     return toBeliefEvidence(row);
+  }
+
+  async listEvidenceWithStatus(
+    context: LifeGraphContext,
+  ): Promise<BeliefEvidenceWithStatus[]> {
+    const rows = await this.db
+      .select({
+        memoryId: beliefEvidence.memoryId,
+        insightId: beliefEvidence.insightId,
+        beliefStatus: beliefs.status,
+      })
+      .from(beliefEvidence)
+      .innerJoin(beliefs, eq(beliefEvidence.beliefId, beliefs.id))
+      .where(eq(beliefEvidence.lifeGraphId, context.lifeGraphId));
+
+    return rows.map((row) => ({
+      memoryId: row.memoryId ? createEntityId(row.memoryId) : null,
+      insightId: row.insightId ? createEntityId(row.insightId) : null,
+      beliefStatus: row.beliefStatus,
+    }));
   }
 
   async getHistory(

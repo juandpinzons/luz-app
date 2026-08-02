@@ -1,4 +1,4 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, eq, gte, notInArray } from "drizzle-orm";
 import type { Database, Transaction } from "../../db/client";
 import { type ProjectRow, lifeProjects } from "../../db/schema";
 import type { Project } from "../entities/project";
@@ -63,6 +63,25 @@ export class DrizzleProjectRepository implements ProjectRepository {
         and(
           eq(lifeProjects.lifeGraphId, context.lifeGraphId),
           notInArray(lifeProjects.status, [...INACTIVE_PROJECT_STATUSES]),
+        ),
+      );
+
+    return rows.map(toProject);
+  }
+
+  /** Mismo criterio que `DrizzleGoalRepository.listRecentlyCompleted`. */
+  async listRecentlyCompleted(
+    context: LifeGraphContext,
+    since: Date,
+  ): Promise<Project[]> {
+    const rows = await this.db
+      .select()
+      .from(lifeProjects)
+      .where(
+        and(
+          eq(lifeProjects.lifeGraphId, context.lifeGraphId),
+          eq(lifeProjects.status, "completed"),
+          gte(lifeProjects.updatedAt, since),
         ),
       );
 

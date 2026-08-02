@@ -1,3 +1,4 @@
+import { DrizzleBeliefRepository } from "../../belief-engine/repositories/drizzle-belief.repository";
 import type { Database } from "../../db/client";
 import { DrizzleImportanceRepository } from "../../importance-engine/repositories/drizzle-importance.repository";
 import { createEntityId } from "../../life/value-objects/entity-id";
@@ -44,12 +45,20 @@ export class DefaultContextEngine implements ContextEngine {
  * scoring por importancia simplemente no aporta nada, igual que antes
  * de que `core/importance-engine` existiera -- ningún llamador
  * existente que use `createContextEngine()` sin argumentos se rompe.
+ * `recentContextItemKeys` (redesign del pipeline conversacional, Beta)
+ * ya viene resuelto por quien llama (`build-context.ts`) -- ver
+ * docblock del constructor de `DeterministicContextScoringStrategy`.
  */
-export function createContextEngine(db?: Database): ContextEngine {
+export function createContextEngine(
+  db?: Database,
+  recentContextItemKeys?: readonly (readonly string[])[],
+): ContextEngine {
   const stages: ContextEngineStages = {
     filter: new DeterministicContextFilterStrategy(),
     score: new DeterministicContextScoringStrategy(
       db ? new DrizzleImportanceRepository(db) : undefined,
+      db ? new DrizzleBeliefRepository(db) : undefined,
+      recentContextItemKeys,
     ),
     prioritize: new DeterministicContextPrioritizationStrategy(),
   };

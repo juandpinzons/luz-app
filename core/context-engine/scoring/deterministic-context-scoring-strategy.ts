@@ -1,7 +1,12 @@
+import type { BeliefStatus } from "../../belief-engine/entities/belief";
+import type { BeliefRepository } from "../../belief-engine/repositories/belief.repository";
 import type { LifeGraphContext } from "../../life/life-graph-context";
+import type { EntityId } from "../../life/value-objects/entity-id";
 import type { ImportanceRepository } from "../../importance-engine/repositories/importance.repository";
+import { contextItemKey } from "../context-item-key";
 import type { ContextItem } from "../entities/context";
 import type { ContextItemSource } from "../value-objects/context-item-source";
+import { consecutiveStreak, cooldownPenalty } from "./diversity-cooldown";
 import type { ContextScoringStrategy } from "./context-scoring-strategy";
 
 /**
@@ -64,6 +69,31 @@ const IMPORTANCE_ENTITY_TYPE: Partial<Record<ContextItemSource, string>> = {
 /** Cuánto puede sumar la importancia global persistida (`core/importance-engine`) -- una señal más, nunca la dominante frente al peso base por fuente. */
 const IMPORTANCE_BONUS_MAX = 15;
 
+/**
+ * La identidad actual debe pesar más que la memoria histórica: una
+ * memoria/insight que sigue respaldando una creencia `active` suma un
+ * poco; una que solo respalda creencias ya `expired`/`retracted` resta
+ * bastante más de lo que la primera suma -- asimetría deliberada, es
+ * la respuesta concreta a "que un capítulo cerrado no siga dominando".
+ * Un item sin ninguna evidencia de Belief detrás (la mayoría, hoy) no
+ * se ve afectado -- 0, ni bono ni penalización, nunca una suposición
+ * sobre algo que Belief Engine todavía no evaluó.
+ */
+const IDENTITY_ALIGNMENT_BONUS = 10;
+const IDENTITY_ALIGNMENT_PENALTY = 25;
+
+/**
+ * Diversidad conversacional: un item que ya ganó el top del turno en
+ * las últimas `MAX_CONSECUTIVE_CONTEXT_ITEM_REPEATS` conversaciones
+ * seguidas recibe una penalización -- nunca un veto total (a
+ * diferencia de `apply-rotation.ts`, Context Engine llena 8 espacios,
+ * no 1, así que sacar del top a la única memoria real disponible sería
+ * peor que dejarla repetirse). Mismo umbral que
+ * `MAX_CONSECUTIVE_STRATEGY_REPEATS` (`conversation-strategy-engine/rules`).
+ */
+const MAX_CONSECUTIVE_CONTEXT_ITEM_REPEATS = 2;
+const CONTEXT_ITEM_COOLDOWN_PENALTY = 30;
+
 /** Primero de su fuente = bono completo, último = 0, lineal entre ambos. */
 function positionBonus(index: number, total: number, max: number): number {
   if (max === 0 || total <= 1) {
@@ -101,13 +131,26 @@ function urgencyBonus(dueDate: Date | undefined, now: Date): number {
  */
 export class DeterministicContextScoringStrategy implements ContextScoringStrategy {
   /**
-   * `importanceRepository` es opcional: sin él, esta estrategia se
-   * comporta exactamente igual que antes de que existiera
-   * `core/importance-engine` (compatibilidad hacia atrás real, no solo
-   * de tipos) -- ningún llamador existente que la instancie sin
-   * argumentos se rompe.
+   * `importanceRepository`/`beliefRepository` son opcionales: sin
+   * ellos, esta estrategia se comporta exactamente igual que antes de
+   * que existiera `core/importance-engine`/la alineación de identidad
+   * (compatibilidad hacia atrás real, no solo de tipos) -- ningún
+   * llamador existente que la instancie sin argumentos se rompe.
    */
-  constructor(private readonly importanceRepository?: ImportanceRepository) {}
+  constructor(
+    private readonly importanceRepository?: ImportanceRepository,
+    private readonly beliefRepository?: BeliefRepository,
+    /**
+     * El top de `contextItems` de cada una de las últimas conversaciones
+     * (más reciente primero, ver `getRecentConversationSignals`) -- a
+     * diferencia de los dos repositorios de arriba, esto no se carga
+     * desde una base de datos aquí: ya viene resuelto por quien orquesta
+     * (`build-context.ts`), mismo criterio que `context: LifeGraphContext`
+     * en `score()`. `[]` por defecto -- sin historial (primera
+     * conversación real), ningún item se ve afectado.
+     */
+    private readonly recentContextItemKeys: readonly (readonly string[])[] = [],
+  ) {}
 
   async score(
     items: ContextItem[],
@@ -119,6 +162,7 @@ export class DeterministicContextScoringStrategy implements ContextScoringStrate
     }
 
     const importanceByKey = await this.loadImportance(context);
+    const identityAlignment = await this.loadIdentityAlignment(context);
     const seenBySource = new Map<ContextItemSource, number>();
     const now = new Date();
 
@@ -131,7 +175,9 @@ export class DeterministicContextScoringStrategy implements ContextScoringStrate
         SOURCE_BASE_WEIGHT[item.source] +
         positionBonus(index, total, POSITION_BONUS_MAX[item.source]) +
         urgencyBonus(item.dueDate, now) +
-        this.importanceBonus(item, importanceByKey);
+        this.importanceBonus(item, importanceByKey) +
+        this.identityAlignmentAdjustment(item, identityAlignment) -
+        this.contextItemCooldownPenalty(item);
 
       return { ...item, relevanceScore: Math.max(0, Math.min(MAX_SCORE, score)) };
     });
@@ -160,4 +206,86 @@ export class DeterministicContextScoringStrategy implements ContextScoringStrate
     }
     return map;
   }
+
+  /**
+   * +bono si el item sigue respaldando al menos una creencia `active`;
+   * -penalización si TODA la evidencia que respalda quedó
+   * `expired`/`retracted` y ninguna sigue `active`; 0 si no hay
+   * evidencia de Belief detrás (la mayoría de items, hoy) -- nunca una
+   * suposición sobre algo que Belief Engine no evaluó. `signal`/`life`
+   * no tienen `BeliefEvidence` (esta solo enlaza `memoryId`/`insightId`),
+   * así que quedan en 0 sin necesidad de comprobarlo explícitamente.
+   */
+  private identityAlignmentAdjustment(
+    item: ContextItem,
+    alignment: IdentityAlignmentMaps,
+  ): number {
+    if (!item.sourceId) {
+      return 0;
+    }
+
+    const statuses =
+      item.source === "memory"
+        ? alignment.memoryStatuses.get(item.sourceId)
+        : item.source === "insight"
+          ? alignment.insightStatuses.get(item.sourceId)
+          : undefined;
+
+    if (!statuses || statuses.length === 0) {
+      return 0;
+    }
+    if (statuses.includes("active")) {
+      return IDENTITY_ALIGNMENT_BONUS;
+    }
+    return -IDENTITY_ALIGNMENT_PENALTY;
+  }
+
+  /**
+   * Cuántos puntos restar porque este item ya ganó el top del turno en
+   * conversaciones recientes consecutivas -- 0 si no tiene `sourceId`
+   * (`signal`, ver `contextItemKey`) o si no lleva racha suficiente
+   * todavía.
+   */
+  private contextItemCooldownPenalty(item: ContextItem): number {
+    const key = contextItemKey(item);
+    if (!key) {
+      return 0;
+    }
+    const streak = consecutiveStreak(
+      key,
+      this.recentContextItemKeys,
+      (entry, k) => entry.includes(k),
+    );
+    return cooldownPenalty(streak, MAX_CONSECUTIVE_CONTEXT_ITEM_REPEATS, CONTEXT_ITEM_COOLDOWN_PENALTY);
+  }
+
+  private async loadIdentityAlignment(
+    context: LifeGraphContext,
+  ): Promise<IdentityAlignmentMaps> {
+    const memoryStatuses = new Map<EntityId, BeliefStatus[]>();
+    const insightStatuses = new Map<EntityId, BeliefStatus[]>();
+    if (!this.beliefRepository) {
+      return { memoryStatuses, insightStatuses };
+    }
+
+    const evidence = await this.beliefRepository.listEvidenceWithStatus(context);
+    for (const row of evidence) {
+      if (row.memoryId) {
+        const existing = memoryStatuses.get(row.memoryId) ?? [];
+        existing.push(row.beliefStatus);
+        memoryStatuses.set(row.memoryId, existing);
+      }
+      if (row.insightId) {
+        const existing = insightStatuses.get(row.insightId) ?? [];
+        existing.push(row.beliefStatus);
+        insightStatuses.set(row.insightId, existing);
+      }
+    }
+    return { memoryStatuses, insightStatuses };
+  }
+}
+
+interface IdentityAlignmentMaps {
+  memoryStatuses: Map<EntityId, BeliefStatus[]>;
+  insightStatuses: Map<EntityId, BeliefStatus[]>;
 }

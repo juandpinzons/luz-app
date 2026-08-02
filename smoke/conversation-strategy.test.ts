@@ -45,6 +45,9 @@ function emptySnapshot(): RealitySnapshot {
     contradictions: { items: [] },
     communicationStyle: { items: [] },
     growingBeliefs: { items: [] },
+    fadingBeliefs: { items: [] },
+    reopenCandidates: { items: [] },
+    closures: { items: [] },
   };
 }
 
@@ -67,6 +70,11 @@ async function selectStrategyFor(
     realitySnapshot: snapshot,
     contextItems: engineContext.items,
     isFirstContact,
+    // Fixtures de este archivo prueban una condición de activación
+    // aislada por estrategia -- nunca el cooldown de diversidad, que
+    // tiene sus propios escenarios en `diversity` más abajo. `[]`
+    // = sin historial, mismo criterio que "primera conversación real".
+    recentStrategyTypes: [],
   });
   return directive.strategy;
 }
@@ -238,6 +246,66 @@ export const conversationStrategyFlow: SmokeFlow = {
       "'confirm' nunca debería ganar en el primer contacto, sin importar qué hipótesis existan",
     );
 
+    const releaseSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      fadingBeliefs: {
+        items: [
+          {
+            id: createEntityId("fading-belief-1"),
+            statement: "Está definido por un trabajo que ya dejó",
+            domain: "career",
+            confidence: 40,
+            since: hoursAgo(48),
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(releaseSnapshot, false)) === "release",
+      "una creencia recién expirada/retractada (fadingBeliefs) debería producir 'release'",
+    );
+    assert(
+      (await selectStrategyFor(releaseSnapshot, true)) !== "release",
+      "'release' nunca debería ganar en el primer contacto, sin importar qué creencias se hayan soltado",
+    );
+
+    const reopenSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      reopenCandidates: {
+        items: [
+          {
+            id: createEntityId("reopen-candidate-1"),
+            statement: "Iba a hablar con su jefe sobre el cambio de puesto",
+          },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(reopenSnapshot, true)) === "reopen",
+      "una intención sin resolver (reopenCandidates) al reabrir (isFirstContact) debería producir 'reopen'",
+    );
+    assert(
+      (await selectStrategyFor(reopenSnapshot, false)) !== "reopen",
+      "'reopen' nunca debería ganar a mitad de una conversación en curso, solo al reabrir",
+    );
+
+    const acknowledgeClosureSnapshot: RealitySnapshot = {
+      ...emptySnapshot(),
+      closures: {
+        items: [
+          { id: createEntityId("closure-1"), title: "Maratón", kind: "goal" },
+        ],
+      },
+    };
+    assert(
+      (await selectStrategyFor(acknowledgeClosureSnapshot, false)) === "acknowledge_closure",
+      "un cierre real sin reconocer (closures) debería producir 'acknowledge_closure'",
+    );
+    assert(
+      (await selectStrategyFor(acknowledgeClosureSnapshot, true)) !== "acknowledge_closure",
+      "'acknowledge_closure' nunca debería ganar en el primer contacto",
+    );
+
     const followUpSnapshot: RealitySnapshot = {
       ...emptySnapshot(),
       memory: {
@@ -294,6 +362,63 @@ export const conversationStrategyFlow: SmokeFlow = {
       "una memoria muy reciente (2h) como único item relevante debería producir 'celebrate'",
     );
 
+    // E) Diversidad conversacional (redesign del pipeline
+    // conversacional, Beta): las mismas condiciones de arriba, pero con
+    // esa postura ya ganada las últimas `MAX_CONSECUTIVE_STRATEGY_REPEATS`
+    // conversaciones seguidas -- debe suprimirse, nunca repetirse una
+    // tercera vez, y `Listen` debe nombrar la restricción, no caer en
+    // el genérico "nada domina".
+    const celebrateEngineContext = await createContextEngine().build(
+      celebrateSnapshot,
+      FIXTURE_LIFE_GRAPH,
+    );
+    const suppressedCelebrate = createConversationStrategyEngine().select({
+      realitySnapshot: celebrateSnapshot,
+      contextItems: celebrateEngineContext.items,
+      isFirstContact: false,
+      recentStrategyTypes: ["celebrate", "celebrate"],
+    });
+    assert(
+      suppressedCelebrate.strategy === "listen",
+      `'celebrate' en cooldown (2 seguidas) debería suprimirse a 'listen', dio '${suppressedCelebrate.strategy}'`,
+    );
+    assert(
+      suppressedCelebrate.reason.includes("celebrate"),
+      "'listen' por cooldown debería nombrar explícitamente qué postura se suprimió, no un motivo genérico",
+    );
+
+    // Con una sola repetición previa (no dos seguidas todavía),
+    // 'celebrate' debe seguir pudiendo ganar -- el cooldown exige la
+    // racha completa, nunca dispara con una sola coincidencia.
+    const singleRepeatCelebrate = createConversationStrategyEngine().select({
+      realitySnapshot: celebrateSnapshot,
+      contextItems: celebrateEngineContext.items,
+      isFirstContact: false,
+      recentStrategyTypes: ["celebrate"],
+    });
+    assert(
+      singleRepeatCelebrate.strategy === "celebrate",
+      `'celebrate' con una sola repetición previa (racha incompleta) debería seguir ganando, dio '${singleRepeatCelebrate.strategy}'`,
+    );
+
+    // El caso concreto que motivó este mecanismo: la MISMA pregunta de
+    // curiosidad pendiente no debería poder ganar el turno semana tras
+    // semana -- ver `curiosity-strategy-rule.ts`.
+    const curiosityEngineContext = await createContextEngine().build(
+      curiositySnapshot,
+      FIXTURE_LIFE_GRAPH,
+    );
+    const suppressedCuriosity = createConversationStrategyEngine().select({
+      realitySnapshot: curiositySnapshot,
+      contextItems: curiosityEngineContext.items,
+      isFirstContact: false,
+      recentStrategyTypes: ["curiosity", "curiosity"],
+    });
+    assert(
+      suppressedCuriosity.strategy !== "curiosity",
+      "'curiosity' en cooldown (2 seguidas, misma pregunta pendiente) debería suprimirse -- este es exactamente el caso que motivó el sistema de diversidad",
+    );
+
     const clarifySnapshot: RealitySnapshot = {
       ...emptySnapshot(),
       memory: {
@@ -343,9 +468,12 @@ export const conversationStrategyFlow: SmokeFlow = {
     // como parte de la suite completa sin cambiar de comportamiento"),
     // así que solo se verifican invariantes válidas en cualquiera de
     // los dos casos, nunca una estrategia específica.
-    const realBuiltContext = await buildContext(db, ctx.lifeGraphContext, [
-      { role: "user", content: "Hola, quiero empezar a organizar mejor mi semana." },
-    ]);
+    const realBuiltContext = await buildContext(
+      db,
+      ctx.lifeGraphContext,
+      [{ role: "user", content: "Hola, quiero empezar a organizar mejor mi semana." }],
+      ctx.userId,
+    );
     const strategy = realBuiltContext.conversationStrategy;
     assert(
       CONVERSATION_STRATEGY_TYPES.includes(strategy.strategy),

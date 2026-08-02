@@ -2,9 +2,11 @@ import { and, desc, eq } from "drizzle-orm";
 import { after } from "next/server";
 import { getAIProvider } from "../../../ai";
 import type { AIMessage } from "../../../ai/provider";
+import { contextItemKey } from "../../../core/context-engine";
 import { db } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
+import type { EntityId } from "../../../core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
@@ -12,10 +14,13 @@ import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
+import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
 import {
   buildContext,
   renderContextToMessages,
+  recordConversationSignalShown,
+  type ConversationSignal,
 } from "../context-builder";
 import type { ConversationTurn } from "../context-builder";
 import { captureLifeEntityFromMemory } from "../../life/services/life-capture-service";
@@ -126,12 +131,33 @@ async function getOrCreateConversation(
   return { id: created.id, isNew: true };
 }
 
+/**
+ * Qué fila de `seen_prompts` marcar tras esta respuesta -- `reopen`/
+ * `acknowledge_closure` (redesign del pipeline conversacional, Beta)
+ * son las únicas estrategias que necesitan esto: ganar el turno una
+ * vez ya es "mostrarlo", nunca debe volver a ganar para el mismo
+ * sujeto.
+ */
+interface SeenPromptToMark {
+  subjectType: string;
+  subjectId: EntityId;
+}
+
 interface PreparedMessage {
   conversationId: string;
   isNewConversation: boolean;
   aiMessages: AIMessage[];
   /** Null si la captura en Memory Engine falló o se omitió (sin LifeGraphContext) — en ese caso, Life Capture (`finalizeReply`) tampoco corre, mismo criterio de degradación que el resto del archivo. */
   capturedMemory: Memory | null;
+  /**
+   * Qué decidió Context Builder para este turno (redesign del pipeline
+   * conversacional, Beta) -- null en el mismo caso que degrada
+   * `aiMessages` al historial simple: sin Context construido, no hay
+   * nada real que registrar como señal de diversidad.
+   */
+  conversationSignal: ConversationSignal | null;
+  /** Null salvo que la estrategia ganadora sea `reopen`/`acknowledge_closure`. */
+  seenPromptToMark: SeenPromptToMark | null;
 }
 
 /**
@@ -221,11 +247,50 @@ async function prepareMessage(
   // reglas ni memoria, exactamente el comportamiento anterior a este
   // sprint.
   let aiMessages: AIMessage[] = conversation;
+  let conversationSignal: ConversationSignal | null = null;
+  let seenPromptToMark: SeenPromptToMark | null = null;
   if (lifeGraphContext) {
     const contextBuilderStart = Date.now();
     try {
-      const builtContext = await buildContext(db, lifeGraphContext, conversation);
+      const builtContext = await buildContext(
+        db,
+        lifeGraphContext,
+        conversation,
+        context.userId,
+      );
       aiMessages = renderContextToMessages(builtContext);
+      conversationSignal = {
+        conversationId,
+        strategy: builtContext.conversationStrategy.strategy,
+        topContextItemKeys: builtContext.contextItems
+          .map((item) => contextItemKey(item))
+          .filter((key): key is string => key !== null),
+      };
+      // Redesign del pipeline conversacional (Beta): `reopen`/
+      // `acknowledge_closure` ganaron leyendo `items[0]` de una lista
+      // ya filtrada por `seen_prompts` (`assembleRealitySnapshot`) --
+      // re-derivar ese mismo ganador aquí, del mismo `realitySnapshot`
+      // ya construido, es consistente por construcción (nada lo muta
+      // entre la decisión y este punto), sin ensanchar
+      // `ConversationStrategyDirective` con un campo que solo estas dos
+      // estrategias necesitan.
+      if (builtContext.conversationStrategy.strategy === "reopen") {
+        const winner = builtContext.realitySnapshot.reopenCandidates.items[0];
+        if (winner) {
+          seenPromptToMark = {
+            subjectType: SEEN_PROMPT_SUBJECT_TYPES.intentionFollowup,
+            subjectId: winner.id,
+          };
+        }
+      } else if (builtContext.conversationStrategy.strategy === "acknowledge_closure") {
+        const winner = builtContext.realitySnapshot.closures.items[0];
+        if (winner) {
+          seenPromptToMark = {
+            subjectType: SEEN_PROMPT_SUBJECT_TYPES.goalClosure,
+            subjectId: winner.id,
+          };
+        }
+      }
       logger.log({
         event: "context_builder.completed",
         requestId,
@@ -307,6 +372,8 @@ async function prepareMessage(
     isNewConversation: conversationRef.isNew,
     aiMessages,
     capturedMemory,
+    conversationSignal,
+    seenPromptToMark,
   };
 }
 
@@ -321,6 +388,10 @@ interface FinalizeReplyInput {
   reply: string;
   /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture y de Knowledge Engine, ver `life-capture-service.ts` y `core/knowledge-engine`. Reemplaza a `userMessageId`, que ya no se usa acá (P0, cierre del Alpha: Knowledge Engine se dispara por Memory, no por el mensaje crudo). */
   capturedMemory: Memory | null;
+  /** Qué decidió Context Builder este turno (`prepareMessage`) -- ver docblock de `PreparedMessage.conversationSignal`. */
+  conversationSignal: ConversationSignal | null;
+  /** Ver docblock de `SeenPromptToMark`. */
+  seenPromptToMark: SeenPromptToMark | null;
   /** `route.ts` usa el mismo valor para taggear `error` en esta ruta -- así ambos son consultables juntos (OBSERVABILITY_PLAN.md). */
   route: string;
   /** Solo en el camino con streaming: ms desde `startedAt` hasta el primer chunk yielded. `undefined` en `sendMessage` -- ahí "primer token" y "duración total" son el mismo número, no hay nada nuevo que medir. */
@@ -360,6 +431,8 @@ async function finalizeReply(
     startedAt,
     reply,
     capturedMemory,
+    conversationSignal,
+    seenPromptToMark,
     route,
     firstTokenMs,
   } = input;
@@ -370,6 +443,42 @@ async function finalizeReply(
     role: "assistant",
     content: reply,
   });
+
+  // Diversidad conversacional (redesign del pipeline conversacional,
+  // Beta): registrado solo tras una respuesta exitosa -- mismo
+  // criterio que el resto de `finalizeReply`, nunca antes de saber que
+  // el turno de verdad se completó. Tolerante a fallos (`recordEvent`
+  // ya nunca lanza), mismo criterio que `message_sent` más abajo.
+  if (conversationSignal) {
+    await recordConversationSignalShown(db, context.userId, conversationSignal);
+  }
+
+  // `reopen`/`acknowledge_closure` ganaron el turno -- marcar el
+  // sujeto como visto para que nunca vuelva a ganar (`seen_prompts`,
+  // `docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md` §5.3). Requiere
+  // `lifeGraphContext` real (`seen_prompts.lifeGraphId`, no `userId`);
+  // sin él, `seenPromptToMark` siempre es `null` de todas formas (se
+  // deriva dentro del mismo `if (lifeGraphContext)` en `prepareMessage`).
+  // Tolerante a fallos, mismo criterio que el resto de este archivo: un
+  // error aquí en el peor caso repite un reconocimiento una vez más, no
+  // debe tumbar la respuesta que la persona ya recibió.
+  if (seenPromptToMark && lifeGraphContext) {
+    try {
+      await new DrizzleSeenPromptRepository(db).markSeen(
+        lifeGraphContext,
+        seenPromptToMark.subjectType,
+        seenPromptToMark.subjectId,
+      );
+    } catch (error) {
+      logger.log({
+        event: "background.seen_prompt_mark.failed",
+        severity: "error",
+        requestId,
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   const backgroundTasks: Promise<unknown>[] = [];
 
@@ -509,6 +618,8 @@ export async function sendMessage(
     startedAt,
     reply,
     capturedMemory: prepared.capturedMemory,
+    conversationSignal: prepared.conversationSignal,
+    seenPromptToMark: prepared.seenPromptToMark,
     route: input.route,
   });
   after(() => Promise.all(backgroundTasks));
@@ -591,6 +702,8 @@ export async function sendMessageStream(
         startedAt,
         reply: fullReply,
         capturedMemory: prepared.capturedMemory,
+        conversationSignal: prepared.conversationSignal,
+        seenPromptToMark: prepared.seenPromptToMark,
         route: input.route,
         firstTokenMs: firstChunkAt ? firstChunkAt - startedAt : undefined,
       });
