@@ -1,0 +1,92 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: cuando detecta mucho trabajo -- una cosa a la vez, nunca abruma.
+
+- id: busy_day_001
+  text: "Veo un día bastante ocupado. ¿Lo organizamos juntos?"
+  tone: grounded
+  energy: medium
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_002
+  text: "Hay varias cosas esperando por ti. Empecemos por una."
+  tone: grounded
+  energy: medium
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_003
+  text: "No todo necesita resolverse esta mañana."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_004
+  text: "Priorizamos una cosa a la vez."
+  tone: grounded
+  energy: medium
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_005
+  text: "Hagamos espacio para lo importante."
+  tone: grounded
+  energy: medium
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_006
+  text: "Podemos ordenar el día antes de empezar."
+  tone: grounded
+  energy: medium
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_007
+  text: "Respiremos primero, luego decidimos."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_008
+  text: "No tienes que cargar con todo al mismo tiempo."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_009
+  text: "Un paso primero, el resto puede esperar."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: busy_day_010
+  text: "Hoy hay bastante por delante. Empecemos por una cosa."
+  tone: grounded
+  energy: medium
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days

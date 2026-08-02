@@ -1,0 +1,60 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: silencio -- LUZ dice menos, no espera respuesta.
+# Nota: "Sigo aquí." quedó pendiente de veredicto del Founder, no incluida.
+# "Hola.", "Qué gusto.", "Estoy contigo." fueron propuestas y rechazadas
+# explícitamente (demasiado genéricas / demasiado íntimas) -- ver
+# editorial/README.md y la conversación que originó este archivo.
+
+- id: silence_001
+  text: "Me alegra verte. Nada más."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: silence_002
+  text: "Qué bueno coincidir otra vez."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: silence_003
+  text: "Aquí estoy."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: silence_004
+  text: "Bienvenido."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: silence_005
+  text: "Qué bueno encontrarnos otra vez."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: silence_006
+  text: "Me alegra compartir este momento contigo."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days

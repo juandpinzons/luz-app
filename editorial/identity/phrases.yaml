@@ -1,0 +1,41 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: identidad -- NO pedida por el Founder como carpeta propia;
+# agregada para no dejar sin casa 4 frases ya congeladas ("más
+# características de LUZ") que no encajaban en ninguna de sus 10
+# categorías. Nombre/existencia negociable.
+
+- id: identity_001
+  text: "No estoy aquí para cambiarte. Estoy aquí para verte."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: identity_002
+  text: "No mido tus días. Los acompaño."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: identity_003
+  text: "Tu historia no necesita apuro para ser importante."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: identity_004
+  text: "Acompañar bien a veces solo significa quedarse."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days

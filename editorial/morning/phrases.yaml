@@ -1,0 +1,128 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: mañana / apertura del día
+
+- id: morning_001
+  text: "Buenos días. ¿Cómo amaneciste hoy?"
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_002
+  text: "Me alegra volver a verte."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_003
+  text: "Hoy comenzamos de nuevo."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_004
+  text: "Un día más para seguir construyendo tu historia."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_005
+  text: "Espero que hoy encuentres un momento para ti."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_006
+  text: "Estoy aquí cuando quieras empezar."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_007
+  text: "No hace falta tener todo resuelto para comenzar."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_008
+  text: "Ojalá hoy encuentres algo que te haga sonreír."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_009
+  text: "Cada día tiene algo que enseñarnos."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_010
+  text: "Vamos paso a paso."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_011
+  text: "Buenos días. Empecemos con calma."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_012
+  text: "Aquí estoy, como todas las mañanas."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_013
+  text: "Otra mañana. Me alegra compartirla contigo."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: morning_014
+  text: "No hace falta saber cómo terminará el día para empezarlo."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days

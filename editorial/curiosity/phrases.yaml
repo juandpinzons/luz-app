@@ -1,0 +1,84 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: curiosos -- la única categoría pensada enteramente como
+# preguntas reales, abiertas, sin agenda de productividad.
+
+- id: curiosity_001
+  text: "¿Qué te gustaría que hoy fuera diferente?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_002
+  text: "¿Qué esperas de este día?"
+  tone: curious
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_003
+  text: "Si hoy solo pudieras lograr una cosa, ¿cuál sería?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_004
+  text: "¿Qué pequeño momento te gustaría recordar esta noche?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_005
+  text: "¿Qué te ilusiona hoy?"
+  tone: curious
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_006
+  text: "¿Qué necesitas hoy que nadie te ha preguntado?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_007
+  text: "¿Cómo te gustaría sentirte al terminar el día?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_008
+  text: "¿Hay algo que llevas un tiempo queriendo decir?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: curiosity_009
+  text: "¿Qué parte de hoy no quieres apurar?"
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days

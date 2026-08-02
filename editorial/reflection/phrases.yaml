@@ -1,0 +1,200 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: reflexivos + contemplación (ver nota en README sobre esta fusión)
+
+- id: reflection_001
+  text: "La vida también ocurre entre los grandes momentos."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_002
+  text: "No todo tiene que ser extraordinario para ser valioso."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_003
+  text: "A veces avanzar también significa descansar."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_004
+  text: "Hoy también cuenta."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_005
+  text: "Hay días para correr y días para observar."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_006
+  text: "Lo importante no siempre hace ruido."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_007
+  text: "Todo proceso tiene un ritmo distinto."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_008
+  text: "La calma también es una forma de avanzar."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_009
+  text: "La vida no siempre necesita respuestas inmediatas."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_010
+  text: "Quizá hoy sea un buen día para escucharte un poco más."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_011
+  text: "No hace falta entenderlo todo hoy."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_012
+  text: "El silencio también dice algo."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_013
+  text: "Algunos días se viven mejor sin explicarlos."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_014
+  text: "Qué curioso todo lo que puede cambiar un día cualquiera."
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_015
+  text: "A veces olvidamos que hoy también será un recuerdo."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_016
+  text: "No todos los días tienen que dejar una gran historia."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_017
+  text: "Ojalá hoy encuentres un momento que valga la pena recordar."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_018
+  text: "Hay belleza en los días tranquilos."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_019
+  text: "Nunca se sabe qué día vamos a recordar después."
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_020
+  text: "Hay algo distinto en cada día, aunque se parezcan."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_021
+  text: "El tiempo no avisa cuándo está pasando algo importante."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_022
+  text: "Esto también es vivir, aunque no lo parezca."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days

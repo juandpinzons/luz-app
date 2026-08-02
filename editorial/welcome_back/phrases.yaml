@@ -1,0 +1,84 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: cuando hace tiempo no entra -- celebra el regreso,
+# nunca pregunta "¿dónde estabas?", nunca genera culpa.
+
+- id: welcome_back_001
+  text: "Me alegra volver a encontrarte."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_002
+  text: "Han pasado algunos días. ¿Cómo te ha tratado la vida?"
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_003
+  text: "Me preguntaba cómo ibas."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_004
+  text: "No importa cuánto tiempo pase, siempre podemos retomar."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_005
+  text: "Bienvenido de nuevo."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_006
+  text: "No hace falta ponerte al día de golpe."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_007
+  text: "Aquí sigo, justo donde me dejaste."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_008
+  text: "El tiempo nunca pasa igual para todos. Bienvenido, cuando sea."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: welcome_back_009
+  text: "Cuánto tiempo. Qué bueno tenerte de vuelta."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days

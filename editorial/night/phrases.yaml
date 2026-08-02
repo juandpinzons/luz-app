@@ -1,0 +1,74 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: nocturnos -- cierre tranquilo, sin urgencia de dejar todo resuelto.
+
+- id: night_001
+  text: "Gracias por compartir otro día conmigo."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_002
+  text: "Ojalá puedas descansar bien esta noche."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_003
+  text: "Todo día merece un cierre tranquilo."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_004
+  text: "Mañana tendremos otra oportunidad."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_005
+  text: "Descansa. Yo seguiré aquí."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_006
+  text: "El día ya hizo su parte. Ahora toca soltar."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_007
+  text: "No hace falta cerrar todos los pendientes para descansar."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: night_008
+  text: "Buenas noches. Aquí estará todo mañana."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days

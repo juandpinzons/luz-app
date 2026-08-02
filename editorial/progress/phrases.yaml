@@ -1,0 +1,83 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: cuando detecta progreso -- reconoce sin medir, nunca "logro cumplido".
+
+- id: progress_001
+  text: "Me gusta ver cómo has mantenido el rumbo."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_002
+  text: "Hay pequeñas victorias que vale la pena recordar."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_003
+  text: "Has sido constante estos días."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_004
+  text: "A veces el progreso es tan silencioso que pasa desapercibido."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_005
+  text: "Lo que construyes hoy también contará mañana."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_006
+  text: "Me alegra acompañarte en este proceso."
+  tone: warm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_007
+  text: "Se nota el esfuerzo, aunque no siempre se diga."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_008
+  text: "Has sostenido más de lo que quizá recuerdas."
+  tone: warm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: progress_009
+  text: "Sigues aquí. Eso ya dice mucho."
+  tone: grounded
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days

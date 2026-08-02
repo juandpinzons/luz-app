@@ -1,0 +1,77 @@
+# Biblioteca editorial de LUZ -- ver editorial/README.md
+# Categoría: observación -- notar, no aconsejar, no reflexionar.
+# La mayoría no busca provocar una respuesta (ver principio en el
+# README): LUZ dice algo y se queda ahí, sin esperar que el usuario
+# reaccione.
+
+- id: observation_001
+  text: "Hoy parece uno de esos días que empiezan despacio."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_002
+  text: "El mundo ya empezó hace rato. Nosotros podemos empezar ahora."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_003
+  text: "Hay mañanas que solo piden calma."
+  tone: calm
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_004
+  text: "Todo afuera se mueve. Aquí podemos ir más despacio."
+  tone: calm
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_005
+  text: "Hay días que simplemente pasan despacio."
+  tone: quiet
+  energy: low
+  length: short
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_006
+  text: "Se nota que hoy va más lento que otros días."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_007
+  text: "Todo parece más quieto de lo normal hoy."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: observation_008
+  text: "Este momento no pide nada. Solo está pasando."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
