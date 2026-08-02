@@ -4,6 +4,7 @@ import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { createPresenceEngine } from "../../../core/presence-engine";
 import { createVoiceEngine } from "../../../core/voice-engine";
+import { span } from "../../../core/observability/trace";
 import { assembleRealitySnapshot } from "../services/assemble-reality-snapshot";
 import { assembleReconnectionContext } from "../services/assemble-reconnection-context";
 import { getRecentConversationSignals } from "./conversation-signal-log";
@@ -89,16 +90,15 @@ export async function buildContext(
   // contrato de `RealitySnapshot` (ADR-0013): esto es meta-información
   // sobre lo que LUZ ya dijo, no sobre la vida de la persona.
   const [realitySnapshot, recentSignals] = await Promise.all([
-    assembleRealitySnapshot(db, lifeGraphContext, { currentMessage }),
-    getRecentConversationSignals(db, userId),
+    span("Reality", "engine", () => assembleRealitySnapshot(db, lifeGraphContext, { currentMessage })),
+    span("Conversation.recentSignals", "repository", () => getRecentConversationSignals(db, userId)),
   ]);
   const memories = realitySnapshot.memory.items;
   const recentStrategyTypes = recentSignals.map((signal) => signal.strategy);
   const recentContextItemKeys = recentSignals.map((signal) => signal.topContextItemKeys);
 
-  const engineContext = await createContextEngine(db, recentContextItemKeys).build(
-    realitySnapshot,
-    lifeGraphContext,
+  const engineContext = await span("Context Engine", "engine", () =>
+    createContextEngine(db, recentContextItemKeys).build(realitySnapshot, lifeGraphContext),
   );
   const contextItems = engineContext.items;
 
@@ -106,24 +106,32 @@ export async function buildContext(
   // Context Engine, antes del Prompt Builder (`renderContextToMessages`,
   // `render-context.ts`) — nunca vuelve a consultar Memory Engine,
   // Knowledge Engine ni Life State por su cuenta, solo lo que
-  // `realitySnapshot` y `contextItems` ya trajeron.
-  const conversationStrategy = createConversationStrategyEngine().select({
-    realitySnapshot,
-    contextItems,
-    isFirstContact,
-    recentStrategyTypes,
-  });
+  // `realitySnapshot` y `contextItems` ya trajeron. Determinista y
+  // síncrona -- envuelta igual en `span()` (async trivial) por
+  // completitud del perfil de latencia, nunca porque tarde algo real.
+  const conversationStrategy = await span("Conversation Strategy", "compute", async () =>
+    createConversationStrategyEngine().select({
+      realitySnapshot,
+      contextItems,
+      isFirstContact,
+      recentStrategyTypes,
+    }),
+  );
 
   // Presence (Fase II): nunca pasa `allowSilence` — el chat es
   // reactivo (la persona ya escribió, una respuesta es parte del
   // contrato de esta UI), así que `"silence"` no es una salida
   // alcanzable desde aquí hoy (ver docblock de `DefaultPresenceEngine`).
-  const presence = createPresenceEngine().decide(conversationStrategy);
+  const presence = await span("Presence", "compute", async () =>
+    createPresenceEngine().decide(conversationStrategy),
+  );
   // Fast User Understanding: `communicationStyle` viaja directo de
   // RealitySnapshot a Voice -- no es una decisión de Conversation
   // Strategy (QUÉ lograr) ni de Presence (CÓMO estar presente), es
   // puramente CÓMO suena, la responsabilidad exclusiva de Voice.
-  const voice = createVoiceEngine().speak(presence, realitySnapshot.communicationStyle);
+  const voice = await span("Voice", "compute", async () =>
+    createVoiceEngine().speak(presence, realitySnapshot.communicationStyle),
+  );
 
   // "Qué cambió" + "qué capítulo vive" (redesign del pipeline
   // conversacional, Beta) -- no-op barato (`isFirstContact` es la
@@ -131,11 +139,8 @@ export async function buildContext(
   // en curso; solo ensambla el `NarrativeState` real, con su propio
   // costo (equivalente a una carga de Dashboard), al reabrir de
   // verdad.
-  const reconnectionContext = await assembleReconnectionContext(
-    db,
-    lifeGraphContext,
-    userId,
-    isFirstContact,
+  const reconnectionContext = await span("Reconnection", "orchestration", () =>
+    assembleReconnectionContext(db, lifeGraphContext, userId, isFirstContact),
   );
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(

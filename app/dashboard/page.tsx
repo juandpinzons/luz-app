@@ -35,7 +35,8 @@ import { SecondaryExperienceList } from "@/features/experience/components/second
 import { PostponedExperienceNote } from "@/features/experience/components/postponed-experience-note";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
 import { describeError } from "@/core/observability/describe-error";
-import { createRequestId, elapsedMs, logger, nowMs } from "@/core/observability/logger";
+import { createRequestId, logger } from "@/core/observability/logger";
+import { logTraceSummary, runTrace, span } from "@/core/observability/trace";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
 
 /**
@@ -134,10 +135,10 @@ export default async function DashboardPage() {
 
   // Un solo id por render, para poder correlacionar todas las líneas
   // de log de esta carga del Dashboard entre sí (mismo patrón que
-  // app/api/chat/route.ts). `renderStartedAt` alimenta el log de
-  // duración al final -- ver "Latencia" más abajo.
+  // app/api/chat/route.ts) -- y para atribuir cada span real de esta
+  // carga a la misma traza (`runTrace`, misión "complete latency
+  // profile").
   const requestId = createRequestId();
-  const renderStartedAt = nowMs();
   // Capturado una sola vez, fuera de cualquier cierre -- evita
   // cualquier duda sobre si el angostamiento de tipos de TypeScript
   // (`session.user.id` ya no puede ser `undefined` tras el `redirect`
@@ -162,8 +163,23 @@ export default async function DashboardPage() {
    * mensaje de error, ni el criterio de tolerancia a fallos de cada
    * una (cada función interna conserva su propio `try/catch` y su
    * propio evento de log, exactamente como antes).
+   *
+   * Misión "complete latency profile": toda esta carga corre dentro de
+   * `runTrace` -- cada `load*` de abajo se envuelve en `span()` con el
+   * nombre del subsistema real que mide (Reality/Memory/Knowledge/
+   * Identity Evolution ya se miden dentro de `assembleRealitySnapshot`,
+   * anidados bajo "Morning Brief" -> "Reality"). Medición pura: ningún
+   * `span()` cambia qué hace el código que envuelve.
    */
-
+  async function loadDashboardData(): Promise<{
+    summary: DashboardSummary | null;
+    homeState: HomeState | null;
+    experience: ExperienceState | null;
+    brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
+    calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
+    recentMemory: Awaited<ReturnType<typeof getRecentMemoryHighlight>>;
+    isFirstVisit: boolean;
+  }> {
   async function loadConversationCount(): Promise<number> {
     const [row] = await db
       .select({ n: sql<number>`count(*)::int` })
@@ -245,10 +261,18 @@ export default async function DashboardPage() {
   async function loadHomeStateBase(): Promise<HomeState | null> {
     if (!lifeGraphContext) return null;
     try {
-      const snapshot = await buildLifeDashboardSnapshot(db, lifeGraphContext);
-      const recommendations = buildFollowUpRecommendations(snapshot.observations, snapshot);
-      const presence = buildPresenceState(snapshot.observations, snapshot, recommendations);
-      return buildHomeState(snapshot, snapshot.observations, recommendations, presence, null);
+      const snapshot = await span("Life Dashboard Snapshot", "engine", () =>
+        buildLifeDashboardSnapshot(db, lifeGraphContext),
+      );
+      const recommendations = await span("Recommendations", "compute", async () =>
+        buildFollowUpRecommendations(snapshot.observations, snapshot),
+      );
+      const presence = await span("Presence", "compute", async () =>
+        buildPresenceState(snapshot.observations, snapshot, recommendations),
+      );
+      return await span("Home", "compute", async () =>
+        buildHomeState(snapshot, snapshot.observations, recommendations, presence, null),
+      );
     } catch (error) {
       logger.log({
         event: "dashboard.home_state_failed",
@@ -360,13 +384,13 @@ export default async function DashboardPage() {
   // `homeState` en mano, aunque nunca lo necesitaron a él tampoco.
   const [summary, homeStateBase, brief, calendarOutcome, recentMemory, recentPrimaryKeys, previousFingerprint] =
     await Promise.all([
-      loadSummary(),
-      loadHomeStateBase(),
-      loadMorningBrief(),
-      loadCalendarOutcome(),
-      loadRecentMemory(),
-      getRecentPrimaryKeys(db, userId),
-      getPreviousFingerprint(db, userId),
+      span("Dashboard Summary", "orchestration", loadSummary),
+      span("Home State", "orchestration", loadHomeStateBase),
+      span("Morning Brief", "orchestration", loadMorningBrief),
+      span("Calendar", "external_api", loadCalendarOutcome),
+      span("Recent Memory", "repository", loadRecentMemory),
+      span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
+      span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
     ]);
 
   let homeState = homeStateBase;
@@ -389,12 +413,15 @@ export default async function DashboardPage() {
    */
   let experience: ExperienceState | null = null;
   if (homeState) {
+    const capturedHomeState = homeState;
     try {
-      experience = buildExperienceState(
-        homeState,
-        recentPrimaryKeys,
-        summary?.memoriesStored ?? 0,
-        previousFingerprint,
+      experience = await span("Experience", "compute", async () =>
+        buildExperienceState(
+          capturedHomeState,
+          recentPrimaryKeys,
+          summary?.memoriesStored ?? 0,
+          previousFingerprint,
+        ),
       );
       if (experience.primary) {
         const primaryCard = experience.primary;
@@ -414,14 +441,16 @@ export default async function DashboardPage() {
     }
   }
 
-  logger.log({
-    event: "dashboard.render_completed",
-    severity: "info",
+    return { summary, homeState, experience, brief, calendarOutcome, recentMemory, isFirstVisit };
+  }
+
+  const { result: dashboardData, summary: trace } = await runTrace(
     requestId,
-    route: ROUTE,
-    userId,
-    durationMs: elapsedMs(renderStartedAt),
-  });
+    "dashboard.request",
+    loadDashboardData,
+  );
+  logTraceSummary(trace, { route: ROUTE, userId });
+  const { summary, homeState, experience, brief, calendarOutcome, recentMemory, isFirstVisit } = dashboardData;
 
   const daysSinceLastMessage = summary?.lastMessageAt
     ? daysSince(summary.lastMessageAt, new Date())

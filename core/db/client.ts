@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { env } from "../config/env";
+import { recordQuery } from "../observability/trace";
 import * as schema from "./schema";
 
 /**
@@ -17,7 +18,19 @@ import * as schema from "./schema";
  */
 const queryClient = postgres(env.DATABASE_URL, { prepare: false });
 
-export const db = drizzle(queryClient, { schema });
+/**
+ * Misión "complete latency profile" -- `logger.logQuery` es el punto de
+ * extensión oficial de Drizzle (no un hack sobre el driver crudo),
+ * llamado por cada sentencia SQL real que Drizzle ejecuta. Solo cuenta
+ * (`recordQuery`, atribuida al span activo vía `AsyncLocalStorage`,
+ * `core/observability/trace.ts`) -- nunca registra el texto de la query
+ * ni sus parámetros (podrían llevar contenido real de una persona),
+ * nunca cambia ni retrasa la ejecución real.
+ */
+export const db = drizzle(queryClient, {
+  schema,
+  logger: { logQuery: () => recordQuery() },
+});
 
 export type Database = typeof db;
 

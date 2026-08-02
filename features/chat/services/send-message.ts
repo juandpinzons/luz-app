@@ -14,6 +14,7 @@ import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
+import { logTraceSummary, runTrace, span } from "../../../core/observability/trace";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
 import {
@@ -167,14 +168,13 @@ interface PreparedMessage {
  * Engine. Compartido por `sendMessage` y `sendMessageStream` — ninguna
  * de las dos reimplementa esta parte, ambas la llaman igual.
  */
-async function prepareMessage(
+async function prepareMessageInner(
   input: SendMessageInput,
 ): Promise<PreparedMessage> {
   const { context, lifeGraphContext, requestId } = input;
 
-  const conversationRef = await getOrCreateConversation(
-    context,
-    input.conversationId,
+  const conversationRef = await span("Conversation.getOrCreate", "repository", () =>
+    getOrCreateConversation(context, input.conversationId),
   );
   const conversationId = conversationRef.id;
 
@@ -186,34 +186,37 @@ async function prepareMessage(
   });
 
   const dbWriteStart = Date.now();
-  const [userMessage] = await db
-    .insert(conversationMessages)
-    .values({
-      conversationId,
-      userId: context.userId,
-      role: "user",
-      content: input.message,
-    })
-    .returning();
+  const { userMessage, history } = await span("Conversation.persistMessage", "repository", async () => {
+    const [inserted] = await db
+      .insert(conversationMessages)
+      .values({
+        conversationId,
+        userId: context.userId,
+        role: "user",
+        content: input.message,
+      })
+      .returning();
 
-  if (!userMessage) {
-    throw new Error("No se pudo guardar el mensaje del usuario.");
-  }
+    if (!inserted) {
+      throw new Error("No se pudo guardar el mensaje del usuario.");
+    }
 
-  // Los `MAX_HISTORY_MESSAGES` más recientes, no los primeros -- una
-  // conversación larga debe recordar lo último que se dijo, nunca
-  // truncar por el principio. Se pide en orden descendente (más
-  // reciente primero) para que `LIMIT` recorte el extremo correcto, y
-  // se revierte después: todo lo que consume `history` de aquí en
-  // adelante (`conversation`, Context Builder, `renderContextToMessages`)
-  // espera orden cronológico.
-  const recentHistory = await db
-    .select()
-    .from(conversationMessages)
-    .where(eq(conversationMessages.conversationId, conversationId))
-    .orderBy(desc(conversationMessages.createdAt))
-    .limit(MAX_HISTORY_MESSAGES);
-  const history = recentHistory.reverse();
+    // Los `MAX_HISTORY_MESSAGES` más recientes, no los primeros -- una
+    // conversación larga debe recordar lo último que se dijo, nunca
+    // truncar por el principio. Se pide en orden descendente (más
+    // reciente primero) para que `LIMIT` recorte el extremo correcto, y
+    // se revierte después: todo lo que consume `history` de aquí en
+    // adelante (`conversation`, Context Builder, `renderContextToMessages`)
+    // espera orden cronológico.
+    const recentHistory = await db
+      .select()
+      .from(conversationMessages)
+      .where(eq(conversationMessages.conversationId, conversationId))
+      .orderBy(desc(conversationMessages.createdAt))
+      .limit(MAX_HISTORY_MESSAGES);
+
+    return { userMessage: inserted, history: recentHistory.reverse() };
+  });
   logger.log({
     event: "db.query",
     requestId,
@@ -327,13 +330,15 @@ async function prepareMessage(
   let capturedMemory: Memory | null = null;
   if (lifeGraphContext) {
     try {
-      capturedMemory = await createMemoryEngine(db).capture(lifeGraphContext, {
-        content: input.message,
-        source: "conversation",
-        sourceId: userMessage.id,
-        personId: lifeGraphContext.personId,
-        occurredAt: userMessage.createdAt,
-      });
+      capturedMemory = await span("Memory.capture", "engine", () =>
+        createMemoryEngine(db).capture(lifeGraphContext, {
+          content: input.message,
+          source: "conversation",
+          sourceId: userMessage.id,
+          personId: lifeGraphContext.personId,
+          occurredAt: userMessage.createdAt,
+        }),
+      );
     } catch (error) {
       // Mismo criterio que `life-capture-service.ts` (auditoría
       // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo
@@ -377,6 +382,25 @@ async function prepareMessage(
   };
 }
 
+/**
+ * Envoltorio delgado de `prepareMessageInner` -- misión "complete
+ * latency profile": todo lo que corre antes de tocar la IA (persistir
+ * el mensaje, Reality/Memory/Knowledge/Identity Evolution vía Context
+ * Builder, Context Engine, Conversation Strategy, Presence, Voice,
+ * Reconnection/Narrative/Continuity) queda en una sola traza real
+ * (`chat.prepare_context`). Nunca cambia el resultado ni los errores --
+ * `runTrace` relanza tal cual lo que `prepareMessageInner` lance.
+ */
+async function prepareMessage(input: SendMessageInput): Promise<PreparedMessage> {
+  const { result, summary } = await runTrace(
+    input.requestId ?? "unknown",
+    "chat.prepare_context",
+    () => prepareMessageInner(input),
+  );
+  logTraceSummary(summary, { conversationId: result.conversationId, route: input.route });
+  return result;
+}
+
 interface FinalizeReplyInput {
   context: UserContext;
   lifeGraphContext: LifeGraphContext | null;
@@ -418,7 +442,7 @@ interface FinalizeReplyInput {
  * `app/api/chat/route.ts`), que sí sigue en scope válido; esta función
  * solo arranca las tareas y devuelve sus promesas.
  */
-async function finalizeReply(
+async function finalizeReplyInner(
   input: FinalizeReplyInput,
 ): Promise<{ backgroundTasks: Promise<unknown>[] }> {
   const {
@@ -437,12 +461,14 @@ async function finalizeReply(
     firstTokenMs,
   } = input;
 
-  await db.insert(conversationMessages).values({
-    conversationId,
-    userId: context.userId,
-    role: "assistant",
-    content: reply,
-  });
+  await span("Conversation.persistReply", "repository", () =>
+    db.insert(conversationMessages).values({
+      conversationId,
+      userId: context.userId,
+      role: "assistant",
+      content: reply,
+    }),
+  );
 
   // Diversidad conversacional (redesign del pipeline conversacional,
   // Beta): registrado solo tras una respuesta exitosa -- mismo
@@ -450,7 +476,9 @@ async function finalizeReply(
   // el turno de verdad se completó. Tolerante a fallos (`recordEvent`
   // ya nunca lanza), mismo criterio que `message_sent` más abajo.
   if (conversationSignal) {
-    await recordConversationSignalShown(db, context.userId, conversationSignal);
+    await span("Conversation.recordSignal", "repository", () =>
+      recordConversationSignalShown(db, context.userId, conversationSignal),
+    );
   }
 
   // `reopen`/`acknowledge_closure` ganaron el turno -- marcar el
@@ -464,10 +492,12 @@ async function finalizeReply(
   // debe tumbar la respuesta que la persona ya recibió.
   if (seenPromptToMark && lifeGraphContext) {
     try {
-      await new DrizzleSeenPromptRepository(db).markSeen(
-        lifeGraphContext,
-        seenPromptToMark.subjectType,
-        seenPromptToMark.subjectId,
+      await span("SeenPrompts.markSeen", "repository", () =>
+        new DrizzleSeenPromptRepository(db).markSeen(
+          lifeGraphContext,
+          seenPromptToMark.subjectType,
+          seenPromptToMark.subjectId,
+        ),
       );
     } catch (error) {
       logger.log({
@@ -524,11 +554,18 @@ async function finalizeReply(
     capturedMemory &&
     (capturedMemory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL
   ) {
-    await enqueueKnowledgeJob(db, {
-      userId: context.userId,
-      sourceType: "memory",
-      sourceId: capturedMemory.id,
-    });
+    // Solo encola la fila -- el análisis real del Knowledge Engine
+    // (enriquecimiento, Belief/Concept/Contradiction) corre después, en
+    // `worker/` (proceso aparte, decisión CTO #6), genuinamente fuera de
+    // la vida de esta petición HTTP -- no medible dentro de esta traza,
+    // documentado como límite conocido del perfil (ver README).
+    await span("Knowledge.enqueue", "repository", () =>
+      enqueueKnowledgeJob(db, {
+        userId: context.userId,
+        sourceType: "memory",
+        sourceId: capturedMemory.id,
+      }),
+    );
   }
 
   const totalDurationMs = Date.now() - startedAt;
@@ -548,6 +585,37 @@ async function finalizeReply(
   });
 
   return { backgroundTasks };
+}
+
+/**
+ * Envoltorio delgado de `finalizeReplyInner` -- misión "complete
+ * latency profile": persistir la respuesta, registrar la señal de
+ * diversidad, marcar `seen_prompts`, encolar Knowledge Engine, todo en
+ * su propia traza (`chat.finalize`), separada de `chat.prepare_context`
+ * a propósito -- ambas ya se completan sincrónicamente dentro de
+ * `generate()`, así que una sola traza combinada las mediría bien de
+ * todas formas, pero mantenerlas separadas dista de asumir nada nuevo
+ * sobre esa arquitectura: si algún día `finalizeReply` se mueve a
+ * correr fuera de línea (post-respuesta), esta separación ya está
+ * lista para esa realidad, sin necesitar otro cambio.
+ *
+ * Las tareas de `backgroundTasks` (título, Life Capture) NUNCA se
+ * miden aquí -- se disparan (`push`) pero nunca se esperan dentro de
+ * esta función, corren de verdad después de que la traza ya cerró (vía
+ * `after()` en el llamador). Medirlas exigiría una traza que sobreviva
+ * al cierre de esta función, fuera de alcance de esta misión --
+ * documentado como límite conocido, no un olvido.
+ */
+async function finalizeReply(
+  input: FinalizeReplyInput,
+): Promise<{ backgroundTasks: Promise<unknown>[] }> {
+  const { result, summary } = await runTrace(
+    input.requestId ?? "unknown",
+    "chat.finalize",
+    () => finalizeReplyInner(input),
+  );
+  logTraceSummary(summary, { conversationId: input.conversationId, route: input.route });
+  return result;
 }
 
 /**

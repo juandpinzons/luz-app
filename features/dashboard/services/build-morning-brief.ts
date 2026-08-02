@@ -10,6 +10,7 @@ import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
+import { span } from "../../../core/observability/trace";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 
 /**
@@ -117,7 +118,7 @@ const OPENING_ELIGIBLE_STRATEGIES = new Set<ConversationStrategyType>([
 async function buildStrategicContinuityLine(
   directive: ConversationStrategyDirective,
 ): Promise<string> {
-  const reply = await getAIProvider().generateReply([
+  const reply = await span("Morning Brief LLM", "llm", () => getAIProvider().generateReply([
     {
       role: "system",
       content:
@@ -136,7 +137,7 @@ async function buildStrategicContinuityLine(
         `Qué lograr con esta frase: ${directive.primaryObjective}\n` +
         `Qué evitar: ${directive.avoid}`,
     },
-  ]);
+  ]));
 
   return reply.trim();
 }
@@ -155,7 +156,7 @@ export async function buildMorningBrief(
    */
   isFirstVisit: boolean,
 ): Promise<MorningBrief> {
-  const snapshot = await assembleRealitySnapshot(db, lifeGraphContext);
+  const snapshot = await span("Reality", "engine", () => assembleRealitySnapshot(db, lifeGraphContext));
 
   const now = new Date();
   const firstName = personName.trim().split(/\s+/)[0];
@@ -166,7 +167,9 @@ export async function buildMorningBrief(
   let continuityLine: string | null = null;
 
   try {
-    const context = await createContextEngine(db).build(snapshot, lifeGraphContext);
+    const context = await span("Context Engine", "engine", () =>
+      createContextEngine(db).build(snapshot, lifeGraphContext),
+    );
     const directive = createConversationStrategyEngine().select({
       realitySnapshot: snapshot,
       contextItems: context.items,

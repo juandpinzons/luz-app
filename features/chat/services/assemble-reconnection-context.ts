@@ -3,6 +3,7 @@ import type { Database } from "../../../core/db/client";
 import { conversationMessages, memories } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
 import { DrizzleContinuityLoopRepository } from "../../../core/continuity-engine";
+import { span } from "../../../core/observability/trace";
 import { buildLifeDashboardSnapshot } from "../../dashboard/services/build-life-dashboard-snapshot";
 import { buildFollowUpRecommendations } from "../../dashboard/services/build-follow-up-recommendations";
 import { buildPresenceState } from "../../presence/application/build-presence-state";
@@ -104,7 +105,9 @@ export async function assembleReconnectionContext(
     return null;
   }
 
-  const snapshot = await buildLifeDashboardSnapshot(db, context);
+  const snapshot = await span("Life Dashboard Snapshot", "engine", () =>
+    buildLifeDashboardSnapshot(db, context),
+  );
   const recommendations = buildFollowUpRecommendations(snapshot.observations, snapshot);
   const presence = buildPresenceState(snapshot.observations, snapshot, recommendations);
   // Sin calendario/correo en vivo aquí -- Narrative solo usa `overdue`
@@ -115,10 +118,10 @@ export async function assembleReconnectionContext(
   const homeState = buildHomeState(snapshot, snapshot.observations, recommendations, presence, null);
 
   const [recentPrimaryKeys, previousFingerprint, loops, memoriesStored] = await Promise.all([
-    getRecentPrimaryKeys(db, userId),
-    getPreviousFingerprint(db, userId),
-    new DrizzleContinuityLoopRepository(db).list(context),
-    countMemories(db, context),
+    span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
+    span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
+    span("Continuity", "repository", () => new DrizzleContinuityLoopRepository(db).list(context)),
+    span("Reconnection.countMemories", "repository", () => countMemories(db, context)),
   ]);
 
   const experienceState = buildExperienceState(
@@ -128,23 +131,25 @@ export async function assembleReconnectionContext(
     previousFingerprint,
   );
 
-  const narrativeState = buildNarrativeState({
-    homeState,
-    experienceState,
-    loops,
-    recommendations,
-    lifeDashboardSnapshot: snapshot,
-    calendar: null,
-    email: null,
-    // Sin historial propio todavía -- este es el primer consumidor
-    // real de Narrative en el chat (ver `to-conversation-context.ts`:
-    // "Ningún llamador real hoy"), así que no hay
-    // `recentlyNarratedThreadIds` que reutilizar. El propio mecanismo
-    // de diversidad de este redesign (`conversation-signal-log.ts`,
-    // a nivel de tipo de estrategia) sigue evitando la repetición
-    // gruesa mientras tanto.
-    recentlyNarratedThreadIds: [],
-  });
+  const narrativeState = await span("Narrative", "engine", async () =>
+    buildNarrativeState({
+      homeState,
+      experienceState,
+      loops,
+      recommendations,
+      lifeDashboardSnapshot: snapshot,
+      calendar: null,
+      email: null,
+      // Sin historial propio todavía -- este es el primer consumidor
+      // real de Narrative en el chat (ver `to-conversation-context.ts`:
+      // "Ningún llamador real hoy"), así que no hay
+      // `recentlyNarratedThreadIds` que reutilizar. El propio mecanismo
+      // de diversidad de este redesign (`conversation-signal-log.ts`,
+      // a nivel de tipo de estrategia) sigue evitando la repetición
+      // gruesa mientras tanto.
+      recentlyNarratedThreadIds: [],
+    }),
+  );
 
   const conversationContext = toConversationContext(narrativeState);
 

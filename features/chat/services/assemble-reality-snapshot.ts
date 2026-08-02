@@ -20,6 +20,7 @@ import { DrizzleCuriosityQuestionRepository } from "../../../core/curiosity-engi
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
+import { span } from "../../../core/observability/trace";
 import { assembleIdentityEvolution } from "../../identity-evolution";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
@@ -141,47 +142,56 @@ export async function assembleRealitySnapshot(
     seenClosureIds,
     identitySnapshot,
   ] = await Promise.all([
-    options.currentMessage
-      ? selectContextualMemories(
-          db,
-          context,
-          options.currentMessage,
-          RELEVANT_MEMORY_LIMIT,
-        )
-      : createMemoryEngine(db).retrieve(context, {
-          limit: RELEVANT_MEMORY_LIMIT,
-        }),
-    options.focusMemoryId
-      ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
-      : Promise.resolve(null),
-    listActiveGoals(db, context),
-    listActiveProjects(db, context),
-    listActiveHabits(db, context),
+    span("Memory.retrieve", "repository", () =>
+      options.currentMessage
+        ? selectContextualMemories(
+            db,
+            context,
+            options.currentMessage,
+            RELEVANT_MEMORY_LIMIT,
+          )
+        : createMemoryEngine(db).retrieve(context, {
+            limit: RELEVANT_MEMORY_LIMIT,
+          }),
+    ),
+    span("Memory.focused", "repository", () =>
+      options.focusMemoryId
+        ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
+        : Promise.resolve(null),
+    ),
+    span("Life.activeGoals", "repository", () => listActiveGoals(db, context)),
+    span("Life.activeProjects", "repository", () => listActiveProjects(db, context)),
+    span("Life.activeHabits", "repository", () => listActiveHabits(db, context)),
     // `type: "intention"` filtrado en JS, no en SQL -- mismo criterio
     // que `growingBeliefs`/`fadingBeliefs` sobre `beliefs.list()`:
     // Memory Engine no expone un filtro por tipo todavía, y agregar
     // uno nuevo para un solo consumidor no vale la pena antes de que
     // un segundo lo necesite.
-    new DrizzleMemoryRepository(db).listActive(context),
-    new DrizzleInsightRepository(db).list(context),
-    new DrizzleBeliefRepository(db).list(context),
-    new DrizzleConceptRepository(db).list(context),
-    new DrizzleReasoningRepository(db).list(context),
-    new DrizzleCuriosityQuestionRepository(db).getPending(context),
-    new DrizzleContradictionRepository(db).list(context),
+    span("Memory.active", "repository", () => new DrizzleMemoryRepository(db).listActive(context)),
+    span("Knowledge.insights", "repository", () => new DrizzleInsightRepository(db).list(context)),
+    span("Knowledge.beliefs", "repository", () => new DrizzleBeliefRepository(db).list(context)),
+    span("Knowledge.concepts", "repository", () => new DrizzleConceptRepository(db).list(context)),
+    span("Knowledge.reasoning", "repository", () => new DrizzleReasoningRepository(db).list(context)),
+    span("Curiosity", "repository", () => new DrizzleCuriosityQuestionRepository(db).getPending(context)),
+    span("Contradiction", "repository", () => new DrizzleContradictionRepository(db).list(context)),
     // Calendario en la conversación (misión "conecta calendario con
     // conversación") -- `getCalendarSignalsForConversation` nunca
     // lanza (degrada a `[]` ante cualquier falla), así que puede vivir
     // en el mismo `Promise.all` que el resto sin arriesgar el
     // ensamblado completo por un problema de calendario.
-    getCalendarSignalsForConversation(db, context),
-    listRecentlyCompletedGoals(db, context, recentlyCompletedSince),
-    listRecentlyCompletedProjects(db, context, recentlyCompletedSince),
-    seenPromptRepository.listSeenSubjectIds(
-      context,
-      SEEN_PROMPT_SUBJECT_TYPES.intentionFollowup,
+    span("Calendar", "external_api", () => getCalendarSignalsForConversation(db, context)),
+    span("Life.recentlyCompletedGoals", "repository", () =>
+      listRecentlyCompletedGoals(db, context, recentlyCompletedSince),
     ),
-    seenPromptRepository.listSeenSubjectIds(context, SEEN_PROMPT_SUBJECT_TYPES.goalClosure),
+    span("Life.recentlyCompletedProjects", "repository", () =>
+      listRecentlyCompletedProjects(db, context, recentlyCompletedSince),
+    ),
+    span("SeenPrompts.intentionFollowup", "repository", () =>
+      seenPromptRepository.listSeenSubjectIds(context, SEEN_PROMPT_SUBJECT_TYPES.intentionFollowup),
+    ),
+    span("SeenPrompts.goalClosure", "repository", () =>
+      seenPromptRepository.listSeenSubjectIds(context, SEEN_PROMPT_SUBJECT_TYPES.goalClosure),
+    ),
     // Identity Evolution real (`features/identity-evolution`) -- única
     // frontera cruzada a propósito (`features/chat` normalmente nunca
     // importa de otro slice de `features/*`): este archivo ya es la
@@ -191,7 +201,7 @@ export async function assembleRealitySnapshot(
     // resto de este `Promise.all` -- `assembleIdentityEvolution` solo
     // reutiliza `describeEvolution` (ya real) + una consulta a
     // `core/concept-graph`, nunca construye `HomeState`/`ExperienceState`.
-    assembleIdentityEvolution(db, context),
+    span("Identity Evolution", "engine", () => assembleIdentityEvolution(db, context)),
   ]);
 
   const relevantMemories = focusedMemory
