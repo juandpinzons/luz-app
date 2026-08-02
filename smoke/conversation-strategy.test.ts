@@ -251,18 +251,16 @@ export const conversationStrategyFlow: SmokeFlow = {
       fadingBeliefs: {
         items: [
           {
-            id: createEntityId("fading-belief-1"),
             statement: "Está definido por un trabajo que ya dejó",
             domain: "career",
             confidence: 40,
-            since: hoursAgo(48),
           },
         ],
       },
     };
     assert(
       (await selectStrategyFor(releaseSnapshot, false)) === "release",
-      "una creencia recién expirada/retractada (fadingBeliefs) debería producir 'release'",
+      "una dimensión/tema deemphasized (fadingBeliefs, vía Identity Evolution) debería producir 'release'",
     );
     assert(
       (await selectStrategyFor(releaseSnapshot, true)) !== "release",

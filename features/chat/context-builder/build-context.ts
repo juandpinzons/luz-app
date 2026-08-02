@@ -128,13 +128,14 @@ export async function buildContext(
   // "Qué cambió" + "qué capítulo vive" (redesign del pipeline
   // conversacional, Beta) -- no-op barato (`isFirstContact` es la
   // primera condición que revisa) en el caso común de una conversación
-  // en curso; solo consulta de verdad al reabrir.
+  // en curso; solo ensambla el `NarrativeState` real, con su propio
+  // costo (equivalente a una carga de Dashboard), al reabrir de
+  // verdad.
   const reconnectionContext = await assembleReconnectionContext(
     db,
     lifeGraphContext,
     userId,
     isFirstContact,
-    realitySnapshot,
   );
 
   const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(

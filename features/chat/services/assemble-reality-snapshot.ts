@@ -20,6 +20,7 @@ import { DrizzleCuriosityQuestionRepository } from "../../../core/curiosity-engi
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "../../../core/knowledge-engine";
 import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
+import { assembleIdentityEvolution } from "../../identity-evolution";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
@@ -138,6 +139,7 @@ export async function assembleRealitySnapshot(
     recentlyCompletedProjects,
     seenIntentionIds,
     seenClosureIds,
+    identitySnapshot,
   ] = await Promise.all([
     options.currentMessage
       ? selectContextualMemories(
@@ -180,6 +182,16 @@ export async function assembleRealitySnapshot(
       SEEN_PROMPT_SUBJECT_TYPES.intentionFollowup,
     ),
     seenPromptRepository.listSeenSubjectIds(context, SEEN_PROMPT_SUBJECT_TYPES.goalClosure),
+    // Identity Evolution real (`features/identity-evolution`) -- única
+    // frontera cruzada a propósito (`features/chat` normalmente nunca
+    // importa de otro slice de `features/*`): este archivo ya es la
+    // capa anti-corrupción que traduce motores/módulos reales a la
+    // forma neutral de `RealitySnapshot`, mismo rol que ya cumple para
+    // `core/belief-engine`/`core/knowledge-engine`. Tan barato como el
+    // resto de este `Promise.all` -- `assembleIdentityEvolution` solo
+    // reutiliza `describeEvolution` (ya real) + una consulta a
+    // `core/concept-graph`, nunca construye `HomeState`/`ExperienceState`.
+    assembleIdentityEvolution(db, context),
   ]);
 
   const relevantMemories = focusedMemory
@@ -274,17 +286,16 @@ export async function assembleRealitySnapshot(
     .sort((a, b) => b.lastReinforcedAt.getTime() - a.lastReinforcedAt.getTime())
     .slice(0, RELEVANT_GROWING_BELIEF_LIMIT);
 
-  // Identity Evolution, hecha audible -- reutiliza el mismo `beliefs`
-  // ya obtenido arriba, cero consultas nuevas. `decay-stale-beliefs.ts`
-  // es el único lugar que transiciona un Belief fuera de `active`, y
-  // nunca vuelve a tocarlo después -- así que `updatedAt` es el
-  // instante real de la transición, nunca una aproximación. La más
-  // reciente primero: el capítulo que se cerró hace más tiempo ya dejó
-  // de ser noticia.
-  const fadingBeliefs = beliefs
-    .filter((belief) => belief.status === "expired" || belief.status === "retracted")
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-    .slice(0, RELEVANT_FADING_BELIEF_LIMIT);
+  // Identity Evolution real, hecha audible -- `identitySnapshot.deemphasized`
+  // ya es exactamente "cosas que ya no deberían dominar la conversación"
+  // (dimensiones/temas históricamente fuertes ahora `dormant`/`declining`),
+  // computado con memoria de largo plazo real (`lookbackDays`), no un
+  // simple chequeo de estado de una sola creencia. `RELEVANT_FADING_BELIEF_LIMIT`
+  // se mantiene (1) -- mismo criterio de "un capítulo cerrado a la vez".
+  const fadingIdentityUnits = identitySnapshot.deemphasized.slice(
+    0,
+    RELEVANT_FADING_BELIEF_LIMIT,
+  );
 
   // Reapertura (redesign del pipeline conversacional, Beta) -- memorias
   // tipo "intention" todavía sin seguimiento, filtradas contra
@@ -461,17 +472,16 @@ export async function assembleRealitySnapshot(
         confidence: belief.confidence.score,
       })),
     },
-    // Identity Evolution -- la creencia que más recientemente dejó de
-    // sostenerse. Sin ninguna en `expired`/`retracted` todavía, `items`
+    // Identity Evolution real (`features/identity-evolution`) -- la
+    // dimensión/tema que ya no debería dominar la conversación. Sin
+    // ninguno por encima del umbral de presencia real todavía, `items`
     // queda vacío a propósito, mismo criterio de ausencia real que el
     // resto de este ensamblador.
     fadingBeliefs: {
-      items: fadingBeliefs.map((belief) => ({
-        id: belief.id,
-        statement: belief.statement,
-        domain: belief.domain,
-        confidence: belief.confidence.score,
-        since: belief.updatedAt,
+      items: fadingIdentityUnits.map((unit) => ({
+        statement: unit.label,
+        domain: unit.unitKind === "dimension" ? (unit.key as LifeDomainType) : undefined,
+        confidence: unit.weight,
       })),
     },
     // Continuidad al reabrir -- una intención sin resolver, si hay una
