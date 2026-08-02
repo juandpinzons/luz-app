@@ -26,6 +26,20 @@ export const eventTypeEnum = pgEnum("event_type", [
    * captura" que esta tabla ya existe para modelar.
    */
   "experience_card_shown",
+  /**
+   * Redesign del pipeline conversacional (Beta) -- una fila por cada
+   * turno de LUZ, registrando qué decidió mostrar (Conversation
+   * Strategy ganadora, qué memorias/insights ganaron el top del
+   * scoring, qué dominio de curiosidad se preguntó). Es la base de
+   * datos real detrás del sistema de diversidad conversacional: sin
+   * esto, nada sabe qué ya se dijo/preguntó/celebró en conversaciones
+   * anteriores. Mismo criterio que `experience_card_shown`: una fila
+   * por evento, leída de vuelta por `userId`+`type`+`createdAt`, nunca
+   * una columna `metadata` genérica sustituyendo modelado real en otra
+   * tabla -- este SÍ es exactamente el tipo de señal operacional que
+   * esta tabla existe para modelar.
+   */
+  "conversation_signal_shown",
 ]);
 
 export const events = pgTable(

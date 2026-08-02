@@ -1,0 +1,1 @@
+ALTER TYPE "public"."event_type" ADD VALUE 'conversation_signal_shown';

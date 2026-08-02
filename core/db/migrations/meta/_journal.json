@@ -162,6 +162,20 @@
       "when": 1785525698179,
       "tag": "0022_index_optimization_45_table_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785525699179,
+      "tag": "0023_conversation_signal_shown_event_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785525700179,
+      "tag": "0024_seen_prompts",
+      "breakpoints": true
     }
   ]
 }
