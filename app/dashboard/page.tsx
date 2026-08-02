@@ -5,6 +5,7 @@ import { after } from "next/server";
 import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
+import { DrizzleContinuityLoopRepository } from "@/core/continuity-engine";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { getRecentMemoryHighlight } from "@/features/dashboard/services/get-recent-memory-highlight";
@@ -19,8 +20,11 @@ import {
   type DashboardSummary,
 } from "@/features/dashboard/services/build-dashboard-summary";
 import { buildLifeDashboardSnapshot } from "@/features/dashboard/services/build-life-dashboard-snapshot";
+import type { LifeDashboardSnapshot } from "@/features/dashboard/services/build-life-dashboard-snapshot";
 import { buildFollowUpRecommendations } from "@/features/dashboard/services/build-follow-up-recommendations";
+import type { FollowUpRecommendation } from "@/features/dashboard/services/build-follow-up-recommendations";
 import { buildPresenceState } from "@/features/presence/application/build-presence-state";
+import type { PresenceState } from "@/features/presence/domain/presence-state";
 import { buildHomeState } from "@/features/home/application/build-home-state";
 import type { HomeState } from "@/features/home/domain/home-state";
 import { buildExperienceState } from "@/features/experience/application/build-experience-state";
@@ -38,6 +42,10 @@ import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { logTraceSummary, runTrace, span } from "@/core/observability/trace";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
+import { assembleIdentityEvolution } from "@/features/identity-evolution";
+import { buildNarrativeState } from "@/features/narrative";
+import { deriveMood, type AvatarMoodSignal } from "@/features/avatar";
+import { PresenceAvatar } from "@/features/avatar/components/presence-avatar";
 
 /**
  * Mismo ritual de apertura que `/chat` (la esfera respira, el trazo se
@@ -171,10 +179,21 @@ export default async function DashboardPage() {
    * anidados bajo "Morning Brief" -> "Reality"). Medición pura: ningún
    * `span()` cambia qué hace el código que envuelve.
    */
+  interface HomeStateBaseResult {
+    readonly homeState: HomeState;
+    /** Cruda, previa al passthrough aplanado de `HomeState` -- `deriveMood` (Avatar V1) la necesita tal cual, nunca reconstruida desde `HomeState`. */
+    readonly presence: PresenceState;
+    /** Solo `overdue` la necesita `buildNarrativeState`, ver su propio docblock. */
+    readonly snapshot: LifeDashboardSnapshot;
+    /** Lista completa, sin recortar -- distinta de `homeState.attentionNeeded` (Presence ya la acotó a 2-3). */
+    readonly recommendations: FollowUpRecommendation[];
+  }
+
   async function loadDashboardData(): Promise<{
     summary: DashboardSummary | null;
     homeState: HomeState | null;
     experience: ExperienceState | null;
+    avatarMood: AvatarMoodSignal | null;
     brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
     calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
     recentMemory: Awaited<ReturnType<typeof getRecentMemoryHighlight>>;
@@ -258,7 +277,7 @@ export default async function DashboardPage() {
    * construye primero con `null` para no bloquear el resto del Life
    * Graph a que el calendario responda.
    */
-  async function loadHomeStateBase(): Promise<HomeState | null> {
+  async function loadHomeStateBase(): Promise<HomeStateBaseResult | null> {
     if (!lifeGraphContext) return null;
     try {
       const snapshot = await span("Life Dashboard Snapshot", "engine", () =>
@@ -270,9 +289,10 @@ export default async function DashboardPage() {
       const presence = await span("Presence", "compute", async () =>
         buildPresenceState(snapshot.observations, snapshot, recommendations),
       );
-      return await span("Home", "compute", async () =>
+      const homeState = await span("Home", "compute", async () =>
         buildHomeState(snapshot, snapshot.observations, recommendations, presence, null),
       );
+      return { homeState, presence, snapshot, recommendations };
     } catch (error) {
       logger.log({
         event: "dashboard.home_state_failed",
@@ -382,7 +402,7 @@ export default async function DashboardPage() {
   // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
   // dos `select` simples que antes solo se pedían DESPUÉS de tener
   // `homeState` en mano, aunque nunca lo necesitaron a él tampoco.
-  const [summary, homeStateBase, brief, calendarOutcome, recentMemory, recentPrimaryKeys, previousFingerprint] =
+  const [summary, homeStateBaseResult, brief, calendarOutcome, recentMemory, recentPrimaryKeys, previousFingerprint] =
     await Promise.all([
       span("Dashboard Summary", "orchestration", loadSummary),
       span("Home State", "orchestration", loadHomeStateBase),
@@ -393,7 +413,7 @@ export default async function DashboardPage() {
       span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
     ]);
 
-  let homeState = homeStateBase;
+  let homeState = homeStateBaseResult?.homeState ?? null;
   if (homeState && calendarOutcome?.status === "connected") {
     homeState = { ...homeState, calendar: calendarOutcome.calendarContext };
   }
@@ -412,8 +432,37 @@ export default async function DashboardPage() {
    * corre después de que la respuesta ya salió, nunca antes.
    */
   let experience: ExperienceState | null = null;
-  if (homeState) {
+  /**
+   * Avatar V1 (Presence Avatar UI, `features/avatar/`) -- el `mood` de
+   * fondo que alimenta `<PresenceAvatar>` en esta página. Narrative
+   * necesita `experience` ya resuelto (`experienceState`), así que
+   * Narrative/Identity no pueden unirse al primer `Promise.all` de
+   * arriba -- pero tampoco dependen entre sí ni de `experience`, así
+   * que arrancan en paralelo con el cómputo de Experience (mismo
+   * criterio de "correr lo independiente en paralelo" que ya aplica el
+   * resto de este archivo), nunca en secuencia detrás de él.
+   */
+  let avatarMood: AvatarMoodSignal | null = null;
+  if (homeState && homeStateBaseResult) {
     const capturedHomeState = homeState;
+    const capturedBase = homeStateBaseResult;
+
+    const avatarInputsPromise = Promise.all([
+      span("Continuity", "repository", () => new DrizzleContinuityLoopRepository(db).list(lifeGraphContext!)),
+      span("Identity Evolution", "engine", () => assembleIdentityEvolution(db, lifeGraphContext!)),
+    ]).catch((error: unknown) => {
+      logger.log({
+        event: "dashboard.avatar_inputs_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        lifeGraphId: lifeGraphContext?.lifeGraphId,
+        ...describeError(error),
+      });
+      return null;
+    });
+
     try {
       experience = await span("Experience", "compute", async () =>
         buildExperienceState(
@@ -439,9 +488,47 @@ export default async function DashboardPage() {
         ...describeError(error),
       });
     }
+
+    const avatarInputs = await avatarInputsPromise;
+    if (experience && avatarInputs) {
+      const [loops, identitySnapshot] = avatarInputs;
+      try {
+        const narrativeState = buildNarrativeState({
+          homeState: capturedHomeState,
+          experienceState: experience,
+          loops,
+          recommendations: capturedBase.recommendations,
+          lifeDashboardSnapshot: capturedBase.snapshot,
+          // `getLiveCalendarContext` solo expone el `CalendarSnapshot`
+          // crudo internamente (lo traduce a `HomeCalendarContext` antes
+          // de devolverlo) -- mismo `calendar: null` que ya usa el único
+          // otro llamador real de Narrative (`assembleReconnectionContext.ts`),
+          // nunca tocar `core/calendar-connections` solo para exponerlo.
+          calendar: null,
+          email: null,
+          recentlyNarratedThreadIds: [],
+        });
+        avatarMood = deriveMood({
+          presence: capturedBase.presence,
+          experience,
+          narrative: narrativeState,
+          identity: identitySnapshot,
+        });
+      } catch (error) {
+        logger.log({
+          event: "dashboard.avatar_mood_failed",
+          severity: "error",
+          requestId,
+          route: ROUTE,
+          userId,
+          lifeGraphId: lifeGraphContext?.lifeGraphId,
+          ...describeError(error),
+        });
+      }
+    }
   }
 
-    return { summary, homeState, experience, brief, calendarOutcome, recentMemory, isFirstVisit };
+    return { summary, homeState, experience, avatarMood, brief, calendarOutcome, recentMemory, isFirstVisit };
   }
 
   const { result: dashboardData, summary: trace } = await runTrace(
@@ -450,7 +537,8 @@ export default async function DashboardPage() {
     loadDashboardData,
   );
   logTraceSummary(trace, { route: ROUTE, userId });
-  const { summary, homeState, experience, brief, calendarOutcome, recentMemory, isFirstVisit } = dashboardData;
+  const { summary, homeState, experience, avatarMood, brief, calendarOutcome, recentMemory, isFirstVisit } =
+    dashboardData;
 
   const daysSinceLastMessage = summary?.lastMessageAt
     ? daysSince(summary.lastMessageAt, new Date())
@@ -473,19 +561,22 @@ export default async function DashboardPage() {
         la fecha queda deliberadamente más chica y muted, como una
         acotación, no como parte del saludo.
       */}
-      <div className="animate-fade-in space-y-1">
-        {homeState ? (
-          <>
+      <div className="animate-fade-in flex items-center gap-4">
+        {avatarMood && <PresenceAvatar mood={avatarMood} size="sm" className="flex-shrink-0" />}
+        <div className="space-y-1">
+          {homeState ? (
+            <>
+              <p className="text-2xl font-light text-zinc-100">
+                {personalizeGreeting(homeState.greeting, session.user.name)}
+              </p>
+              {brief?.dateLine && <p className="text-sm text-zinc-500">{brief.dateLine}</p>}
+            </>
+          ) : (
             <p className="text-2xl font-light text-zinc-100">
-              {personalizeGreeting(homeState.greeting, session.user.name)}
+              {timeOfDayGreeting(new Date())}.
             </p>
-            {brief?.dateLine && <p className="text-sm text-zinc-500">{brief.dateLine}</p>}
-          </>
-        ) : (
-          <p className="text-2xl font-light text-zinc-100">
-            {timeOfDayGreeting(new Date())}.
-          </p>
-        )}
+          )}
+        </div>
       </div>
 
       {/*

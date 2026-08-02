@@ -52,6 +52,27 @@
   --animate-light-pulse: light-pulse 500ms ease-in both;
   --animate-veil-dissolve: veil-dissolve 500ms ease-in both;
   --animate-emerge: emerge 500ms ease-out both;
+
+  /*
+   * Avatar V1 (Presence Avatar UI, `features/avatar/components/`) --
+   * mismo criterio de "asentarse, nunca rebotar" que el resto de este
+   * vocabulario. `breathe`/`blink` son micro-loops involuntarios,
+   * siempre activos, independientes de `emotion`/`animation` (ver
+   * `features/avatar/README.md`); `think`/`listen`/`sleep` son loops
+   * sostenidos mientras la condición real siga vigente; `jump`/`nod`/
+   * `wave`/`hug` son gestos de un solo disparo (personaje sin brazos:
+   * `wave`/`hug` se expresan como balanceo/brillo cálido, nunca un
+   * gesto literal de brazos que no existen).
+   */
+  --animate-avatar-breathe: avatar-breathe 4.6s ease-in-out infinite;
+  --animate-avatar-blink: avatar-blink 260ms ease-in-out;
+  --animate-avatar-think: avatar-think 2.6s ease-in-out infinite;
+  --animate-avatar-listen: avatar-listen 2.2s ease-in-out infinite;
+  --animate-avatar-sleep: avatar-sleep 6s ease-in-out infinite;
+  --animate-avatar-jump: avatar-jump 1.5s cubic-bezier(0.34, 1.56, 0.64, 1) 1 both;
+  --animate-avatar-nod: avatar-nod 800ms ease-in-out 1 both;
+  --animate-avatar-wave: avatar-wave 1.2s ease-in-out 1 both;
+  --animate-avatar-hug: avatar-hug 2s ease-in-out 1 both;
 }
 
 @keyframes fade-in {
@@ -179,6 +200,128 @@
   }
 }
 
+/* Respiración involuntaria del personaje (Avatar V1) -- siempre activa, independiente de `emotion`/`animation`. Misma escala sutil que `sphere-breathe`, ritmo propio para no leerse como una copia. */
+@keyframes avatar-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.025);
+  }
+}
+
+/* Parpadeo -- temporizador propio del cliente (aleatorio, 3-6s), nunca elegido por el backend. Solo aplica al grupo de ojos. */
+@keyframes avatar-blink {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(0.05);
+  }
+}
+
+/* "Pensando" -- un leve balanceo, ritmo distinto de la respiración para que se lea como una actividad real en curso, no como la misma respiración. */
+@keyframes avatar-think {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-1.5deg) translateY(-2px);
+  }
+}
+
+/* "Escuchando" -- inclinación sutil hacia adelante, sostenida mientras la persona escribe. */
+@keyframes avatar-listen {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(1px) scale(1.015);
+  }
+}
+
+/* Dormido -- respiración más lenta y más discreta, nunca la misma amplitud que estar despierto. */
+@keyframes avatar-sleep {
+  0%,
+  100% {
+    transform: scale(0.97);
+    opacity: 0.75;
+  }
+  50% {
+    transform: scale(0.985);
+    opacity: 0.82;
+  }
+}
+
+/* Gesto "jump" -- celebración, un solo disparo. */
+@keyframes avatar-jump {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    transform: translateY(-10px) scale(1.05);
+  }
+  60% {
+    transform: translateY(0) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Gesto "nod" -- reconocimiento de una urgencia real, un solo disparo. */
+@keyframes avatar-nod {
+  0% {
+    transform: rotate(0deg);
+  }
+  40% {
+    transform: rotate(6deg);
+  }
+  70% {
+    transform: rotate(-2deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+/* Gesto "wave" -- saludo de entrada, un solo disparo. Sin brazos: se expresa como un balanceo cálido. */
+@keyframes avatar-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-5deg);
+  }
+  50% {
+    transform: rotate(4deg);
+  }
+  75% {
+    transform: rotate(-2deg);
+  }
+}
+
+/* Gesto "hug" -- consuelo, un solo disparo. Sin brazos: un brillo cálido que se expande y se asienta. */
+@keyframes avatar-hug {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.06);
+    filter: brightness(1.15);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
@@ -209,11 +352,21 @@
   .animate-script-reveal,
   .animate-light-pulse,
   .animate-veil-dissolve,
-  .animate-emerge {
+  .animate-emerge,
+  .animate-avatar-breathe,
+  .animate-avatar-blink,
+  .animate-avatar-think,
+  .animate-avatar-listen,
+  .animate-avatar-sleep,
+  .animate-avatar-jump,
+  .animate-avatar-nod,
+  .animate-avatar-wave,
+  .animate-avatar-hug {
     animation: none;
     opacity: 1;
     transform: none;
     clip-path: none;
+    filter: none;
   }
 }
 
