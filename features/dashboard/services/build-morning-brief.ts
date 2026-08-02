@@ -142,10 +142,20 @@ async function buildStrategicContinuityLine(
   return reply.trim();
 }
 
-export async function buildMorningBrief(
+/**
+ * La única parte de `MorningBrief` que toca IA (`buildStrategicContinuityLine`)
+ * -- extraída como su propia función (misión "complete latency profile",
+ * roadmap #1) para que un llamador que SOLO necesite esto (el futuro
+ * endpoint diferido que reemplace la espera síncrona de
+ * `app/dashboard/page.tsx`, mismo patrón que ya usa `/api/chat/welcome`
+ * para su propio saludo generado por IA) pueda pedirlo sin pasar por
+ * `buildMorningBrief` completo. `buildMorningBrief` la sigue llamando
+ * tal cual abajo -- ningún cambio de comportamiento en el camino que
+ * ya existe hoy, esto es una extracción, no una reescritura.
+ */
+export async function buildContinuityLine(
   db: Database,
   lifeGraphContext: LifeGraphContext,
-  personName: string,
   /**
    * Cero conversaciones registradas todavía (ver `isFirstVisit` en
    * `app/dashboard/page.tsx`) -- la señal equivalente a
@@ -155,16 +165,8 @@ export async function buildMorningBrief(
    * cuando se arma el saludo del Dashboard).
    */
   isFirstVisit: boolean,
-): Promise<MorningBrief> {
+): Promise<string | null> {
   const snapshot = await span("Reality", "engine", () => assembleRealitySnapshot(db, lifeGraphContext));
-
-  const now = new Date();
-  const firstName = personName.trim().split(/\s+/)[0];
-  const greeting = timeOfDayGreeting(now);
-  const greetingLine = firstName ? `${greeting}, ${firstName}.` : `${greeting}.`;
-  const dateLine = buildDateLine(now);
-
-  let continuityLine: string | null = null;
 
   try {
     const context = await span("Context Engine", "engine", () =>
@@ -189,8 +191,9 @@ export async function buildMorningBrief(
     });
 
     if (OPENING_ELIGIBLE_STRATEGIES.has(directive.strategy)) {
-      continuityLine = await buildStrategicContinuityLine(directive);
+      return await buildStrategicContinuityLine(directive);
     }
+    return null;
   } catch (error) {
     // Mismo criterio que `life-capture-service.ts` (auditoría
     // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo solo a
@@ -212,8 +215,23 @@ export async function buildMorningBrief(
         errorCode: detail.errorCode,
       },
     });
-    continuityLine = null;
+    return null;
   }
+}
+
+export async function buildMorningBrief(
+  db: Database,
+  lifeGraphContext: LifeGraphContext,
+  personName: string,
+  isFirstVisit: boolean,
+): Promise<MorningBrief> {
+  const now = new Date();
+  const firstName = personName.trim().split(/\s+/)[0];
+  const greeting = timeOfDayGreeting(now);
+  const greetingLine = firstName ? `${greeting}, ${firstName}.` : `${greeting}.`;
+  const dateLine = buildDateLine(now);
+
+  const continuityLine = await buildContinuityLine(db, lifeGraphContext, isFirstVisit);
 
   return { greetingLine, dateLine, continuityLine };
 }

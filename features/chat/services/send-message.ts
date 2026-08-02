@@ -461,25 +461,34 @@ async function finalizeReplyInner(
     firstTokenMs,
   } = input;
 
-  await span("Conversation.persistReply", "repository", () =>
-    db.insert(conversationMessages).values({
-      conversationId,
-      userId: context.userId,
-      role: "assistant",
-      content: reply,
-    }),
-  );
-
-  // Diversidad conversacional (redesign del pipeline conversacional,
-  // Beta): registrado solo tras una respuesta exitosa -- mismo
-  // criterio que el resto de `finalizeReply`, nunca antes de saber que
-  // el turno de verdad se completó. Tolerante a fallos (`recordEvent`
-  // ya nunca lanza), mismo criterio que `message_sent` más abajo.
-  if (conversationSignal) {
-    await span("Conversation.recordSignal", "repository", () =>
-      recordConversationSignalShown(db, context.userId, conversationSignal),
-    );
-  }
+  // Independientes entre sí (misión "complete latency profile", ítem
+  // de roadmap #4): `recordConversationSignalShown` escribe a `events`
+  // usando `conversationSignal` (ya resuelto por `prepareMessage`) y
+  // `userId` -- nunca lee ni depende de la fila que `persistReply`
+  // inserta en `conversation_messages`. Antes se esperaban una detrás
+  // de otra sin que ninguna necesitara el resultado de la otra, mismo
+  // patrón ya corregido esta sesión en `app/dashboard/page.tsx`.
+  await Promise.all([
+    span("Conversation.persistReply", "repository", () =>
+      db.insert(conversationMessages).values({
+        conversationId,
+        userId: context.userId,
+        role: "assistant",
+        content: reply,
+      }),
+    ),
+    // Diversidad conversacional (redesign del pipeline conversacional,
+    // Beta): registrado solo tras una respuesta exitosa -- mismo
+    // criterio que el resto de `finalizeReply`, nunca antes de saber
+    // que el turno de verdad se completó. Tolerante a fallos
+    // (`recordEvent` ya nunca lanza), mismo criterio que `message_sent`
+    // más abajo.
+    conversationSignal
+      ? span("Conversation.recordSignal", "repository", () =>
+          recordConversationSignalShown(db, context.userId, conversationSignal),
+        )
+      : Promise.resolve(),
+  ]);
 
   // `reopen`/`acknowledge_closure` ganaron el turno -- marcar el
   // sujeto como visto para que nunca vuelva a ganar (`seen_prompts`,
