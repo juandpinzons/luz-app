@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +18,9 @@ import type {
 
 /** Sin llamada de red -- se usa solo al reanudar una conversación histórica puntual, donde el gesto es "volver a algo", nunca la bienvenida completa generada por IA (esa es solo para empezar de cero). */
 const RESUME_CUE = "De vuelta";
+
+/** Ver `showOpeningRitual` en `ChatPageContent`: una sola vez por navegador, nunca por servidor (no hay campo de cuenta para esto, y no hace falta uno -- ver el mismo docblock). */
+const CHAT_RITUAL_SEEN_KEY = "luz:chat-ritual-seen";
 
 /**
  * Avatar V1 -- `/chat` recibe la capa de interacción en vivo completa
@@ -195,6 +198,21 @@ function ChatPageContent() {
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  /**
+   * Beta-critical polish (rendimiento, mismo mandato que ya corrigió
+   * Dashboard): el ritual de apertura (~1.9s) se reproducía en TODA
+   * visita a /chat, no solo la primera vez -- a diferencia de Dashboard,
+   * que ya lo gatea con `isFirstVisit` (`app/dashboard/page.tsx`) desde
+   * antes de este cambio. Arranca en `true` (mismo valor en servidor y
+   * en el primer render del cliente -- sin esto, `localStorage` no
+   * existe en el servidor y un mismatch de hidratación sería real) y se
+   * corrige, si corresponde, en el `useLayoutEffect` de abajo --
+   * *antes* de pintar, para que quien ya lo vio nunca vea ni un frame
+   * del velo. `null` no hace falta aquí (a diferencia de
+   * `floating-avatar.tsx`): no hay una posición que calcular, solo un
+   * booleano que ya tiene un valor por defecto seguro.
+   */
+  const [showOpeningRitual, setShowOpeningRitual] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLElement>(null);
   /**
@@ -212,6 +230,24 @@ function ChatPageContent() {
    * el valor no cambió).
    */
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  // `useLayoutEffect`, no `useEffect`: corre antes de que el navegador
+  // pinte, así que quien ya vio el ritual nunca ve el velo aparecer y
+  // desaparecer en el mismo frame -- a diferencia de un `useEffect`
+  // normal, que corre después del primer pintado real.
+  useLayoutEffect(() => {
+    const seen = window.localStorage.getItem(CHAT_RITUAL_SEEN_KEY) === "true";
+    if (seen) {
+      // `window`/`localStorage` no existen durante SSR -- el estado
+      // tiene que arrancar en `true` (mismo output en servidor y en el
+      // primer render del cliente) y corregirse aquí, después de
+      // montar, mismo criterio ya establecido en `floating-avatar.tsx`.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setShowOpeningRitual(false);
+    } else {
+      window.localStorage.setItem(CHAT_RITUAL_SEEN_KEY, "true");
+    }
+  }, []);
 
   function handleScroll() {
     const el = scrollContainerRef.current;
@@ -579,30 +615,13 @@ function ChatPageContent() {
     }
   }
 
-  return (
-    <main className="h-full bg-black text-white">
+  // Extraído a una variable (mismo patrón que `pageContent` en
+  // `app/dashboard/page.tsx`) para poder envolverlo condicionalmente
+  // abajo -- `showOpeningRitual` decide si aparece dentro de
+  // `ConversationOpeningRitual` o directo, sin duplicar este árbol.
+  const pageContent = (
+    <>
       {/*
-        Beta-critical polish (feedback directo de Juan, 2026-08-03): "el
-        avatar en conversación debe ser de mínimo 3cm... que tenga vida y
-        se desplace por la pantalla". Vive fuera de `ConversationOpeningRitual`
-        a propósito -- ese componente anima su contenido con transforms
-        propios mientras se asienta, y un hijo `position: fixed` dentro de
-        un ancestro con `transform` activo deja de posicionarse contra el
-        viewport (se vuelve relativo a ese ancestro en su lugar) -- exactamente
-        el tipo de bug de layout que no se puede verificar visualmente sin
-        una cuenta real. Como hermano directo aquí, el flotante siempre es
-        relativo a la pantalla completa, sin ambigüedad.
-      */}
-      {!isLoadingHistory && (
-        <FloatingAvatar
-          mood={NEUTRAL_AVATAR_MOOD}
-          isAiResponding={isThinking}
-          isUserTyping={message.trim() !== ""}
-          lastActivityAt={lastActivityAt}
-        />
-      )}
-      <ConversationOpeningRitual ready={!isLoadingHistory} cue={welcomeCue} orb={orbSignature}>
-        {/*
           Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1);
           este header solo aporta lo específico de /chat: retomar/empezar de
           nuevo, y (Auditoría de Experiencia V1, hallazgo H3) un camino de
@@ -740,7 +759,47 @@ function ChatPageContent() {
             </button>
           </div>
         </footer>
-      </ConversationOpeningRitual>
+    </>
+  );
+
+  return (
+    <main className="h-full bg-black text-white">
+      {/*
+        Beta-critical polish (feedback directo de Juan, 2026-08-03): "el
+        avatar en conversación debe ser de mínimo 3cm... que tenga vida y
+        se desplace por la pantalla". Vive fuera de `ConversationOpeningRitual`
+        a propósito -- ese componente anima su contenido con transforms
+        propios mientras se asienta, y un hijo `position: fixed` dentro de
+        un ancestro con `transform` activo deja de posicionarse contra el
+        viewport (se vuelve relativo a ese ancestro en su lugar) -- exactamente
+        el tipo de bug de layout que no se puede verificar visualmente sin
+        una cuenta real. Como hermano directo aquí, el flotante siempre es
+        relativo a la pantalla completa, sin ambigüedad.
+      */}
+      {!isLoadingHistory && (
+        <FloatingAvatar
+          mood={NEUTRAL_AVATAR_MOOD}
+          isAiResponding={isThinking}
+          isUserTyping={message.trim() !== ""}
+          lastActivityAt={lastActivityAt}
+        />
+      )}
+      {/*
+        Rendimiento (mismo mandato que ya corrigió Dashboard): el ritual
+        completo (~1.9s) solo se justifica la primera vez que esta
+        persona habla con LUZ alguna vez, nunca en cada visita --
+        `showOpeningRitual` (arriba) ya lo decidió antes del primer
+        pintado. Sin el ritual, el mismo `contentClassName` por defecto
+        que `ConversationOpeningRitual` ya usaba (`flex h-full flex-col`)
+        para que el layout no salte entre un camino y el otro.
+      */}
+      {showOpeningRitual ? (
+        <ConversationOpeningRitual ready={!isLoadingHistory} cue={welcomeCue} orb={orbSignature}>
+          {pageContent}
+        </ConversationOpeningRitual>
+      ) : (
+        <div className="flex h-full flex-col">{pageContent}</div>
+      )}
     </main>
   );
 }

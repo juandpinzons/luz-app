@@ -211,21 +211,35 @@ export async function assembleRealitySnapshot(
       ].slice(0, RELEVANT_MEMORY_LIMIT)
     : candidateMemories;
 
-  // Auditoría de comportamiento (Presence Principles): dar continuidad
-  // a partir de un dato solo porque existe, sin que represente
-  // comprensión real, ya se identificó como el hallazgo transversal de
-  // esa revisión. `retrieve()` ordena por rank descendente, así que
-  // filtrar aquí nunca esconde una memoria mejor que quedó fuera del
-  // límite — la separación entre "tiene señal real" y "no la tiene" es
-  // más grande (26 puntos) que cualquier bono de recencia (máx. 4), o
-  // sea que el orden ya garantiza que lo que califica siempre aparece
-  // antes que lo que no. `rank` viene indefinido solo si `retrieve()`
-  // alguna vez devolviera una memoria sin rankear — no debería ocurrir
-  // (Capture → Rank es síncrono), pero se trata igual que "no califica"
-  // en vez de asumir que sí, por prudencia.
-  const memoriesWithRealSignal = relevantMemories.filter(
-    (memory) => (memory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL,
-  );
+  // P0 (incidente real, agosto 1-2, ver
+  // docs/engineering/investigations/2026-08-02_memory_recall_value_change.md):
+  // `MIN_SCORE_WITH_UNDERSTANDING_SIGNAL` mide, por diseño
+  // (`DeterministicMemoryRankingStrategy`), CUÁNTO profundiza una
+  // memoria la comprensión narrativa de la persona -- nunca si es
+  // recuperable para responder algo puntual. Aplicarlo aquí sin
+  // condición, después de `selectContextualMemories` (que YA calculó
+  // relevancia real contra `currentMessage` -- tokens compartidos, tipo,
+  // y `rank.score` como una señal más, nunca absoluta), descartaba
+  // resultados genuinamente relevantes por un criterio que nunca fue
+  // diseñado para decidir eso -- confirmado con datos reales: la
+  // memoria del gasto del 1 de agosto (`rank_score = 19`) sí era
+  // candidata en la posición 4 de 5, y este filtro la eliminaba antes
+  // de llegar al prompt.
+  //
+  // Con `currentMessage` (el camino de chat en vivo, único llamador que
+  // lo pasa -- `build-context.ts`): se confía en la relevancia que
+  // `selectContextualMemories` ya calculó, sin volver a filtrar por un
+  // eje distinto. Sin `currentMessage` (Morning Brief, bienvenida,
+  // modelo de identidad -- ninguno responde a una pregunta puntual, los
+  // otros 4 llamadores reales de esta función), el filtro sigue siendo
+  // exactamente la pregunta correcta -- sin cambios ahí: "qué es lo
+  // bastante significativo para mencionar sin que nadie haya
+  // preguntado" es precisamente lo que este umbral mide.
+  const memoriesWithRealSignal = options.currentMessage
+    ? relevantMemories
+    : relevantMemories.filter(
+        (memory) => (memory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL,
+      );
 
   // Mismo criterio que arriba, aplicado al Knowledge Engine
   // (2026-07-25, docs/engineering/FIRST_MESSAGE_IDENTITY_PLAN.md):
