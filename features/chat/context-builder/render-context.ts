@@ -145,11 +145,23 @@ export function renderContextToMessages(context: Context): AIMessage[] {
   ];
 
   if (context.conversationRules.length > 0) {
+    // Antes: `- ${rule.instruction}` con `.join("\n")` -- un solo guion
+    // pegado a la primera línea de CADA regla, sin importar si es una
+    // instrucción de una frase (`PrioritizeUnderstandingRule`) o un
+    // bloque de varias secciones con sus propios sub-ítems
+    // (`FavorPrioritizedContextRule`, que ya incluye Identidad,
+    // memoria, vida, señales). El resultado real, verificado corriendo
+    // este mismo pipeline (no simulado): una sola bolsa de líneas con
+    // "-" al mismo nivel visual, sin distinguir encabezado de sección,
+    // ítem de dato, o instrucción -- Identidad quedaba sepultada ahí
+    // con el mismo peso que cualquier otra cosa. Cada regla ya sabe
+    // formatear su propio contenido (`FavorPrioritizedContextRule` ya
+    // usa "\n\n" entre sus propias secciones); esta capa solo necesita
+    // separarlas entre sí con la misma claridad, nunca inventar una
+    // jerarquía que no le corresponde decidir.
     systemMessages.push({
       role: "system",
-      content: context.conversationRules
-        .map((rule) => `- ${rule.instruction}`)
-        .join("\n"),
+      content: context.conversationRules.map((rule) => rule.instruction).join("\n\n"),
     });
   }
 
