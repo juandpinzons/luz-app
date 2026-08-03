@@ -116,8 +116,11 @@ export default async function LifeIdentityPage() {
 
         {!hasAnything && (
           <p className="animate-fade-in mt-10 text-sm text-zinc-500">
-            Todavía no tengo suficiente para armar una idea de quién eres
-            — a medida que hablemos, esto se va a ir llenando.
+            No es que no te haya escuchado — es que todavía no he
+            hablado contigo lo suficiente sobre las mismas cosas para
+            poder decirte, con seguridad, quién eres para mí. Eso se
+            construye con el tiempo, no de una sola vez. Sigamos
+            hablando y esto se va a ir llenando.
           </p>
         )}
 

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { RADIANT_THRESHOLD, STEADY_THRESHOLD } from "@/features/orb/services/derive-maturity";
 import type { OrbMaturityStage } from "@/features/orb/domain/orb-state";
 import { PresenceOrb, type PresenceOrbSignature } from "@/components/ui/presence-orb";
@@ -13,23 +12,6 @@ const WEEKDAY_DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
 
 function formatDate(date: Date): string {
   return WEEKDAY_DATE_FORMAT.format(date);
-}
-
-function formatRelativeTime(date: Date): string {
-  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-
-  if (diffMinutes < 1) return "hace un momento";
-  if (diffMinutes < 60) return `hace ${diffMinutes} min`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `hace ${diffHours} h`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return "ayer";
-  if (diffDays < 30) return `hace ${diffDays} días`;
-
-  const diffMonths = Math.floor(diffDays / 30);
-  return `hace ${diffMonths} ${diffMonths === 1 ? "mes" : "meses"}`;
 }
 
 /**
@@ -128,48 +110,15 @@ export function DashboardActivitySummary({
   return (
     <div className="mt-10 space-y-10">
       {/*
-       * Promovida fuera del bloque de actividad/cuenta (Sprint 2,
-       * docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §3.1(f)) — responde
-       * "¿qué conversaciones requieren continuidad?", no una estadística
-       * de uso, así que ya no vive detrás del mismo separador que
-       * "Estadísticas".
+       * Beta-critical polish (feedback directo de Juan, 2026-08-03): el
+       * historial de conversaciones recientes se retira de Dashboard --
+       * era la única forma de llegar a `/conversations` cuando esa
+       * auditoría se escribió (`EXPERIENCE_AUDIT_V1.md`, H3), pero
+       * `/chat` ya tiene un link "Historial" siempre visible, así que
+       * este segundo camino (tope de 5, invisible si no hay actividad
+       * reciente) quedó duplicando lo que la navegación ya resuelve
+       * mejor -- uno de los "reguero de información" que Juan señaló.
        */}
-      {summary && summary.recentConversations.length > 0 && (
-        <section>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-zinc-400">
-              Conversaciones recientes
-            </h2>
-            <Link
-              href="/conversations"
-              className="rounded text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-            >
-              Ver conversaciones
-            </Link>
-          </div>
-          <div className="mt-3 space-y-2">
-            {summary.recentConversations.map((conversation, index) => (
-              <Link
-                key={conversation.id}
-                href={`/conversations/${conversation.id}`}
-                className="animate-fade-in block rounded-lg border border-zinc-800 px-4 py-3 text-sm transition hover:border-zinc-600 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-                style={{ animationDelay: `${Math.min(index, 10) * 30}ms` }}
-              >
-                <p className="text-zinc-300">
-                  {formatDate(conversation.startedAt)}
-                </p>
-                <p className="mt-1 text-zinc-500">
-                  {conversation.messageCount}{" "}
-                  {conversation.messageCount === 1 ? "mensaje" : "mensajes"}
-                  {conversation.lastMessageAt &&
-                    ` · última actividad ${formatRelativeTime(conversation.lastMessageAt)}`}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/*
        * Antes tres secciones separadas ("Tu cuenta"/"Actividad
        * reciente"/"Estadísticas"), cada una con su propio encabezado

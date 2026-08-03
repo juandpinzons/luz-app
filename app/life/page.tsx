@@ -355,19 +355,32 @@ export default async function LifePage() {
   return (
     <main className="min-h-full px-6 py-10">
       <div className="mx-auto w-full max-w-5xl">
-        <div className="flex items-baseline justify-between gap-4">
-          <h1 className="text-xl font-light tracking-[0.25em] text-white">
-            VIDA
-          </h1>
-          <Link
-            href="/life/identity"
-            className="rounded text-sm text-zinc-500 underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-          >
-            Quién eres para LUZ →
-          </Link>
-        </div>
+        <h1 className="text-xl font-light tracking-[0.25em] text-white">
+          VIDA
+        </h1>
 
-        <div className="mt-6">
+        {/*
+          Beta-critical polish (feedback directo de Juan, 2026-08-03):
+          "con tantos recuerdos que tiene de mí, Luz no puede responder
+          la pregunta 'quien eres para luz'". La capacidad ya existía
+          (`/life/identity`, `buildIdentityModel`) -- lo que fallaba era
+          que la única puerta de entrada era un link de texto muted, del
+          mismo peso visual que cualquier enlace secundario, al lado de
+          un título. Promovida a tarjeta real, mismo lenguaje visual que
+          la caja de continuidad de Dashboard (borde `luz`, no un link
+          más) -- esta es la pregunta central de Vida, no una nota al pie.
+        */}
+        <Link
+          href="/life/identity"
+          className="animate-fade-in mt-6 block rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 transition hover:border-luz/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+        >
+          <p className="text-sm text-zinc-400">Quién eres para LUZ</p>
+          <p className="mt-1 text-zinc-200">
+            Ver lo que he llegado a entender de ti →
+          </p>
+        </Link>
+
+        <div className="mt-8">
           <LifeGraphView personName={firstName} summary={summary} listView={listView} />
         </div>
       </div>
