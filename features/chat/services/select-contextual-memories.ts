@@ -7,7 +7,31 @@ import {
   type Memory,
 } from "../../../core/memory-engine";
 
-const CANDIDATE_POOL_SIZE = 30;
+/**
+ * Incremento 1 (dirección del Founder: la inteligencia de selección
+ * vive en `features/chat`, Memory Engine sigue siendo solo proveedor
+ * de candidatas -- sin tocar su contrato). Antes, 30: internamente,
+ * `MemoryEngine.retrieve({limit})` expande esto a un pool de SQL de
+ * `min(limit * 3, 150)` (`CANDIDATE_POOL_CEILING`,
+ * `structured-memory-retrieval-strategy.ts`) ordenado únicamente por
+ * `rankScore` -- con 30, ese pool era 90, dejando cualquier memoria
+ * fuera del top-90 por rank sin ninguna posibilidad de competir por
+ * texto, sin importar qué tan bien coincidiera con la pregunta (medido
+ * contra la distribución real de rank del Founder: ~89 de 179
+ * memorias, 50%, nunca entraban).
+ *
+ * 150 satura ese mismo techo ya existente en Memory Engine (no lo
+ * cambia, no lo cruza) -- es el máximo real obtenible sin tocar
+ * `core/memory-engine`. Reduce cuánto decide el rank por sí solo
+ * (ahora decide "cuáles 150 se ven", no "cuáles 30"); no lo elimina
+ * como señal (`RANK_WEIGHT` abajo sigue intacto) ni lo intenta
+ * eliminar de Memory Engine, que es exactamente lo que esta dirección
+ * pidió no hacer. Límite conocido y declarado: una cuenta con más de
+ * 150 memorias activas seguiría teniendo un residuo fuera de alcance
+ * -- no resuelto aquí, nombrado explícitamente para la siguiente
+ * decisión, no escondido.
+ */
+const CANDIDATE_POOL_SIZE = 150;
 const MIN_TOKEN_LENGTH = 4;
 
 /** Igual que `sameOriginMatches`/`samePersonMatches` en DefaultConnectStage — coincidencia estructural, nunca similitud semántica. */
