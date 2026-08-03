@@ -22,6 +22,7 @@ import type { LifeStateItem, RealitySnapshot } from "../../../core/reality";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { span } from "../../../core/observability/trace";
 import { assembleIdentityEvolution } from "../../identity-evolution";
+import { explainInsight, type InsightExplanation } from "../../knowledge/services/explain-insight";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
@@ -104,6 +105,46 @@ function toLifeStateItem(
   dueDate?: Date,
 ): LifeStateItem {
   return { id: entity.id, title: entity.title, dueDate, domain: entity.domain };
+}
+
+/**
+ * "Inteligencia desperdiciada" #1: `explainInsight` (`features/knowledge/services/`)
+ * ya calcula, para `/memories`, cuántas veces y en cuánto tiempo se
+ * repitió lo que respalda un insight -- pero el camino de chat
+ * construía su propia lista, en paralelo, con solo `description` en
+ * crudo (`DrizzleInsightRepository` directo, nunca `explainInsight`).
+ * Reimplementada aquí, no importada de `insight-card.tsx`
+ * (componente de UI, dirección de dependencia equivocada para un
+ * servicio) -- misma fórmula exacta que ya está validada en
+ * producción en `/memories`, para que la voz sea consistente entre
+ * las dos superficies. `null` en el mismo caso que allí: sin fecha
+ * real resuelta, silencio en vez de una frase a medias.
+ */
+function describeInsightConsistency(explanation: InsightExplanation): string | null {
+  const { evidenceCount, spanDays, daysSinceMostRecentEvidence } = explanation;
+  if (spanDays === null || daysSinceMostRecentEvidence === null) {
+    return null;
+  }
+
+  const recency =
+    daysSinceMostRecentEvidence <= 0
+      ? "hoy"
+      : daysSinceMostRecentEvidence === 1
+        ? "ayer"
+        : daysSinceMostRecentEvidence < 30
+          ? `hace ${daysSinceMostRecentEvidence} días`
+          : `hace ${Math.round(daysSinceMostRecentEvidence / 30)} ${Math.round(daysSinceMostRecentEvidence / 30) === 1 ? "mes" : "meses"}`;
+
+  if (spanDays === 0) {
+    return `lo he notado ${evidenceCount} veces, ${recency}`;
+  }
+
+  const span =
+    spanDays < 30
+      ? `${spanDays} días`
+      : `${Math.round(spanDays / 30)} ${Math.round(spanDays / 30) === 1 ? "mes" : "meses"}`;
+
+  return `lo he notado ${evidenceCount} veces a lo largo de ${span} -- la más reciente, ${recency}`;
 }
 
 export async function assembleRealitySnapshot(
@@ -259,6 +300,24 @@ export async function assembleRealitySnapshot(
         : b.updatedAt.getTime() - a.updatedAt.getTime();
     })
     .slice(0, RELEVANT_INSIGHT_LIMIT);
+
+  // "Inteligencia desperdiciada" #1 (ver `describeInsightConsistency`):
+  // como máximo `RELEVANT_INSIGHT_LIMIT` (3) llamadas, mismo costo por
+  // insight que `/memories` ya paga hoy para una lista más larga (5).
+  // `explainInsight` devuelve `null` solo si el insight no existe o
+  // dejó de estar validado entre la consulta de arriba y esta -- se
+  // trata igual que "sin consistencia calculable", nunca un error.
+  const insightExplanations = await Promise.all(
+    validatedInsights.map((insight) => explainInsight(db, context, insight.id)),
+  );
+  const consistencyByInsightId = new Map<string, string>();
+  for (const explanation of insightExplanations) {
+    if (!explanation) continue;
+    const consistency = describeInsightConsistency(explanation);
+    if (consistency) {
+      consistencyByInsightId.set(explanation.id, consistency);
+    }
+  }
 
   // Mismo criterio que `validatedInsights`: solo conclusiones ya
   // `validated` (nunca `invalidated`), ordenadas por confianza y
@@ -421,11 +480,22 @@ export async function assembleRealitySnapshot(
     // (Knowledge Engine, desplegado 2026-07-25) — "qué significa",
     // distinto de `memory` ("qué pasó").
     insights: {
-      items: validatedInsights.map((insight) => ({
-        id: insight.id,
-        description: insight.description,
-        type: insight.type,
-      })),
+      // "Inteligencia desperdiciada" #1: la consistencia real
+      // (`consistencyByInsightId`, calculada arriba) se añade al mismo
+      // `description` que siempre existió -- `RealitySnapshot.insights.items[].description`
+      // sigue siendo `string`, sin ningún campo nuevo ni cambio de
+      // contrato, solo un valor más completo cuando hay evidencia real
+      // detrás.
+      items: validatedInsights.map((insight) => {
+        const consistency = consistencyByInsightId.get(insight.id);
+        return {
+          id: insight.id,
+          description: consistency
+            ? `${insight.description} (${consistency})`
+            : insight.description,
+          type: insight.type,
+        };
+      }),
     },
     // Calendar Foundation (`features/reality/`) llena el punto de
     // extensión que este campo ya reservaba (`external-signal-snapshot.ts`:
