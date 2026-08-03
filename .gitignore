@@ -45,3 +45,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .scratch/
+
+# resultados de experimentos del arnés de evaluación (evaluation/README.md) --
+# salida de cada corrida, no código fuente
+evaluation/results/
