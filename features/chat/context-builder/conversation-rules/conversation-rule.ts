@@ -1,4 +1,5 @@
 import type { ContextItem } from "../../../../core/context-engine";
+import type { RealitySnapshot } from "../../../../core/reality";
 import type { ConversationTurn } from "../context";
 import type { ReconnectionContext } from "../../services/assemble-reconnection-context";
 import type { ConversationVarietyRuleSignal } from "../../../conversational-variety";
@@ -15,6 +16,17 @@ import type { ConversationVarietyRuleSignal } from "../../../conversational-vari
 export interface ConversationRuleInput {
   conversation: ConversationTurn[];
   contextItems: ContextItem[];
+  /**
+   * Incremento 2 ("hacer evidente que LUZ aprende con el tiempo"):
+   * `ContextItem` no carga `occurredAt` (solo `dueDate`, exclusivo de
+   * `life`) -- Context Engine nunca lo tuvo en su contrato y esto no
+   * se lo agrega. En vez de eso, la regla que necesite fecha real (hoy,
+   * solo `FavorPrioritizedContextRule`) busca el mismo dato ya presente
+   * en `RealitySnapshot.memory.items` por `sourceId` -- mismo snapshot
+   * que `build-context.ts` ya tenía en la mano, sin volver a
+   * consultarlo. Aditivo: reglas existentes que no lo usan no cambian.
+   */
+  realitySnapshot: RealitySnapshot;
   /**
    * "Qué cambió" + "qué capítulo vive" (redesign del pipeline
    * conversacional, Beta) -- `null` salvo que de verdad haya un vacío

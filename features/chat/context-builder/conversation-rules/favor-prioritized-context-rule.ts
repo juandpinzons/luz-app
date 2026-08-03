@@ -31,7 +31,7 @@ const SOURCE_GUIDANCE: Record<RenderableSource, string> = {
   insight:
     'Déjalo influir en cómo respondes, de forma natural — nunca lo repitas como una lista ni lo anuncies como un dato que "descubriste". Solo si de verdad ayuda a esta respuesta puntual.',
   memory:
-    "Da continuidad a partir de ahí — no trates este mensaje como si fuera la primera vez que hablan.",
+    'Da continuidad a partir de ahí — no trates este mensaje como si fuera la primera vez que hablan. Cada una trae, entre paréntesis, cuándo pasó de verdad -- úsalo para hablar del tiempo con naturalidad ("hace unas semanas...", "el mes pasado...") en vez de un genérico "mencionaste". Nunca leas el paréntesis literal ni lo cites como una fecha exacta.',
   life: "Tenlo presente si conecta con lo que la persona dice ahora — no lo menciones si no aporta nada a esta respuesta puntual.",
   signal:
     "Úsalo para responder con precisión si pregunta qué tiene pendiente o agendado — y para mostrar que sabes lo que está viviendo si conecta con lo que dice ahora. Nunca lo recites completo sin que venga a cuento.",
@@ -43,8 +43,49 @@ function isRenderableSource(source: ContextItemSource): source is RenderableSour
   return source in SOURCE_INTRO;
 }
 
-function renderSection(source: RenderableSource, items: ContextItem[]): string {
-  const lines = items.map((item) => `- ${item.label}`).join("\n");
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Incremento 2 ("hacer evidente que LUZ aprende con el tiempo"): sin
+ * esto, cada memoria llegaba al modelo como un hecho plano, sin fecha
+ * -- LUZ no tenía cómo decir "hace unas semanas" en vez de un genérico
+ * "mencionaste", aunque el dato (`RealitySnapshot.memory.items[].occurredAt`)
+ * siempre existió, solo que `ContextItem` nunca lo carga (ver docblock
+ * de `ConversationRuleInput.realitySnapshot`). Mismos cortes que ya
+ * usa el resto de la app (`app/life/page.tsx`, `dashboard-activity-summary.tsx`)
+ * -- reimplementado aquí, no importado, mismo criterio ya establecido
+ * en `select-contextual-memories.ts` para no cruzar límites de
+ * `features/*` por una función de un párrafo.
+ */
+function formatRelativeTime(date: Date, now: Date): string {
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / DAY_MS);
+
+  if (diffDays <= 0) return "hoy";
+  if (diffDays === 1) return "ayer";
+  if (diffDays < 7) return `hace ${diffDays} días`;
+  if (diffDays < 30) {
+    const weeks = Math.round(diffDays / 7);
+    return weeks === 1 ? "hace una semana" : `hace ${weeks} semanas`;
+  }
+  const months = Math.round(diffDays / 30);
+  return months === 1 ? "hace un mes" : `hace ${months} meses`;
+}
+
+function renderSection(
+  source: RenderableSource,
+  items: ContextItem[],
+  memoryDateById: ReadonlyMap<string, Date>,
+): string {
+  const now = new Date();
+  const lines = items
+    .map((item) => {
+      if (source !== "memory" || !item.sourceId) {
+        return `- ${item.label}`;
+      }
+      const occurredAt = memoryDateById.get(item.sourceId);
+      return occurredAt ? `- (${formatRelativeTime(occurredAt, now)}) ${item.label}` : `- ${item.label}`;
+    })
+    .join("\n");
   return `${SOURCE_INTRO[source]}\n${lines}\n${SOURCE_GUIDANCE[source]}`;
 }
 
@@ -82,9 +123,19 @@ export class FavorPrioritizedContextRule implements ConversationRule {
       bySource.set(item.source, group);
     }
 
+    // Incremento 2: `RealitySnapshot.memory.items` ya trae `occurredAt`
+    // real -- `ContextItem` no lo carga, así que se busca por `id` en
+    // vez de duplicar el dato en un tipo que Context Engine no conoce.
+    const memoryDateById = new Map<string, Date>();
+    for (const memory of input.realitySnapshot.memory.items) {
+      if (memory.occurredAt) {
+        memoryDateById.set(memory.id, memory.occurredAt);
+      }
+    }
+
     return RENDER_ORDER.map((source) => {
       const items = bySource.get(source);
-      return items && items.length > 0 ? renderSection(source, items) : null;
+      return items && items.length > 0 ? renderSection(source, items, memoryDateById) : null;
     })
       .filter((section): section is string => section !== null)
       .join("\n\n");

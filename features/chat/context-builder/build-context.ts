@@ -150,9 +150,14 @@ export async function buildContext(
     assembleReconnectionContext(db, lifeGraphContext, userId, isFirstContact),
   );
 
-  const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter(
-    (rule) =>
-      rule.applies({ conversation, contextItems, reconnectionContext, variety: varietyContext.ruleSignal }),
+  const conversationRules: RuleDirective[] = CONVERSATION_RULES.filter((rule) =>
+    rule.applies({
+      conversation,
+      contextItems,
+      reconnectionContext,
+      variety: varietyContext.ruleSignal,
+      realitySnapshot,
+    }),
   ).map((rule) => ({
     ruleId: rule.id,
     instruction: rule.directive({
@@ -160,6 +165,7 @@ export async function buildContext(
       contextItems,
       reconnectionContext,
       variety: varietyContext.ruleSignal,
+      realitySnapshot,
     }),
   }));
 
