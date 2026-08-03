@@ -3,6 +3,7 @@ import type { CommunicationPreferenceSnapshot } from "./communication-preference
 import type { ContradictionContextSnapshot } from "./contradiction-snapshot";
 import type { CuriosityContextSnapshot } from "./curiosity-snapshot";
 import type { ClosureSnapshot } from "./closure-snapshot";
+import type { ConceptSnapshot } from "./concept-snapshot";
 import type { ExternalSignalSnapshot } from "./external-signal-snapshot";
 import type { FadingBeliefSnapshot } from "./fading-belief-snapshot";
 import type { GrowingBeliefSnapshot } from "./growing-belief-snapshot";
@@ -51,4 +52,6 @@ export interface RealitySnapshot {
   reopenCandidates: ReopenCandidateSnapshot;
   /** `core/life` (Goal/Project `status: "completed"`, recientes) filtrado por `seen_prompts` -- un cierre real todavía sin reconocer, si hay uno. */
   closures: ClosureSnapshot;
+  /** `core/concept-graph` -- temas/rasgos que ya aparecen de forma recurrente en la vida de esta persona (identidad de fondo, `METADATA_INVENTORY_V1.md`). */
+  concepts: ConceptSnapshot;
 }

@@ -48,6 +48,7 @@ function emptySnapshot(): RealitySnapshot {
     fadingBeliefs: { items: [] },
     reopenCandidates: { items: [] },
     closures: { items: [] },
+    concepts: { items: [] },
   };
 }
 

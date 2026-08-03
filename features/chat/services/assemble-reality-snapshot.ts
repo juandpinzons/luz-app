@@ -68,6 +68,15 @@ const RELEVANT_REOPEN_CANDIDATE_LIMIT = 1;
 /** Ver docblock de `ClosureSnapshot`: como máximo un cierre a la vez. */
 const RELEVANT_CLOSURE_LIMIT = 1;
 /**
+ * Identidad de fondo (Prioridad 1, `METADATA_INVENTORY_V1.md`): unos
+ * pocos temas, nunca una lista completa -- mismo espíritu que
+ * `RELEVANT_INSIGHT_LIMIT`, pero más bajo porque un concepto es una
+ * sola palabra o frase corta (a diferencia de una interpretación
+ * completa), así que 3 ya se sienten como suficientes sin sonar a
+ * inventario de rasgos.
+ */
+const RELEVANT_CONCEPT_LIMIT = 3;
+/**
  * A partir de cuántos días un Goal/Project completado deja de sentirse
  * "esto acaba de pasar" -- independiente de `seen_prompts`: un cierre
  * de hace meses, nunca reconocido, no debería sentirse como noticia
@@ -445,6 +454,17 @@ export async function assembleRealitySnapshot(
   }
   for (const concept of concepts) bump(concept.domain, "conceptsCount");
 
+  // Prioridad 1 (Identidad, `METADATA_INVENTORY_V1.md`): `concepts` ya
+  // se consultaba en este ensamblador (arriba, para `knowledgeGaps`) --
+  // cero consultas nuevas, solo un recorte que antes no existía. Orden
+  // por `updatedAt` -- un concepto se actualiza (`core/concept-graph`)
+  // cada vez que aparece evidencia nueva, así que lo más reciente es un
+  // proxy real de "sigue vigente", mismo criterio que ya usa
+  // `growingBeliefs` unas líneas más arriba en este mismo archivo.
+  const topConcepts = [...concepts]
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, RELEVANT_CONCEPT_LIMIT);
+
   return {
     lifeGraphId: context.lifeGraphId,
     capturedAt: new Date(),
@@ -596,6 +616,13 @@ export async function assembleRealitySnapshot(
         id: closure.id,
         title: closure.title,
         kind: closure.kind,
+      })),
+    },
+    concepts: {
+      items: topConcepts.map((concept) => ({
+        id: concept.id,
+        label: concept.label,
+        domain: concept.domain,
       })),
     },
   };

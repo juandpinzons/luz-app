@@ -11,4 +11,5 @@ export * from "./growing-belief-snapshot";
 export * from "./fading-belief-snapshot";
 export * from "./reopen-candidate-snapshot";
 export * from "./closure-snapshot";
+export * from "./concept-snapshot";
 export * from "./reality-snapshot";

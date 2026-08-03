@@ -1,4 +1,5 @@
 import type { ContextItem, ContextItemSource } from "../../../../core/context-engine";
+import type { RealityConcept } from "../../../../core/reality";
 import type {
   ConversationRule,
   ConversationRuleInput,
@@ -71,6 +72,26 @@ function formatRelativeTime(date: Date, now: Date): string {
   return months === 1 ? "hace un mes" : `hace ${months} meses`;
 }
 
+/**
+ * Prioridad 1 (Identidad, `METADATA_INVENTORY_V1.md`): `RealitySnapshot.concepts`
+ * -- fuera del ciclo `insight/memory/life/signal` a propósito, mismo
+ * criterio que el bloque de fecha de memoria (Incremento 2): no es un
+ * `ContextItem` (Context Engine no conoce "concept" como fuente, y no
+ * se le agrega aquí -- tocaría su contrato), se lee directo de
+ * `input.realitySnapshot`, que `build-context.ts` ya pasa completo.
+ * Nunca certeza a mostrar: `Concept` no trae `confidence` (ver docblock
+ * de `RealityConcept`), así que la guía nunca habla de "seguridad", solo
+ * de dejar que informe el tono, igual que ya hace `insight`.
+ */
+function renderConceptsSection(concepts: readonly RealityConcept[]): string {
+  const lines = concepts.map((concept) => `- ${concept.label}`).join("\n");
+  return [
+    "Esto ya define a esta persona, según lo que ha compartido con el tiempo (no una interpretación de un solo mensaje, un tema que se repite):",
+    lines,
+    "Déjalo informar tu comprensión de fondo, con naturalidad -- nunca lo anuncies, nunca lo enumeres como una lista de características, nunca lo cites como si fuera un dato que acabas de descubrir. Es quién ya es, no una novedad.",
+  ].join("\n");
+}
+
 function renderSection(
   source: RenderableSource,
   items: ContextItem[],
@@ -109,7 +130,10 @@ export class FavorPrioritizedContextRule implements ConversationRule {
   readonly id = "favor-prioritized-context";
 
   applies(input: ConversationRuleInput): boolean {
-    return input.contextItems.some((item) => isRenderableSource(item.source));
+    return (
+      input.contextItems.some((item) => isRenderableSource(item.source)) ||
+      input.realitySnapshot.concepts.items.length > 0
+    );
   }
 
   directive(input: ConversationRuleInput): string {
@@ -133,11 +157,21 @@ export class FavorPrioritizedContextRule implements ConversationRule {
       }
     }
 
-    return RENDER_ORDER.map((source) => {
+    const sourceSections = RENDER_ORDER.map((source) => {
       const items = bySource.get(source);
       return items && items.length > 0 ? renderSection(source, items, memoryDateById) : null;
-    })
-      .filter((section): section is string => section !== null)
-      .join("\n\n");
+    }).filter((section): section is string => section !== null);
+
+    // Identidad de fondo al final a propósito: las secciones de arriba
+    // son sobre ESTE momento (qué es relevante para el mensaje actual);
+    // esto es sobre quién es la persona en general, más parecido a un
+    // cierre de contexto que a una prioridad de turno.
+    const conceptItems = input.realitySnapshot.concepts.items;
+    const sections =
+      conceptItems.length > 0
+        ? [...sourceSections, renderConceptsSection(conceptItems)]
+        : sourceSections;
+
+    return sections.join("\n\n");
   }
 }
