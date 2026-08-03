@@ -47,6 +47,17 @@
    * animaciones que casualmente ocurren juntas.
    */
   --animate-sphere-breathe: sphere-breathe 3.2s ease-in-out infinite;
+  /**
+   * Beta-critical polish: el avatar de `/chat` deja de ser un ícono fijo
+   * en el header y pasa a flotar sobre la pantalla, arrastrable
+   * (`features/avatar/components/floating-avatar.tsx`). Este drift es
+   * lo que lo hace sentir vivo incluso quieto -- mismo criterio que el
+   * resto de este vocabulario: lento, pequeño, se lee como "flotar", no
+   * como rebotar. El arrastre manual del usuario sigue funcionando bajo
+   * `prefers-reduced-motion` (es una acción de la persona, no una
+   * animación ambiental) -- solo este drift automático se apaga.
+   */
+  --animate-avatar-float: avatar-float 6s ease-in-out infinite;
   /** "Welcome" revelándose de izquierda a derecha, como un trazo manual -- nunca un simple fade, ver `script-reveal`. Duración sincronizada con `TEXT_REVEAL_DURATION_MS` (`conversation-opening-ritual.tsx`) -- ver ese archivo si cambia. */
   --animate-script-reveal: script-reveal 600ms ease-out both;
   --animate-light-pulse: light-pulse 500ms ease-in both;
@@ -200,6 +211,17 @@
   }
 }
 
+/* Flotación lenta del avatar arrastrable de `/chat` -- independiente de `avatar-breathe` (target distinto: el contenedor que posiciona, no el cuerpo del personaje), se componen sin conflicto. */
+@keyframes avatar-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
 /* Respiración involuntaria del personaje (Avatar V1) -- siempre activa, independiente de `emotion`/`animation`. Misma escala sutil que `sphere-breathe`, ritmo propio para no leerse como una copia. */
 @keyframes avatar-breathe {
   0%,
@@ -349,6 +371,7 @@
   .animate-fade-in,
   .animate-pulse-soft,
   .animate-sphere-breathe,
+  .animate-avatar-float,
   .animate-script-reveal,
   .animate-light-pulse,
   .animate-veil-dissolve,

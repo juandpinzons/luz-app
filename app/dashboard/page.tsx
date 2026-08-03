@@ -8,9 +8,7 @@ import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-cal
 import { DrizzleContinuityLoopRepository } from "@/core/continuity-engine";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
-import { getRecentMemoryHighlight } from "@/features/dashboard/services/get-recent-memory-highlight";
 import { EventRow } from "@/features/home/components/event-row";
-import { truncateText } from "@/features/memories/components/truncate-text";
 import {
   buildMorningBrief,
   timeOfDayGreeting,
@@ -36,7 +34,6 @@ import {
 } from "@/features/experience/services/experience-signal-log";
 import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
 import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
-import { PostponedExperienceNote } from "@/features/experience/components/postponed-experience-note";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
@@ -196,7 +193,6 @@ export default async function DashboardPage() {
     avatarMood: AvatarMoodSignal | null;
     brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
     calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
-    recentMemory: Awaited<ReturnType<typeof getRecentMemoryHighlight>>;
     isFirstVisit: boolean;
   }> {
   async function loadConversationCount(): Promise<number> {
@@ -372,43 +368,17 @@ export default async function DashboardPage() {
     }
   }
 
-  /**
-   * "La memoria interna de LUZ reflejada en la experiencia" -- un
-   * teaser real (nunca solo un conteo, eso ya existía en
-   * `DashboardActivitySummary` vía `summary.memoriesStored`) de la
-   * última memoria activa que LUZ capturó. Mismo criterio de
-   * tolerancia a fallos que el resto de esta página.
-   */
-  async function loadRecentMemory(): Promise<Awaited<ReturnType<typeof getRecentMemoryHighlight>>> {
-    if (!lifeGraphContext) return null;
-    try {
-      return await getRecentMemoryHighlight(db, lifeGraphContext);
-    } catch (error) {
-      logger.log({
-        event: "dashboard.recent_memory_failed",
-        severity: "error",
-        requestId,
-        route: ROUTE,
-        userId,
-        lifeGraphId: lifeGraphContext.lifeGraphId,
-        ...describeError(error),
-      });
-      return null;
-    }
-  }
-
-  // Las siete solo necesitan `lifeGraphContext`/`userId`, ya resueltos
+  // Las seis solo necesitan `lifeGraphContext`/`userId`, ya resueltos
   // arriba -- ninguna depende del resultado de otra, así que corren
   // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
   // dos `select` simples que antes solo se pedían DESPUÉS de tener
   // `homeState` en mano, aunque nunca lo necesitaron a él tampoco.
-  const [summary, homeStateBaseResult, brief, calendarOutcome, recentMemory, recentPrimaryKeys, previousFingerprint] =
+  const [summary, homeStateBaseResult, brief, calendarOutcome, recentPrimaryKeys, previousFingerprint] =
     await Promise.all([
       span("Dashboard Summary", "orchestration", loadSummary),
       span("Home State", "orchestration", loadHomeStateBase),
       span("Morning Brief", "orchestration", loadMorningBrief),
       span("Calendar", "external_api", loadCalendarOutcome),
-      span("Recent Memory", "repository", loadRecentMemory),
       span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
       span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
     ]);
@@ -528,7 +498,7 @@ export default async function DashboardPage() {
     }
   }
 
-    return { summary, homeState, experience, avatarMood, brief, calendarOutcome, recentMemory, isFirstVisit };
+    return { summary, homeState, experience, avatarMood, brief, calendarOutcome, isFirstVisit };
   }
 
   const { result: dashboardData, summary: trace } = await runTrace(
@@ -537,7 +507,7 @@ export default async function DashboardPage() {
     loadDashboardData,
   );
   logTraceSummary(trace, { route: ROUTE, userId });
-  const { summary, homeState, experience, avatarMood, brief, calendarOutcome, recentMemory, isFirstVisit } =
+  const { summary, homeState, experience, avatarMood, brief, calendarOutcome, isFirstVisit } =
     dashboardData;
 
   const daysSinceLastMessage = summary?.lastMessageAt
@@ -562,7 +532,7 @@ export default async function DashboardPage() {
         acotación, no como parte del saludo.
       */}
       <div className="animate-fade-in flex items-center gap-4">
-        {avatarMood && <PresenceAvatar mood={avatarMood} size="sm" className="flex-shrink-0" />}
+        {avatarMood && <PresenceAvatar mood={avatarMood} size="lg" className="flex-shrink-0" />}
         <div className="space-y-1">
           {homeState ? (
             <>
@@ -655,43 +625,39 @@ export default async function DashboardPage() {
         <SecondaryExperienceList cards={experience.secondary} />
       )}
 
-      {experience && experience.postponed.length > 0 && (
-        <PostponedExperienceNote cards={experience.postponed} />
-      )}
-
       {/*
-        Calendario de hoy: información complementaria genuina (no
-        cubierta por `experience`, que solo arbitra momentos relativos
-        a "ahora" -- ver `features/experience/README.md`), por eso se
-        mantiene, pero como apoyo visual a la experiencia primaria,
-        nunca compitiendo con ella.
+        Beta-critical polish (feedback directo de Juan, 2026-08-03):
+        "quiero que Luz mejore la parte de 'hoy' que en 5-10 segundos se
+        vea lo más importante... que no salga un reguero de información".
+        `PostponedExperienceNote` (cosas que la propia arbitración
+        decidió NO liderar hoy) se retira de Hoy por completo -- mostrar
+        lo pospuesto contradice el punto de posponerlo (Principio 4,
+        Silencio intencional). El calendario baja de "hasta 3 eventos +
+        N más" a un solo evento, lo único que cabe en la misma lectura
+        de 5-10 segundos que el resto de la pantalla; el resto vive en
+        `/calendar`, que ya existe. El teaser de memoria reciente se
+        retira -- duplicaba lo que `/memories` ya hace mejor, y ya no
+        hace falta un segundo camino ahora que `/chat` tiene "Historial".
       */}
-      {calendarOutcome?.status === "connected" && (
-        <section className="animate-fade-in mt-8" style={{ animationDelay: "180ms" }}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-zinc-400">Tu calendario hoy</h2>
-            <Link href="/calendar" className="text-xs text-zinc-500 hover:text-zinc-300">
-              Ver todo →
-            </Link>
-          </div>
-          {calendarOutcome.calendarContext.today.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-600">Nada agendado hoy.</p>
-          ) : (
-            <>
-              <ul className="mt-3 space-y-2">
-                {calendarOutcome.calendarContext.today.slice(0, 3).map((event) => (
-                  <EventRow key={event.id} event={event} />
-                ))}
-              </ul>
-              {calendarOutcome.calendarContext.today.length > 3 && (
-                <Link href="/calendar" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
-                  +{calendarOutcome.calendarContext.today.length - 3} más
-                </Link>
-              )}
-            </>
-          )}
-        </section>
-      )}
+      {calendarOutcome?.status === "connected" &&
+        calendarOutcome.calendarContext.today.length > 0 && (
+          <section className="animate-fade-in mt-8" style={{ animationDelay: "180ms" }}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-medium text-zinc-400">Tu calendario hoy</h2>
+              <Link href="/calendar" className="text-xs text-zinc-500 hover:text-zinc-300">
+                Ver todo →
+              </Link>
+            </div>
+            <ul className="mt-3 space-y-2">
+              <EventRow event={calendarOutcome.calendarContext.today[0]} />
+            </ul>
+            {calendarOutcome.calendarContext.today.length > 1 && (
+              <Link href="/calendar" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
+                +{calendarOutcome.calendarContext.today.length - 1} más
+              </Link>
+            )}
+          </section>
+        )}
 
       {calendarOutcome?.status === "not_connected" && (
         <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "180ms" }}>
@@ -702,18 +668,6 @@ export default async function DashboardPage() {
             Conecta tu calendario
           </Link>{" "}
           para ver qué tienes ocupado y libre.
-        </p>
-      )}
-
-      {recentMemory && (
-        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
-          Lo último que recuerdo: &ldquo;{truncateText(recentMemory.content, 140)}&rdquo;{" "}
-          <Link
-            href="/memories"
-            className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
-          >
-            Ver más
-          </Link>
         </p>
       )}
 

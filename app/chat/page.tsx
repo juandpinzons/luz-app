@@ -9,7 +9,7 @@ import { ConversationOpeningRitual } from "@/features/chat/components/conversati
 import type { OrbVisualState } from "@/features/orb/domain/orb-visual-state";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
 import type { AvatarMoodSignal } from "@/features/avatar";
-import { PresenceAvatar } from "@/features/avatar/components/presence-avatar";
+import { FloatingAvatar } from "@/features/avatar/components/floating-avatar";
 import type { GetWelcomeResponse } from "@/app/api/chat/welcome/route";
 import type {
   GetLatestConversationResponse,
@@ -581,6 +581,26 @@ function ChatPageContent() {
 
   return (
     <main className="h-full bg-black text-white">
+      {/*
+        Beta-critical polish (feedback directo de Juan, 2026-08-03): "el
+        avatar en conversación debe ser de mínimo 3cm... que tenga vida y
+        se desplace por la pantalla". Vive fuera de `ConversationOpeningRitual`
+        a propósito -- ese componente anima su contenido con transforms
+        propios mientras se asienta, y un hijo `position: fixed` dentro de
+        un ancestro con `transform` activo deja de posicionarse contra el
+        viewport (se vuelve relativo a ese ancestro en su lugar) -- exactamente
+        el tipo de bug de layout que no se puede verificar visualmente sin
+        una cuenta real. Como hermano directo aquí, el flotante siempre es
+        relativo a la pantalla completa, sin ambigüedad.
+      */}
+      {!isLoadingHistory && (
+        <FloatingAvatar
+          mood={NEUTRAL_AVATAR_MOOD}
+          isAiResponding={isThinking}
+          isUserTyping={message.trim() !== ""}
+          lastActivityAt={lastActivityAt}
+        />
+      )}
       <ConversationOpeningRitual ready={!isLoadingHistory} cue={welcomeCue} orb={orbSignature}>
         {/*
           Header — el wordmark "LUZ" ahora vive en el AppShell (Sprint 1);
@@ -598,13 +618,6 @@ function ChatPageContent() {
           <header className="flex-shrink-0 border-b border-zinc-800 px-8 py-5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <PresenceAvatar
-                  mood={NEUTRAL_AVATAR_MOOD}
-                  isAiResponding={isThinking}
-                  isUserTyping={message.trim() !== ""}
-                  lastActivityAt={lastActivityAt}
-                  size="xs"
-                />
                 {historicalLabel && (
                   <p className="text-sm text-zinc-500">{historicalLabel}</p>
                 )}
