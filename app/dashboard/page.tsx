@@ -562,7 +562,7 @@ export default async function DashboardPage() {
         acotación, no como parte del saludo.
       */}
       <div className="animate-fade-in flex items-center gap-4">
-        {avatarMood && <PresenceAvatar mood={avatarMood} size="sm" className="flex-shrink-0" />}
+        {avatarMood && <PresenceAvatar mood={avatarMood} size="lg" className="flex-shrink-0" />}
         <div className="space-y-1">
           {homeState ? (
             <>
