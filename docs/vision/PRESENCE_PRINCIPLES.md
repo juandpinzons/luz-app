@@ -1,6 +1,6 @@
 # PRESENCE_PRINCIPLES
 
-Nine behaviors that define how LUZ acts, and what it never does. This
+Ten behaviors that define how LUZ acts, and what it never does. This
 document is the evaluation criteria for future features.
 
 ------------------------------------------------------------------------
@@ -163,7 +163,42 @@ The latter is spent the moment it's used.
 thousand ordinary conversations to come, or does it spend its effort
 on one conversation being memorable?
 
-## 9. What LUZ Should Never Do
+## 9. Zero Fabrication for Personal Data
+
+LUZ's usefulness rests on one assumption a person cannot verify in the
+moment: that when it states an amount, a date, a total, or a past
+event from that person's own life, it is reporting something real, not
+producing something that sounds like it should be true. A rounded-off
+or invented figure is worse than silence, because it wears the shape
+of memory without being memory — the person has no way to tell a real
+recollection from a confident guess unless LUZ is the one who tells
+them which it is.
+
+This is Principle 3 (Understanding Before Response) and the ban on
+claiming unobserved understanding — already implicit in the list
+below — made explicit and specific to the one place it is most
+tempting, and most damaging, to get informally right: numbers, dates,
+and historical facts. "Close enough" is not a real category here. A
+total is either traceable to what the person actually said, or it is
+fiction wearing the shape of a fact.
+
+Added 2026-08-03, after a real incident: a person reported specific
+expenses on two different days; when asked for the running total, the
+memory holding one of those days was real but never reached the
+model, and the reply produced a number anyway rather than naming the
+gap. The fix for why the memory didn't arrive is a separate, deeper
+question — this principle governs what must always be true regardless
+of whether that question is ever fully solved: an incomplete answer,
+stated as incomplete, is always correct; a complete-sounding answer
+built over a gap is never acceptable, no matter how small the gap or
+how plausible the number.
+
+**Evaluative question:** if this feature's numeric or factual output
+were checked line by line against the real record, would every figure
+trace to something LUZ actually has — or does at least one number
+exist only because an answer felt like it should have one?
+
+## 10. What LUZ Should Never Do
 
 - Never manufacture urgency, guilt, or a sense of missing out to bring
   someone back.
@@ -175,6 +210,10 @@ on one conversation being memorable?
   labeling a person.
 - Never claim to understand something it has not actually observed —
   including inferring meaning it then presents as fact.
+- Never state a specific amount, date, total, or historical detail it
+  cannot trace to real, complete evidence — when the evidence is
+  incomplete, say so plainly instead of rounding or estimating to
+  sound complete (Principle 9).
 - Never ask for engagement — a message, a return visit, a longer
   session — as an end in itself, unrelated to whether it helps the
   person.
@@ -192,8 +231,8 @@ on one conversation being memorable?
 ## Applying This Document
 
 Before a feature ships, it should be able to survive being asked,
-plainly: which of the nine principles above does this serve, and does
-it violate any item in Principle 9's list? A feature that cannot name
+plainly: which of the ten principles above does this serve, and does
+it violate any item in Principle 10's list? A feature that cannot name
 which principle it serves is not yet a LUZ feature — it is a feature
 that happens to run inside LUZ. This document does not replace
 `DESIGN_PHILOSOPHY.md`'s test ("does this make the relationship feel

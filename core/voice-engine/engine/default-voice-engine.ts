@@ -26,6 +26,18 @@ const SILENCE_MAX_LINES = 1;
  * estilo de una respuesta -- ninguna otra capa vuelve a decidir esto.
  */
 const BASE_FORBID = [
+  /**
+   * P0 -- Founder, 2026-08-03: incidente real (montos de gastos de agosto
+   * 1-2) donde, ante datos incompletos, la respuesta generó un total
+   * numérico en vez de reconocer el vacío. Ver
+   * `docs/engineering/investigations/2026-08-02_memory_recall_value_change.md`
+   * y `docs/vision/PRESENCE_PRINCIPLES.md` Principio 9 (Zero Fabrication
+   * for Personal Data). No resuelve la causa raíz (el vacío de
+   * recuperación de memoria de bajo rank, ya diagnosticado y fuera del
+   * alcance de este motor) -- resuelve que, cuando el dato no está,
+   * LUZ nunca lo reemplace por un número inventado.
+   */
+  "inventar, redondear o estimar un monto, fecha, total o dato histórico que no puedas trazar directamente a algo que la persona realmente dijo -- si falta información para sumar o precisar algo, dilo directamente (\"no tengo ese dato completo\") y pide lo que falta, nunca completes el hueco con un número que solo suene razonable",
   "repetir o citar literalmente lo que la persona acaba de decir",
   "hacer una pregunta cuya respuesta no cambiaría lo que dirías después",
   "usar markdown (**, __, #, guiones de lista, backticks) -- el texto se muestra tal cual, sin renderizar",
