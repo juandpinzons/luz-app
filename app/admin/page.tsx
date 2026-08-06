@@ -1,8 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/core/db/client";
-import { env } from "@/core/config/env";
 import {
   conversationMessages,
   conversations,
@@ -10,24 +10,17 @@ import {
   feedbackResponses,
   users,
 } from "@/core/db/schema";
+import { isAdmin } from "./is-admin";
 
 /**
  * Dashboard interno de operación (Sprint de Observabilidad, Alpha).
  * Protegido por email, no por rol — no existe un sistema de roles en
  * el dominio y no vale la pena construir uno para una sola persona.
- * `ADMIN_EMAILS` vacío cierra el acceso para todos por defecto.
  *
  * Server Component: consulta la base directamente, sin pasar por
  * `/api/chat` — es una vista de operación, no un consumidor del
  * dominio de chat.
  */
-function isAdmin(email: string | null | undefined): boolean {
-  if (!email) return false;
-  const allowed = env.ADMIN_EMAILS.split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  return allowed.includes(email.toLowerCase());
-}
 
 function startOfTodayUTC(): Date {
   const now = new Date();
@@ -98,10 +91,20 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-screen bg-black px-8 py-10 text-white">
-      <h1 className="text-2xl font-light tracking-wide">LUZ — Admin</h1>
-      <p className="mt-1 text-sm text-zinc-500">
-        Build {buildVersion} · {deploymentUrl}
-      </p>
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h1 className="text-2xl font-light tracking-wide">LUZ — Admin</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Build {buildVersion} · {deploymentUrl}
+          </p>
+        </div>
+        <Link
+          href="/admin/users"
+          className="rounded-lg border border-zinc-800 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-600 hover:text-white"
+        >
+          Ver por usuario →
+        </Link>
+      </div>
 
       <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Usuarios totales" value={totalUsers?.count ?? 0} />
