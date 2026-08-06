@@ -106,6 +106,73 @@ el hallazgo de mayor impacto: sin límite por usuario, un abuso o una
 cuenta comprometida genera gasto ilimitado de OpenAI sin ninguna
 alarma — no hay una segunda entrada aquí, se consolida en P1-2.
 
+### P1-6. Ranking de memoria sin categoría financiera — ✅ Resuelto, alcance mínimo (2026-08-06)
+**Descripción**: mismo defecto que P1-4 (lista de `UNDERSTANDING_SIGNALS`
+más angosta que el lenguaje real), caso real distinto — el Founder
+reportó que LUZ no recordaba cifras de gastos entre chats. Un dato
+financiero puntual ("gasté X en Y") no encajaba en ninguna de las 9
+categorías existentes, así que su `rank_score` quedaba siempre en el
+piso estructural (15 + recencia — el gasto real del 1 de agosto
+rankeó 19/100, cifra ya documentada en `assemble-reality-snapshot.ts`).
+Esto no solo perjudicaba el chat en vivo: el mismo umbral gatea
+`enqueueKnowledgeJob` (Knowledge Engine) y el pool de candidatos de
+`StructuredMemoryRetrievalStrategy` (techo 150) — un dato financiero
+nunca alcanzaba ninguno de los dos consistentemente.
+**Impacto**: seguimiento financiero (el caso de uso explícito que el
+Founder le pidió a LUZ) perdía datos reales sistemáticamente, no por
+azar.
+**Hecho**: agregada la categoría `financial_tracking` a
+`UNDERSTANDING_SIGNALS` (`deterministic-memory-ranking-strategy.ts`) —
+mismo mecanismo determinista de keyword matching que ya existía, sin
+lógica nueva. Prueba de regresión determinista agregada
+(`smoke/memory-ranking.test.ts`, primera prueba directa de esta
+estrategia). Alcance deliberadamente mínimo, mismo criterio que P1-4:
+el Founder también describió seguimiento de salud/nutrición como
+ejemplo de la capacidad deseada, pero sin un caso real de esa falla
+todavía — no agregado aquí, queda para cuando (si) aparece un caso
+real, o autorización explícita para adelantarlo.
+**Complejidad real**: Baja, como P1-4.
+**Gaps relacionados, nombrados y no resueltos aquí** — ver P1-7 y P1-8.
+
+### P1-7. `selectContextualMemories` solo empareja por token literal
+**Descripción**: la mitad "cuál de las candidatas es relevante para
+ESTE mensaje" (`features/chat/services/select-contextual-memories.ts`)
+compara tokens exactos (minúsculas, sin stemming) entre el mensaje y
+cada memoria — "cuánto he gastado" no comparte ningún token con
+"gasté 30.000 en Uber". P1-6 sube el `rank_score` base de una memoria
+financiera, pero ese score solo pesa 0.3 en el score compuesto de esta
+función (`RANK_WEIGHT`); sin superposición de palabras, sigue
+compitiendo en desventaja.
+**Impacto**: preguntas parafraseadas o agregadas ("¿cómo van mis
+finanzas?", "total de la semana") pueden seguir sin recuperar memorias
+genuinamente relevantes, incluso ya bien rankeadas por P1-6.
+**Prioridad**: P1.
+**Solución sugerida**: no diseñada aquí a propósito (fuera del alcance
+de un cambio de calibración) — candidatos: stemming simple ES/EN,
+detección de intención de agregación por categoría, o expansión de
+`MemoryQuery` para búsquedas category-scoped en vez de solo top-N por
+relevancia. Necesita su propia decisión, no una extensión silenciosa
+de P1-6.
+**Complejidad estimada**: Media-Alta.
+
+### P1-8. `RELEVANT_MEMORY_LIMIT = 5` bloquea preguntas de agregación
+**Descripción**: `assembleRealitySnapshot` nunca pasa más de 5 memorias
+al prompt del chat en vivo, sin importar cuántas sean relevantes. "Suma
+todo lo que gasté esta semana" con más de ~5 gastos reales no puede
+responderse completo aunque la recuperación (P1-6, P1-7) funcione
+perfecto — el snapshot ya recortó antes de llegar al LLM.
+**Impacto**: el caso de uso explícito que motivó P1-6 (control de
+finanzas, seguimiento acumulado) tiene un techo estructural distinto
+del problema de ranking/matching.
+**Prioridad**: P1.
+**Solución sugerida**: no diseñada aquí — subir el límite es la
+palanca más simple pero no fue pensada para agregación (dilución de
+contexto, costo de prompt); una ruta de "consulta category-scoped"
+separada del snapshot de relevancia general es la alternativa más
+alineada con ADR-0018 (sin motor nuevo, reutiliza `MemoryQuery` ya
+existente). Requiere decisión del Founder antes de implementar.
+**Complejidad estimada**: Media.
+
 ---
 
 ## Seguridad y privacidad (línea secundaria, iniciada 2026-07-19)

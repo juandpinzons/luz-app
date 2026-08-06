@@ -160,6 +160,46 @@ const UNDERSTANDING_SIGNALS: ReadonlyArray<{
       "in the long run i want",
     ],
   },
+  /**
+   * Incidente real, 2026-08-06 (Founder): un dato financiero puntual
+   * ("gasté X en Y") no encajaba en ninguna categoría anterior, así que
+   * su rank_score quedaba siempre en el piso estructural (15 + recencia,
+   * ver el caso real de agosto 1 en assemble-reality-snapshot.ts: 19) --
+   * no por un umbral mal calibrado, sino porque la lista nunca tuvo una
+   * categoría para esto. Mismo mecanismo, mismo tipo de arreglo, que
+   * P1-4 (ALPHA_BACKLOG.md, 2026-07-19, "me fue infiel" en
+   * relationship_change) -- ese mismo precedente fija el alcance: solo
+   * el caso real reportado, nunca una lista ampliada por anticipación
+   * (el Founder también describió seguimiento de salud/nutrición como
+   * ejemplo de la capacidad deseada, pero sin un caso real de esa falla
+   * todavía -- deliberadamente no agregado aquí, mismo criterio que
+   * P1-4 aplicó).
+   */
+  {
+    category: "financial_tracking",
+    keywords: [
+      "gasté",
+      "gasto de",
+      "pagué",
+      "compré",
+      "mi presupuesto",
+      "mi salario",
+      "mi sueldo",
+      "ahorré",
+      "mi deuda",
+      "una factura",
+      "mi ingreso",
+      "i spent",
+      "i paid",
+      "i bought",
+      "my budget",
+      "my salary",
+      "i saved",
+      "my debt",
+      "an invoice",
+      "my income",
+    ],
+  },
 ];
 
 /**

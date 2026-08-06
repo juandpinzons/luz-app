@@ -16,6 +16,7 @@ import { importanceEngineFlow } from "./importance-engine.test";
 import { temporalEvolutionFlow } from "./temporal-evolution.test";
 import { predictivePendingFlow } from "./predictive-pending.test";
 import { aiProviderRegistryFlow } from "./ai-provider-registry.test";
+import { memoryRankingFlow } from "./memory-ranking.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -40,6 +41,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   temporalEvolutionFlow,
   predictivePendingFlow,
   aiProviderRegistryFlow,
+  memoryRankingFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {
