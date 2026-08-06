@@ -214,6 +214,31 @@ proveedores de login en el futuro.
 **Solución sugerida**: ninguna todavía, solo observación.
 **Complejidad estimada**: N/A.
 
+### SEC-3. 12 vulnerabilidades reportadas por `npm audit`, 2 críticas
+**Descripción**: encontradas de paso el 2026-08-06 mientras se
+instalaba `@sentry/nextjs` (confirmado pre-existente, no introducido
+por ese cambio — mismo conteo exacto con el package.json anterior
+restaurado vía `git stash`). 2 críticas (`@auth/core`, `next-auth`), 6
+altas (`next`, `postcss`, `sharp`, `js-yaml`, `brace-expansion` x2), 4
+moderadas (cadena `esbuild`/`drizzle-kit`).
+**Impacto**: no evaluado todavía — que el paquete tenga un CVE
+reportado no confirma que la app use la ruta de código vulnerable.
+Las dos críticas viven en `@auth/core`/`next-auth`, que sí es
+autenticación real en producción — la que más justifica revisar
+primero, no asumir explotable ni asumir inofensiva sin mirar.
+**Prioridad**: P1 — no P0 porque no hay evidencia todavía de que sea
+explotable en cómo este código usa esos paquetes, pero autenticación
+real antes de un demo público pesa más que una mejora normal.
+**Solución sugerida**: ninguna implementada — `npm audit fix --force`
+instalaría `next@16.3.0`, fuera del rango de dependencia declarado
+(cambio no probado, no se ejecuta a ciegas). Necesita: leer cada
+advisory real, confirmar si la ruta vulnerable de cada paquete
+efectivamente corre en este código, y solo entonces decidir
+actualizar (con pruebas) vs. aceptar el riesgo documentado.
+**Complejidad estimada**: Media — la investigación es rápida, la
+actualización de `next` (si hace falta) es el riesgo real de romper
+algo tan cerca del freeze.
+
 ---
 
 ## P2 — Mejoras
@@ -256,6 +281,22 @@ manejan cookies de sesión distinto a uno completo.
 **Solución sugerida**: ninguna todavía — solo observar si aparece un
 patrón de deslogueo inesperado.
 **Complejidad estimada**: N/A.
+
+### P2-5. Sin monitoreo externo de errores — ✅ Resuelto, pendiente activar (2026-08-06)
+**Descripción**: cero visibilidad de fallas en producción salvo mirar
+la tabla `events`/`/admin` a mano — ver
+`docs/engineering/BETA_DEVELOPMENT_ROADMAP_V1.md` §6 Prioridad 2.
+**Hecho**: `@sentry/nextjs` instalado y cableado —
+`instrumentation.ts`/`instrumentation-client.ts`/
+`sentry.server.config.ts`/`sentry.edge.config.ts`, `next.config.ts`
+envuelto con `withSentryConfig`. Verificado: `tsc --noEmit` limpio,
+`next build` limpio (sin warnings de Sentry), smoke suite 16/16.
+**Pendiente, no mío**: sin `NEXT_PUBLIC_SENTRY_DSN` configurado el SDK
+queda inerte a propósito (no lanza, no reporta) — el Founder ya
+registró la cuenta de Sentry y la enlazó con GitHub; falta pegar el
+DSN real (Sentry → Settings → Client Keys) en `.env.example`/Vercel
+para que empiece a capturar de verdad.
+**Complejidad real**: Baja, como se estimó.
 
 ---
 
