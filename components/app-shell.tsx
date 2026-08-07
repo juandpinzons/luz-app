@@ -73,8 +73,8 @@ export async function AppShell({
                       aria-current={isActive ? "page" : undefined}
                       className={
                         isActive
-                          ? "block whitespace-nowrap rounded-full bg-zinc-900 px-1.5 py-1.5 text-[11px] text-white ring-1 ring-luz/40 ring-inset sm:px-3 sm:text-sm"
-                          : "block whitespace-nowrap rounded-full px-1.5 py-1.5 text-[11px] text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:px-3 sm:text-sm"
+                          ? "flex min-h-11 items-center justify-center whitespace-nowrap rounded-full bg-zinc-900 px-2.5 text-[11px] text-white ring-1 ring-luz/40 ring-inset sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
+                          : "flex min-h-11 items-center justify-center whitespace-nowrap rounded-full px-2.5 text-[11px] text-zinc-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz sm:min-h-0 sm:px-3 sm:py-1.5 sm:text-sm"
                       }
                     >
                       {section.label}
