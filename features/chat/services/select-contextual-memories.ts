@@ -1,11 +1,13 @@
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life";
 import { DeterministicMemoryClassifier } from "../../../core/memory-engine/classification/deterministic-memory-classifier";
+import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import {
   createMemoryEngine,
   DrizzleMemoryRepository,
   type Memory,
 } from "../../../core/memory-engine";
+import { isAggregationQuery } from "./detect-aggregation-intent";
 
 /**
  * Incremento 1 (dirección del Founder: la inteligencia de selección
@@ -33,6 +35,14 @@ import {
  */
 const CANDIDATE_POOL_SIZE = 150;
 const MIN_TOKEN_LENGTH = 4;
+/**
+ * War Room 2026-08-09 (P1-7/P1-8): techo más alto solo para preguntas
+ * de agregación detectadas (`isAggregationQuery`) -- el límite normal
+ * (5, `RELEVANT_MEMORY_LIMIT`) nunca alcanza para sumar varias
+ * menciones reales. Sigue acotado -- nunca la lista completa de la
+ * persona, mismo espíritu que `CANDIDATE_POOL_SIZE` ya establece.
+ */
+const AGGREGATION_LIMIT = 15;
 
 /** Igual que `sameOriginMatches`/`samePersonMatches` en DefaultConnectStage — coincidencia estructural, nunca similitud semántica. */
 const SHARED_TOKEN_WEIGHT = 20;
@@ -83,6 +93,20 @@ function countShared(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
  *
  * Primera iteración de una capacidad que seguirá evolucionando (pesos
  * ajustables, no una fórmula final) — nunca una limitación permanente.
+ *
+ * War Room 2026-08-09 (P1-7/P1-8, `ALPHA_BACKLOG.md`): para una
+ * pregunta de agregación (`isAggregationQuery`) el límite normal sube
+ * a `AGGREGATION_LIMIT`, y además de lo mejor rankeado por relevancia
+ * a ESTE mensaje, se completa con cualquier otra candidata del mismo
+ * `type` que ya alcanzó `MIN_SCORE_WITH_UNDERSTANDING_SIGNAL` -- el
+ * mismo umbral que P1-6 ya usa para decidir "esto sí profundiza la
+ * comprensión de la persona". Sin esto, "cuánto he gastado en total"
+ * compite por token literal contra "gasté 30.000 en Uber" y pierde casi
+ * siempre (cero palabras compartidas) -- el problema nunca fue que la
+ * memoria no existiera, era que esta función solo sabía buscar por
+ * parecido textual a UN mensaje puntual, nunca por categoría completa.
+ * Sigue sin ninguna consulta nueva a la base de datos: candidates ya
+ * trae hasta 150 del mismo `Promise` de arriba.
  */
 export async function selectContextualMemories(
   db: Database,
@@ -103,6 +127,8 @@ export async function selectContextualMemories(
     currentMessage,
   );
   const messageTokens = tokenize(currentMessage);
+  const aggregation = isAggregationQuery(currentMessage);
+  const effectiveLimit = aggregation ? Math.max(limit, AGGREGATION_LIMIT) : limit;
 
   const scored = candidates
     .map((memory) => {
@@ -117,9 +143,33 @@ export async function selectContextualMemories(
     })
     .sort((a, b) => b.score - a.score);
 
+  // Deliberadamente `limit` (el original, no `effectiveLimit`) -- esta
+  // franja sigue siendo "lo mejor por relevancia real a ESTE mensaje",
+  // sin ensanchar. Ensanchar esta franja también (en vez de solo el
+  // paso de agregación de abajo) dejaba entrar ruido sin ninguna señal
+  // financiera cuando la cuenta tenía pocas memorias en total y nada
+  // más competía por esos puestos -- encontrado por el propio smoke
+  // test de este cambio (`aggregation-query.test.ts`), no en revisión
+  // manual.
   const selected = scored.slice(0, limit).map((entry) => entry.memory);
 
-  if (selected.length > 0 && selected.length < limit) {
+  if (aggregation && selected.length < effectiveLimit) {
+    const selectedIds = new Set(selected.map((memory) => memory.id));
+    const sameTypeUnderstood = candidates.filter(
+      (memory) =>
+        memory.type === messageType &&
+        (memory.rank?.score ?? 0) >= MIN_SCORE_WITH_UNDERSTANDING_SIGNAL &&
+        !selectedIds.has(memory.id),
+    );
+
+    for (const memory of sameTypeUnderstood) {
+      if (selected.length >= effectiveLimit) break;
+      selected.push(memory);
+      selectedIds.add(memory.id);
+    }
+  }
+
+  if (selected.length > 0 && selected.length < effectiveLimit) {
     const top = selected[0];
     const connections = await new DrizzleMemoryRepository(db).getConnections(
       context,
@@ -128,7 +178,7 @@ export async function selectContextualMemories(
     const selectedIds = new Set(selected.map((memory) => memory.id));
 
     for (const connection of connections) {
-      if (selected.length >= limit) break;
+      if (selected.length >= effectiveLimit) break;
 
       const connectedId =
         connection.fromMemoryId === top.id

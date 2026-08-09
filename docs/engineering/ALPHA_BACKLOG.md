@@ -134,44 +134,42 @@ real, o autorización explícita para adelantarlo.
 **Complejidad real**: Baja, como P1-4.
 **Gaps relacionados, nombrados y no resueltos aquí** — ver P1-7 y P1-8.
 
-### P1-7. `selectContextualMemories` solo empareja por token literal
-**Descripción**: la mitad "cuál de las candidatas es relevante para
-ESTE mensaje" (`features/chat/services/select-contextual-memories.ts`)
-compara tokens exactos (minúsculas, sin stemming) entre el mensaje y
-cada memoria — "cuánto he gastado" no comparte ningún token con
-"gasté 30.000 en Uber". P1-6 sube el `rank_score` base de una memoria
-financiera, pero ese score solo pesa 0.3 en el score compuesto de esta
-función (`RANK_WEIGHT`); sin superposición de palabras, sigue
-compitiendo en desventaja.
-**Impacto**: preguntas parafraseadas o agregadas ("¿cómo van mis
-finanzas?", "total de la semana") pueden seguir sin recuperar memorias
-genuinamente relevantes, incluso ya bien rankeadas por P1-6.
-**Prioridad**: P1.
-**Solución sugerida**: no diseñada aquí a propósito (fuera del alcance
-de un cambio de calibración) — candidatos: stemming simple ES/EN,
-detección de intención de agregación por categoría, o expansión de
-`MemoryQuery` para búsquedas category-scoped en vez de solo top-N por
-relevancia. Necesita su propia decisión, no una extensión silenciosa
-de P1-6.
-**Complejidad estimada**: Media-Alta.
-
-### P1-8. `RELEVANT_MEMORY_LIMIT = 5` bloquea preguntas de agregación
-**Descripción**: `assembleRealitySnapshot` nunca pasa más de 5 memorias
-al prompt del chat en vivo, sin importar cuántas sean relevantes. "Suma
-todo lo que gasté esta semana" con más de ~5 gastos reales no puede
-responderse completo aunque la recuperación (P1-6, P1-7) funcione
-perfecto — el snapshot ya recortó antes de llegar al LLM.
-**Impacto**: el caso de uso explícito que motivó P1-6 (control de
-finanzas, seguimiento acumulado) tiene un techo estructural distinto
-del problema de ranking/matching.
-**Prioridad**: P1.
-**Solución sugerida**: no diseñada aquí — subir el límite es la
-palanca más simple pero no fue pensada para agregación (dilución de
-contexto, costo de prompt); una ruta de "consulta category-scoped"
-separada del snapshot de relevancia general es la alternativa más
-alineada con ADR-0018 (sin motor nuevo, reutiliza `MemoryQuery` ya
-existente). Requiere decisión del Founder antes de implementar.
-**Complejidad estimada**: Media.
+### P1-7 + P1-8. Preguntas de agregación — ✅ Resuelto para ese caso específico (War Room, 2026-08-09)
+**Descripción original**: `selectContextualMemories` solo empareja por
+token literal ("cuánto he gastado" no comparte ningún token con "gasté
+30.000 en Uber") y `RELEVANT_MEMORY_LIMIT = 5` nunca deja pasar más de
+5 memorias al prompt en vivo, sin importar cuántas sean relevantes —
+juntos, bloqueaban cualquier pregunta que pidiera sumar/totalizar
+varias menciones reales.
+**Hecho**: `isAggregationQuery()` (`features/chat/services/detect-aggregation-intent.ts`)
+detecta, por palabra clave (mismo criterio determinista que
+`UNDERSTANDING_SIGNALS`), cuándo un mensaje pide agregar/totalizar. Al
+detectarlo, `selectContextualMemories` sube su techo a
+`AGGREGATION_LIMIT = 15` y completa la franja de mayor relevancia con
+cualquier otra candidata del mismo `type` que ya alcanzó
+`MIN_SCORE_WITH_UNDERSTANDING_SIGNAL` (el mismo umbral de P1-6) —
+ningún query nuevo a la base de datos, reutiliza el mismo lote de hasta
+150 candidatas que ya se traía. Zero motor nuevo, zero cambio a
+`core/memory-engine`.
+**Alcance real, no todo P1-7/P1-8**: esto resuelve el patrón de
+agregación específico (el caso real que motivó ambos hallazgos), no el
+problema general de matching parafraseado para cualquier pregunta
+puntual sin palabras de agregación — ese residuo (stemming ES/EN
+genérico) sigue sin resolver, sin diseñar aquí a propósito, mismo
+criterio que antes.
+**Verificado**: smoke test real (`smoke/aggregation-query.test.ts`)
+contra Postgres real — memorias sembradas con `DeterministicMemoryRankingStrategy`
+real (nunca un score fijado a mano), tres menciones de gasto sin
+ninguna palabra compartida con la pregunta de agregación, todas
+presentes en el resultado; una memoria sin señal financiera
+("El clima estuvo agradable hoy") confirmada excluida tanto de la
+franja inicial como del ensanche; una pregunta puntual (no agregación)
+confirmada sin ensanchar. Encontró y corrigió un bug real en la primera
+versión de este mismo cambio (la franja inicial se había ensanchado
+también, dejando entrar ruido cuando la cuenta tenía pocas memorias) —
+el propio test lo atrapó antes de mergear, no en revisión manual.
+tsc/build/smoke (17/17) limpios.
+**Complejidad real**: Media, como se estimó para P1-8.
 
 ---
 
