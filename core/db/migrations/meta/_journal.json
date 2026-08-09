@@ -183,6 +183,13 @@
       "when": 1785545639106,
       "tag": "0025_seen_prompts",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786288444261,
+      "tag": "0026_tricky_mandarin",
+      "breakpoints": true
     }
   ]
 }

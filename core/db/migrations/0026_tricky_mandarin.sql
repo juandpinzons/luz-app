@@ -1,0 +1,2 @@
+CREATE TYPE "public"."feedback_response_length" AS ENUM('too_long', 'just_right', 'too_short');--> statement-breakpoint
+ALTER TABLE "feedback_responses" ADD COLUMN "response_length" "feedback_response_length";

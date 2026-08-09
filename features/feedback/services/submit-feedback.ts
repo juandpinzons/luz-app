@@ -37,6 +37,7 @@ export async function submitFeedback(
         userId: context.userId,
         helpfulness: input.helpfulness,
         remembersMe: input.remembersMe,
+        responseLength: input.responseLength ?? null,
         comment: input.comment && input.comment.length > 0 ? input.comment : null,
       })
       .returning({ id: feedbackResponses.id });
@@ -59,6 +60,7 @@ export async function submitFeedback(
     userId: context.userId,
     helpfulness: input.helpfulness,
     remembersMe: input.remembersMe,
+    responseLength: input.responseLength ?? "sin_opinion",
     hasComment: Boolean(input.comment && input.comment.length > 0),
   });
 

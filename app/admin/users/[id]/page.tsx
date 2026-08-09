@@ -305,7 +305,7 @@ export default async function AdminUserDetailPage({
             <ListRow
               key={f.id}
               primary={f.comment ?? "(sin comentario)"}
-              secondary={`Utilidad ${f.helpfulness}/5 · recuerda con el tiempo: ${REMEMBERS_ME_LABEL[f.remembersMe]} · ${fmtDate(f.createdAt.toISOString())}`}
+              secondary={`Utilidad ${f.helpfulness}/5 · recuerda con el tiempo: ${REMEMBERS_ME_LABEL[f.remembersMe]}${f.responseLength ? ` · extensión: ${RESPONSE_LENGTH_LABEL[f.responseLength]}` : ""} · ${fmtDate(f.createdAt.toISOString())}`}
             />
           ))}
         </Section>
@@ -318,6 +318,12 @@ const REMEMBERS_ME_LABEL: Record<"yes" | "no" | "unsure", string> = {
   yes: "Sí",
   no: "No",
   unsure: "Aún no sé",
+};
+
+const RESPONSE_LENGTH_LABEL: Record<"too_long" | "just_right" | "too_short", string> = {
+  too_long: "muy larga",
+  just_right: "justa",
+  too_short: "muy corta",
 };
 
 function countBy<T>(items: T[], key: (item: T) => string): Record<string, number> {

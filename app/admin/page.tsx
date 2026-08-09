@@ -76,6 +76,7 @@ export default async function AdminPage() {
       id: feedbackResponses.id,
       helpfulness: feedbackResponses.helpfulness,
       remembersMe: feedbackResponses.remembersMe,
+      responseLength: feedbackResponses.responseLength,
       comment: feedbackResponses.comment,
       createdAt: feedbackResponses.createdAt,
       userEmail: users.email,
@@ -161,6 +162,9 @@ export default async function AdminPage() {
               <div className="mt-1">
                 Utilidad: {f.helpfulness}/5 · Recuerda con el tiempo:{" "}
                 {REMEMBERS_ME_LABEL[f.remembersMe]}
+                {f.responseLength && (
+                  <> · Extensión: {RESPONSE_LENGTH_LABEL[f.responseLength]}</>
+                )}
               </div>
               {f.comment && (
                 <div className="mt-1 text-zinc-300">&ldquo;{f.comment}&rdquo;</div>
@@ -177,6 +181,12 @@ const REMEMBERS_ME_LABEL: Record<"yes" | "no" | "unsure", string> = {
   yes: "Sí",
   no: "No",
   unsure: "Aún no sé",
+};
+
+const RESPONSE_LENGTH_LABEL: Record<"too_long" | "just_right" | "too_short", string> = {
+  too_long: "muy larga",
+  just_right: "justa",
+  too_short: "muy corta",
 };
 
 function Stat({ label, value }: { label: string; value: string | number }) {

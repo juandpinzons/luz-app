@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { SubmitFeedbackResponse } from "@/features/feedback/types";
 
 type RemembersMe = "yes" | "no" | "unsure";
+type ResponseLength = "too_long" | "just_right" | "too_short";
 
 const HELPFULNESS_SCALE = [1, 2, 3, 4, 5] as const;
 
@@ -14,9 +15,17 @@ const REMEMBERS_ME_OPTIONS: { value: RemembersMe; label: string }[] = [
   { value: "unsure", label: "Aún no sé" },
 ];
 
+/** Opcional a propósito, a diferencia de `helpfulness`/`remembersMe` -- ver RESPONSE_READING_GUIDELINES_V1.md, cierre. */
+const RESPONSE_LENGTH_OPTIONS: { value: ResponseLength; label: string }[] = [
+  { value: "too_long", label: "Muy larga" },
+  { value: "just_right", label: "Justa" },
+  { value: "too_short", label: "Muy corta" },
+];
+
 export default function FeedbackPage() {
   const [helpfulness, setHelpfulness] = useState<number | null>(null);
   const [remembersMe, setRemembersMe] = useState<RemembersMe | null>(null);
+  const [responseLength, setResponseLength] = useState<ResponseLength | null>(null);
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +46,7 @@ export default function FeedbackPage() {
         body: JSON.stringify({
           helpfulness,
           remembersMe,
+          responseLength: responseLength ?? undefined,
           comment: comment.trim() || undefined,
         }),
       });
@@ -123,6 +133,31 @@ export default function FeedbackPage() {
                 aria-pressed={remembersMe === option.value}
                 className={
                   remembersMe === option.value
+                    ? "rounded-full bg-white px-5 py-2 font-medium text-black"
+                    : "rounded-full px-5 py-2 ring-1 ring-zinc-700 text-zinc-300 transition hover:ring-zinc-500"
+                }
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-10">
+          <p className="text-sm text-zinc-300">
+            ¿Cómo se sintió la extensión de mis respuestas? (opcional)
+          </p>
+          <div className="mt-3 flex gap-2">
+            {RESPONSE_LENGTH_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() =>
+                  setResponseLength((prev) => (prev === option.value ? null : option.value))
+                }
+                aria-pressed={responseLength === option.value}
+                className={
+                  responseLength === option.value
                     ? "rounded-full bg-white px-5 py-2 font-medium text-black"
                     : "rounded-full px-5 py-2 ring-1 ring-zinc-700 text-zinc-300 transition hover:ring-zinc-500"
                 }

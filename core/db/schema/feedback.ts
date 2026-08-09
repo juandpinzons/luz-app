@@ -16,6 +16,19 @@ export const feedbackRemembersMeEnum = pgEnum("feedback_remembers_me", [
   "unsure",
 ]);
 
+/**
+ * RESPONSE_READING_GUIDELINES_V1.md -- la señal real que ese documento
+ * necesita para saber cuándo revisar transcripciones, en vez de
+ * inventar reglas nuevas sin evidencia. Nullable/opcional, igual que
+ * `comment`: la persona puede no tener una opinión sobre esto en
+ * particular sin que eso bloquee el resto del formulario.
+ */
+export const feedbackResponseLengthEnum = pgEnum("feedback_response_length", [
+  "too_long",
+  "just_right",
+  "too_short",
+]);
+
 export const feedbackResponses = pgTable(
   "feedback_responses",
   {
@@ -26,6 +39,7 @@ export const feedbackResponses = pgTable(
     /** 1 (nada útil) a 5 (muy útil). */
     helpfulness: integer("helpfulness").notNull(),
     remembersMe: feedbackRemembersMeEnum("remembers_me").notNull(),
+    responseLength: feedbackResponseLengthEnum("response_length"),
     comment: text("comment"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
