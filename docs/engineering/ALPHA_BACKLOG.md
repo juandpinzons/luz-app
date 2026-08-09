@@ -296,6 +296,46 @@ DSN real (Sentry → Settings → Client Keys) en `.env.example`/Vercel
 para que empiece a capturar de verdad.
 **Complejidad real**: Baja, como se estimó.
 
+### P2-6. Biblioteca editorial sin consumidor — ✅ Resuelto, alcance angosto (War Room, 2026-08-09)
+**Descripción original**: 99 frases reales (`editorial/`, escritas
+2026-08-02 con el Founder) sin ningún código que las leyera —
+`BETA_DEVELOPMENT_ROADMAP_V1.md` §2 lo señaló como el ejemplo más
+limpio de "arquitectura no reflejada en la experiencia" de esa
+auditoría.
+**Hecho**: `editorial/build-phrases.mjs` convierte los YAML a un módulo
+TS (`editorial/generated/phrases.ts`, evita el riesgo real de que
+Vercel no empaquete `fs.readFileSync` sobre archivos fuera del grafo de
+imports). Primer consumidor real:
+`features/dashboard/services/select-editorial-phrase.ts`, cableado en
+`app/dashboard/page.tsx` como cuarta rama del saludo — el único hueco
+sin ninguna lógica hoy (ni primera visita, ni continuidad de IA, ni
+regreso tras pausa real). `repeat_after` (30 días) respetado vía dos
+métodos nuevos en `SeenPromptRepository`
+(`listSeenSubjectIdsSince`/`markSeenAgain`), mismo mecanismo ya real de
+`core/seen-prompts`, sin tabla nueva.
+**Alcance real, no las 99 frases**: solo `silence`+`observation` (14).
+`busy_day` deliberadamente fuera -- afirma haber detectado un día
+ocupado, mostrarla sin señal real que lo respalde viola
+`PRESENCE_PRINCIPLES.md` #9 (cero fabricación). Las 7 categorías
+restantes (77 frases) siguen sin consumidor. "Conversational Variety
+V1" completo (quién decide entre TODAS las categorías/continuidad/
+silencio) sigue sin diseñar, sigue fuera de alcance -- ver
+`editorial/README.md`, actualizado con el mismo detalle.
+**Verificado**: `smoke/editorial-phrase.test.ts` contra Postgres real
+-- primera selección devuelve una frase real del pool, fila real en
+`seen_prompts`, pool completo marcado como visto degrada a repetir
+honestamente (nunca a silencio fabricado). Confirmación indirecta pero
+real de la integración en `/dashboard`: correr la suite completa (no
+en aislamiento) mostró que `dashboard.test.ts` -- que golpea la ruta
+real por HTTP -- ya escribía filas `editorial_phrase` como efecto
+secundario, lo que solo puede pasar si `selectEditorialPhrase` corre
+de verdad dentro del render real de la página. Encontró y corrigió un
+bug de aislamiento en el propio test (asumía que ningún otro flujo de
+la suite tocaba `seen_prompts`, falso) antes de mergear. tsc/build/
+smoke (18/18) limpios.
+**Complejidad real**: Media -- el mecanismo de "no repetir" necesitó
+extender `SeenPromptRepository`, no solo leer las frases.
+
 ---
 
 ## P3 — Futuro

@@ -10,11 +10,26 @@ para aparecer en Daily Brief, pantalla de inicio, estados vacíos,
 esperas, bienvenidas, y pequeños momentos de presencia en general.
 
 Contenido definido 2026-08-02, junto con el Founder, en varias rondas
-de escritura y edición directa. Cero lógica de selección todavía --
-"Conversational Variety V1" (quién decide, en cada momento, si mostrar
-una frase editorial, generar una línea de continuidad personalizada, o
-quedarse en silencio) es trabajo futuro explícitamente fuera de
-alcance de este commit.
+de escritura y edición directa.
+
+**Actualización 2026-08-09 (War Room):** primer consumidor real --
+`features/dashboard/services/select-editorial-phrase.ts`, cableado en
+`app/dashboard/page.tsx`. Alcance deliberadamente angosto: solo
+`silence`+`observation` (14 de las 99 frases), y solo para el único
+hueco de Dashboard sin ninguna lógica hoy (ni primera visita, ni línea
+de continuidad de IA, ni regreso tras una pausa real). El resto de
+"Conversational Variety V1" completo (quién decide, en cada momento,
+entre TODAS las categorías, una línea de continuidad personalizada, o
+quedarse en silencio) sigue sin diseñar, sigue fuera de alcance. Las
+demás categorías (`morning`, `welcome_back`, `progress`, `celebration`,
+`night`, `curiosity`, `identity`, `reflection`) siguen sin consumidor
+real -- `busy_day` deliberadamente excluida incluso de este alcance
+angosto: sus frases afirman haber detectado un día ocupado, y usarlas
+sin una señal real que lo respalde violaría el principio de cero
+fabricación (`PRESENCE_PRINCIPLES.md` #9). `repeat_after` (30 días,
+igual en las 99 frases hoy) se respeta vía `seen_prompts`
+(`listSeenSubjectIdsSince`/`markSeenAgain`, extensión del mecanismo ya
+real de `core/seen-prompts`).
 
 ## Estructura
 

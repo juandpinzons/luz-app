@@ -35,6 +35,7 @@ import {
 import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
 import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
+import { selectEditorialPhrase } from "@/features/dashboard/services/select-editorial-phrase";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { logTraceSummary, runTrace, span } from "@/core/observability/trace";
@@ -193,6 +194,7 @@ export default async function DashboardPage() {
     avatarMood: AvatarMoodSignal | null;
     brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
     calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
+    editorialPhrase: string | null;
     isFirstVisit: boolean;
   }> {
   async function loadConversationCount(): Promise<number> {
@@ -329,6 +331,21 @@ export default async function DashboardPage() {
   }
 
   /**
+   * War Room 2026-08-09 -- biblioteca editorial, primer consumidor
+   * real (`select-editorial-phrase.ts`). Solo se usa cuando ninguna de
+   * las otras tres ramas del saludo aplica (ver más abajo,
+   * `returningGapDays === null`); esa condición se evalúa después de
+   * este `Promise.all`, así que esta carga corre siempre en paralelo
+   * con las demás y simplemente no se usa si no hace falta -- mismo
+   * costo que cualquier otra rama de este bloque, nunca una consulta
+   * extra condicional.
+   */
+  async function loadEditorialPhrase(): Promise<string | null> {
+    if (!lifeGraphContext) return null;
+    return selectEditorialPhrase(db, lifeGraphContext);
+  }
+
+  /**
    * Calendario en vivo (Misión "conéctalo al dashboard principal") --
    * mismo criterio de tolerancia a fallos que el resto de esta página:
    * sin conexión, con error de sync, o con datos reales, la página
@@ -373,15 +390,23 @@ export default async function DashboardPage() {
   // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
   // dos `select` simples que antes solo se pedían DESPUÉS de tener
   // `homeState` en mano, aunque nunca lo necesitaron a él tampoco.
-  const [summary, homeStateBaseResult, brief, calendarOutcome, recentPrimaryKeys, previousFingerprint] =
-    await Promise.all([
-      span("Dashboard Summary", "orchestration", loadSummary),
-      span("Home State", "orchestration", loadHomeStateBase),
-      span("Morning Brief", "orchestration", loadMorningBrief),
-      span("Calendar", "external_api", loadCalendarOutcome),
-      span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
-      span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
-    ]);
+  const [
+    summary,
+    homeStateBaseResult,
+    brief,
+    calendarOutcome,
+    recentPrimaryKeys,
+    previousFingerprint,
+    editorialPhrase,
+  ] = await Promise.all([
+    span("Dashboard Summary", "orchestration", loadSummary),
+    span("Home State", "orchestration", loadHomeStateBase),
+    span("Morning Brief", "orchestration", loadMorningBrief),
+    span("Calendar", "external_api", loadCalendarOutcome),
+    span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
+    span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
+    span("Editorial Phrase", "repository", loadEditorialPhrase),
+  ]);
 
   let homeState = homeStateBaseResult?.homeState ?? null;
   if (homeState && calendarOutcome?.status === "connected") {
@@ -498,7 +523,16 @@ export default async function DashboardPage() {
     }
   }
 
-    return { summary, homeState, experience, avatarMood, brief, calendarOutcome, isFirstVisit };
+    return {
+      summary,
+      homeState,
+      experience,
+      avatarMood,
+      brief,
+      calendarOutcome,
+      editorialPhrase,
+      isFirstVisit,
+    };
   }
 
   const { result: dashboardData, summary: trace } = await runTrace(
@@ -507,8 +541,16 @@ export default async function DashboardPage() {
     loadDashboardData,
   );
   logTraceSummary(trace, { route: ROUTE, userId });
-  const { summary, homeState, experience, avatarMood, brief, calendarOutcome, isFirstVisit } =
-    dashboardData;
+  const {
+    summary,
+    homeState,
+    experience,
+    avatarMood,
+    brief,
+    calendarOutcome,
+    editorialPhrase,
+    isFirstVisit,
+  } = dashboardData;
 
   const daysSinceLastMessage = summary?.lastMessageAt
     ? daysSince(summary.lastMessageAt, new Date())
@@ -579,13 +621,30 @@ export default async function DashboardPage() {
         >
           {brief.continuityLine}
         </div>
+      ) : returningGapDays !== null ? (
+        <div
+          className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
+          style={{ animationDelay: "100ms" }}
+        >
+          {buildReturningLine(returningGapDays)}
+        </div>
       ) : (
-        returningGapDays !== null && (
+        /*
+          War Room 2026-08-09 -- biblioteca editorial, primer
+          consumidor real. Este es el único caso que antes no decía
+          nada: no primera visita, sin línea de continuidad de IA, y
+          sin pausa real que reconocer (`returningGapDays === null` --
+          alguien que vuelve dentro de RETURNING_GAP_DAYS, el caso más
+          común para quien usa LUZ con regularidad). `editorialPhrase`
+          ya viene resuelto (o `null`, degradación silenciosa) del
+          `Promise.all` de arriba -- ninguna consulta nueva acá.
+        */
+        editorialPhrase && (
           <div
             className="animate-fade-in mt-6 rounded-2xl border border-luz/25 bg-zinc-900/60 px-5 py-4 text-zinc-200"
             style={{ animationDelay: "100ms" }}
           >
-            {buildReturningLine(returningGapDays)}
+            {editorialPhrase}
           </div>
         )
       )}

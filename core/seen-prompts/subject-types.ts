@@ -7,4 +7,5 @@
 export const SEEN_PROMPT_SUBJECT_TYPES = {
   intentionFollowup: "intention_followup",
   goalClosure: "goal_closure",
+  editorialPhrase: "editorial_phrase",
 } as const;
