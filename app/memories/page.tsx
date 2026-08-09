@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
@@ -5,9 +6,11 @@ import { db } from "@/core/db/client";
 import { listAllGoals } from "@/features/life/services/list-all-goals";
 import { listAllProjects } from "@/features/life/services/list-all-projects";
 import {
+  groupByTimeLabel,
   searchMemories,
   type MemoryTimeGroup,
 } from "@/features/memories/services/search-memories";
+import { selectMemoryHighlights } from "@/features/memories/services/select-memory-highlights";
 import {
   listValidatedInsights,
   type ValidatedInsights,
@@ -17,25 +20,34 @@ import { InsightCard } from "@/features/memories/components/insight-card";
 
 /**
  * Memories, solo lectura (Sprint 4, docs/product/
- * ALPHA_EXPERIENCE_V1_DESIGN.md §3.3/4.3) — agrupadas por tiempo,
- * búsqueda de texto libre, conexiones (ya reales) y menciones a
- * Life visibles. Sin edición, explícitamente V1.
+ * ALPHA_EXPERIENCE_V1_DESIGN.md §3.3/4.3) — conexiones (ya reales) y
+ * menciones a Life visibles. Sin edición, explícitamente V1.
  *
  * Búsqueda vía `?q=` con un `<form method="GET">` nativo — mismo
  * patrón, sin JS de cliente, que `/conversations` ya usa.
+ *
+ * Landing (UX_ARCHITECTURE_REFINEMENT_V1.md §3, "Highlights"): sin
+ * búsqueda activa, la entrada a la pantalla ya no es la lista
+ * cronológica completa -- son los "Momentos que más han quedado"
+ * (`selectMemoryHighlights`). Lo cronológico no desaparece, pasa a ser
+ * el "ver todo" alcanzable con un link (`?view=all`), nunca lo primero
+ * que se ve. Con búsqueda activa, sin cambios: se muestra todo lo que
+ * coincide, agrupado por tiempo -- filtrar resultados de búsqueda por
+ * highlights escondería coincidencias reales que la persona sí pidió.
  */
 export default async function MemoriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; view?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) {
     redirect("/login");
   }
 
-  const { q } = await searchParams;
+  const { q, view } = await searchParams;
   const searchTerm = q?.trim() || undefined;
+  const showAllChronological = view === "all" || Boolean(searchTerm);
 
   let lifeGraphContext = null;
   try {
@@ -45,6 +57,7 @@ export default async function MemoriesPage({
   }
 
   let groups: MemoryTimeGroup[] = [];
+  let highlights: Awaited<ReturnType<typeof selectMemoryHighlights>> = [];
   /** Títulos de Goal/Project ya persistidos — misma búsqueda literal de §3.2.1, en la dirección inversa (¿qué Life aparece dentro de esta memoria?). */
   let lifeTitles: string[] = [];
   /**
@@ -58,18 +71,20 @@ export default async function MemoriesPage({
 
   if (lifeGraphContext) {
     try {
-      const [memoryGroups, goals, projects, validatedInsights] = await Promise.all([
-        searchMemories(db, lifeGraphContext, {
-          text: searchTerm,
-          groupByTime: true,
-        }),
+      const [flatMemories, goals, projects, validatedInsights] = await Promise.all([
+        // Sin `groupByTime` -- una sola consulta, reutilizada abajo tanto
+        // para "ver todo" (agrupado por tiempo) como para Highlights
+        // (filtrado por rank.score), nunca dos consultas por la misma
+        // visita.
+        searchMemories(db, lifeGraphContext, { text: searchTerm }),
         listAllGoals(db, lifeGraphContext),
         listAllProjects(db, lifeGraphContext),
         searchTerm
           ? Promise.resolve<ValidatedInsights>({ items: [], total: 0, byType: {} })
           : listValidatedInsights(db, lifeGraphContext),
       ]);
-      groups = memoryGroups;
+      groups = groupByTimeLabel(flatMemories);
+      highlights = selectMemoryHighlights(flatMemories);
       lifeTitles = [...goals, ...projects].map((item) => item.title);
       insights = validatedInsights;
     } catch (error) {
@@ -143,18 +158,18 @@ export default async function MemoriesPage({
           </p>
         )}
 
-        <div className="mt-8 space-y-8">
-          {groups.map((group) => (
-            <section key={group.label}>
-              <h2 className="text-sm font-medium text-zinc-400">
-                {group.label}
-              </h2>
+        {hasResults && !showAllChronological && (
+          <section className="animate-fade-in mt-8">
+            <h2 className="text-sm font-medium text-zinc-400">
+              Momentos que más han quedado
+            </h2>
+            {highlights.length > 0 ? (
               <ul className="mt-3 space-y-2">
-                {group.memories.map((memory) => (
+                {highlights.map((memory, index) => (
                   <MemoryCard
                     key={memory.id}
                     memory={memory}
-                    index={Math.min(memoryIndexById.get(memory.id) ?? 0, 12)}
+                    index={Math.min(index, 12)}
                     connectedContents={memory.connectedContents}
                     mentionedLifeTitles={lifeTitles.filter((title) =>
                       memory.content.toLowerCase().includes(title.toLowerCase()),
@@ -162,9 +177,56 @@ export default async function MemoriesPage({
                   />
                 ))}
               </ul>
-            </section>
-          ))}
-        </div>
+            ) : (
+              <p className="mt-3 text-sm text-zinc-500">
+                Todavía no tengo un puñado de momentos que se destaquen
+                especialmente sobre el resto — cuanto más me cuentes, más
+                se va a ir llenando esto.
+              </p>
+            )}
+            <Link
+              href="/memories?view=all"
+              className="mt-4 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+            >
+              Ver todo, en orden →
+            </Link>
+          </section>
+        )}
+
+        {hasResults && showAllChronological && (
+          <>
+            {!searchTerm && (
+              <Link
+                href="/memories"
+                className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+              >
+                ← Momentos destacados
+              </Link>
+            )}
+            <div className={searchTerm ? "mt-8 space-y-8" : "mt-4 space-y-8"}>
+              {groups.map((group) => (
+                <section key={group.label}>
+                  <h2 className="text-sm font-medium text-zinc-400">
+                    {group.label}
+                  </h2>
+                  <ul className="mt-3 space-y-2">
+                    {group.memories.map((memory) => (
+                      <MemoryCard
+                        key={memory.id}
+                        memory={memory}
+                        index={Math.min(memoryIndexById.get(memory.id) ?? 0, 12)}
+                        connectedContents={memory.connectedContents}
+                        mentionedLifeTitles={lifeTitles.filter((title) =>
+                          memory.content.toLowerCase().includes(title.toLowerCase()),
+                        )}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </main>
   );

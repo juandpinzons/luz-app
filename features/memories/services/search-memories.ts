@@ -36,7 +36,8 @@ function sortByRecency<T extends Memory>(memories: T[]): T[] {
   );
 }
 
-function groupByTimeLabel(memories: MemoryWithConnections[]): MemoryTimeGroup[] {
+/** Exportado para `select-memory-highlights.ts` -- la vista "ver todo" agrupa el mismo lote ya cargado, nunca una segunda consulta. */
+export function groupByTimeLabel(memories: MemoryWithConnections[]): MemoryTimeGroup[] {
   const buckets = new Map<MemoryTimeGroupLabel, MemoryWithConnections[]>();
   for (const memory of memories) {
     const label = groupLabel(memory.occurredAt ?? memory.createdAt);
