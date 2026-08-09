@@ -1,5 +1,6 @@
 import type {
   GoalStatus,
+  LifeDomainType,
   ProjectStatus,
   RelationshipType,
 } from "../../core/life";
@@ -53,4 +54,22 @@ export const INSIGHT_TYPE_LABELS: Record<InsightType, string> = {
   fact: "Hechos",
   risk: "Riesgos",
   recommendation: "Recomendaciones",
+};
+
+/**
+ * Distinto a propósito de `LIFE_DOMAIN_LABEL` (`core/life`) -- ese es
+ * para texto generado hacia LUZ/el prompt ("su salud", tercera
+ * persona posesiva), su propio docblock dice explícitamente "nunca
+ * para mostrar en UI". Estas son las etiquetas de UI real -- nombres
+ * de dominio limpios para un chip de filtro, no una frase.
+ */
+export const LIFE_DOMAIN_UI_LABELS: Record<LifeDomainType, string> = {
+  health: "Salud",
+  career: "Carrera",
+  finances: "Finanzas",
+  relationships: "Relaciones",
+  personal_growth: "Crecimiento personal",
+  leisure: "Ocio",
+  home: "Hogar",
+  spirituality: "Espiritualidad",
 };

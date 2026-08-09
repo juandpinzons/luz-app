@@ -7,7 +7,7 @@ import { DrizzleBeliefRepository } from "@/core/belief-engine";
 import type { Concept } from "@/core/concept-graph";
 import { DrizzleConceptRepository } from "@/core/concept-graph";
 import { db } from "@/core/db/client";
-import type { Goal, Habit, Project } from "@/core/life";
+import { LIFE_DOMAIN_TYPES, type Goal, type Habit, type LifeDomainType, type Project } from "@/core/life";
 import { LifeCard } from "@/features/life/components/life-card";
 import { LifeGraphView } from "@/features/life/components/life-graph-view";
 import { listAllGoals } from "@/features/life/services/list-all-goals";
@@ -25,11 +25,16 @@ import {
 } from "@/features/knowledge/services/list-validated-insights";
 import {
   GOAL_STATUS_LABELS,
+  LIFE_DOMAIN_UI_LABELS,
   PROJECT_STATUS_LABELS,
   RELATIONSHIP_TYPE_LABELS,
 } from "@/features/life/labels";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
+
+function isLifeDomainType(value: string): value is LifeDomainType {
+  return (LIFE_DOMAIN_TYPES as readonly string[]).includes(value);
+}
 
 const ROUTE = "/life";
 
@@ -62,12 +67,19 @@ function formatRelativeTime(date: Date): string {
  * lectura de siempre, ahora también disponible como "Vista lista"
  * dentro de `LifeGraphView`.
  */
-export default async function LifePage() {
+export default async function LifePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ domain?: string }>;
+}) {
   const session = await auth();
 
   if (!session?.user) {
     redirect("/login");
   }
+
+  const { domain: domainParam } = await searchParams;
+  const selectedDomain = domainParam && isLifeDomainType(domainParam) ? domainParam : null;
 
   const requestId = createRequestId();
 
@@ -226,6 +238,28 @@ export default async function LifePage() {
     }
   }
 
+  /**
+   * Life Domain lens (UX_ARCHITECTURE_REFINEMENT_V1.md §5, item 1) --
+   * `domain` es un campo real y ya persistido en Goal/Project/Habit
+   * (`core/life/entities/*`), nunca uno nuevo. Filtra las mismas
+   * franjas que ya se cargaron arriba, antes de `assembleLifeGraph` --
+   * así el filtro aplica igual a la vista de lista y al mapa mental,
+   * sin tocar ninguno de los dos por separado. Relaciones y Cronología
+   * no tienen `domain` propio (ver docblock de `LIFE_DOMAIN_UI_LABELS`)
+   * -- se ocultan mientras un dominio está activo en vez de mostrarlas
+   * sin filtrar, que sería más confuso que honesto.
+   */
+  const allGoals = goals;
+  const allProjects = projects;
+  const allHabits = habits;
+  if (selectedDomain) {
+    goals = allGoals.filter((goal) => goal.domain === selectedDomain);
+    projects = allProjects.filter((project) => project.domain === selectedDomain);
+    habits = allHabits.filter((habit) => habit.domain === selectedDomain);
+    relationships = [];
+    timeline = { items: [], total: 0, byType: {} };
+  }
+
   const hasAnything =
     goals.length > 0 ||
     projects.length > 0 ||
@@ -379,6 +413,47 @@ export default async function LifePage() {
             Ver lo que he llegado a entender de ti →
           </p>
         </Link>
+
+        {/*
+          Life Domain lens (UX_ARCHITECTURE_REFINEMENT_V1.md §5, item 1) --
+          generaliza a los ocho dominios de `TARGET_MARKET_HYPOTHESIS.md`,
+          finanzas es uno de ocho, no un caso especial. `?domain=` vía
+          `<Link>`, mismo patrón GET-sin-JS-de-cliente que `/memories`
+          ya usa para búsqueda.
+        */}
+        <div className="mt-8 flex flex-wrap gap-2">
+          <Link
+            href="/life"
+            className={
+              !selectedDomain
+                ? "rounded-full bg-white px-4 py-1.5 text-sm font-medium text-black"
+                : "rounded-full px-4 py-1.5 text-sm text-zinc-400 ring-1 ring-zinc-700 transition hover:text-white hover:ring-zinc-500"
+            }
+          >
+            Todo
+          </Link>
+          {LIFE_DOMAIN_TYPES.map((domainType) => (
+            <Link
+              key={domainType}
+              href={`/life?domain=${domainType}`}
+              className={
+                selectedDomain === domainType
+                  ? "rounded-full bg-white px-4 py-1.5 text-sm font-medium text-black"
+                  : "rounded-full px-4 py-1.5 text-sm text-zinc-400 ring-1 ring-zinc-700 transition hover:text-white hover:ring-zinc-500"
+              }
+            >
+              {LIFE_DOMAIN_UI_LABELS[domainType]}
+            </Link>
+          ))}
+        </div>
+
+        {selectedDomain && !hasAnything && (
+          <p className="animate-fade-in mt-6 text-sm text-zinc-500">
+            Todavía no he entendido lo suficiente de{" "}
+            {LIFE_DOMAIN_UI_LABELS[selectedDomain].toLowerCase()} para
+            resumirlo — cuanto más me cuentes, más se va a ir llenando esto.
+          </p>
+        )}
 
         <div className="mt-8">
           <LifeGraphView personName={firstName} summary={summary} listView={listView} />
