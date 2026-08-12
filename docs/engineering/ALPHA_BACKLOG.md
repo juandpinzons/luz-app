@@ -336,6 +336,41 @@ smoke (18/18) limpios.
 **Complejidad real**: Media -- el mecanismo de "no repetir" necesitó
 extender `SeenPromptRepository`, no solo leer las frases.
 
+### P2-7. `/life/identity` denso + tendencias de creencia sin usar — ✅ Resuelto (War Room, 2026-08-09)
+**Descripción original**: `UX_ARCHITECTURE_REFINEMENT_V1.md` §2 nombró
+esta pantalla "el segundo ofensor" de densidad (8 secciones apiladas
+sin jerarquía) el mismo día que se escribió esa auditoría --
+nunca corregido hasta hoy, verificado releyendo el archivo real antes
+de tocar nada (280 líneas, exactamente la misma estructura que la
+auditoría describió). Por separado, §5 item 3 nombró que
+`deriveBeliefTrend()` (`core/belief-engine`, ya real) nunca se usaba
+en ningún resumen -- solo existía en la vista de detalle de UNA
+creencia a la vez.
+**Hecho**: predicciones + conclusiones de razonamiento + tensiones
+abiertas (las tres secciones "cosas que LUZ infirió, necesitan su
+propia explicación antes de aceptarse") movidas detrás de un único
+`<details>`/`<summary>Cómo llegué a esto</summary>` nativo -- cero JS
+de cliente, mismo criterio que el resto del dominio. Áreas de vida,
+evolución reciente, creencias y conceptos (contenido más directo) se
+quedan visibles por defecto, exactamente como pidió la auditoría.
+Tendencia de creencia (`fortaleciéndose`/`debilitándose`/`estable`) ya
+visible junto a cada creencia en "Lo que más creo saber de ti" --
+`getHistoryForBeliefs` (ya real, un solo query por lote) +
+`deriveBeliefTrend` (ya real), etiquetas movidas de un `Record` local
+duplicado (`app/life/[kind]/[id]/page.tsx`) a
+`features/life/labels.ts` (`BELIEF_TREND_LABELS`) para que las dos
+pantallas digan exactamente lo mismo. Conceptos deliberadamente sin
+tendencia -- no existe ninguna tabla `concept_history` equivalente,
+fabricar una habría sido inventar una capacidad nueva, no cablear una
+existente.
+**Verificado**: dos creencias reales sembradas con historial real
+divergente (una 60→82, otra 85→58) -- confirmado contra la respuesta
+real de `/life/identity` que cada una muestra la tendencia correcta,
+sin intercambiarse entre sí; una contradicción real sembrada confirmada
+dentro del contenido de `<details>`. tsc/eslint/build/smoke (18/18)
+limpios.
+**Complejidad real**: Media.
+
 ---
 
 ## P3 — Futuro

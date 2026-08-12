@@ -22,6 +22,7 @@ import {
 import { DrizzleMemoryRepository, type Memory } from "@/core/memory-engine";
 import { findMemoriesMentioning } from "@/features/life/services/find-memories-mentioning";
 import {
+  BELIEF_TREND_LABELS,
   GOAL_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
   RELATIONSHIP_TYPE_LABELS,
@@ -34,13 +35,6 @@ const BELIEF_STATUS_LABELS: Record<string, string> = {
   active: "activa",
   expired: "expirada",
   retracted: "retractada",
-};
-
-const TREND_LABELS: Record<string, string> = {
-  new: "recién identificada",
-  strengthening: "fortaleciéndose",
-  weakening: "debilitándose",
-  stable: "estable",
 };
 
 const paramsSchema = z.object({
@@ -280,7 +274,7 @@ async function loadEntity(
 
     const fields: DetailField[] = [
       { label: "Confianza", value: `${belief.confidence.score}/100` },
-      { label: "Tendencia", value: TREND_LABELS[deriveBeliefTrend(history)] },
+      { label: "Tendencia", value: BELIEF_TREND_LABELS[deriveBeliefTrend(history)] },
     ];
     if (belief.domain) {
       fields.push({ label: "Área de vida", value: LIFE_DOMAIN_LABEL[belief.domain] });

@@ -4,13 +4,45 @@ import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
 import { LIFE_DOMAIN_LABEL } from "@/core/life";
+import {
+  deriveBeliefTrend,
+  DrizzleBeliefRepository,
+  type BeliefHistoryEntry,
+  type BeliefTrend,
+} from "@/core/belief-engine";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { GROWING_BELIEF_MAX_CONFIDENCE } from "@/features/chat/services/assemble-reality-snapshot";
+import { BELIEF_TREND_LABELS } from "@/features/life/labels";
 import {
   buildIdentityModel,
   type PersonIdentityModel,
 } from "@/features/identity/services/build-identity-model";
+
+/**
+ * War Room 2026-08-09 -- `deriveBeliefTrend`/`getHistoryForBeliefs` ya
+ * eran reales (único consumidor hasta hoy: la vista de detalle de UNA
+ * creencia, `app/life/[kind]/[id]/page.tsx`). Nunca antes en el
+ * resumen donde el Founder de verdad la encuentra primero
+ * (`UX_ARCHITECTURE_REFINEMENT_V1.md` §5, item 3: "la versión
+ * genérica todavía no existe"). Una sola consulta por lote
+ * (`getHistoryForBeliefs`, ya real), nunca N consultas para N
+ * creencias visibles. Solo beliefs -- concepts no tiene ninguna tabla
+ * de historial equivalente (`concept_history` no existe), así que
+ * "tendencia de concepto" no es una capacidad real todavía; no se
+ * fabrica una aquí.
+ */
+function groupHistoryByBelief(
+  history: readonly BeliefHistoryEntry[],
+): Map<string, BeliefHistoryEntry[]> {
+  const byBelief = new Map<string, BeliefHistoryEntry[]>();
+  for (const entry of history) {
+    const list = byBelief.get(entry.beliefId) ?? [];
+    list.push(entry);
+    byBelief.set(entry.beliefId, list);
+  }
+  return byBelief;
+}
 
 const ROUTE = "/life/identity";
 
@@ -69,6 +101,33 @@ export default async function LifeIdentityPage() {
     } catch (error) {
       logger.log({
         event: "life_identity.build_identity_model_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId: session.user.id,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+    }
+  }
+
+  let trendByBeliefId = new Map<string, BeliefTrend>();
+  if (lifeGraphContext && model && model.topBeliefs.length > 0) {
+    try {
+      const history = await new DrizzleBeliefRepository(db).getHistoryForBeliefs(
+        lifeGraphContext,
+        model.topBeliefs.map((belief) => belief.id),
+      );
+      const byBelief = groupHistoryByBelief(history);
+      trendByBeliefId = new Map(
+        model.topBeliefs.map((belief) => [
+          belief.id,
+          deriveBeliefTrend(byBelief.get(belief.id) ?? []),
+        ]),
+      );
+    } catch (error) {
+      logger.log({
+        event: "life_identity.belief_trends_failed",
         severity: "error",
         requestId,
         route: ROUTE,
@@ -169,22 +228,6 @@ export default async function LifeIdentityPage() {
           </section>
         )}
 
-        {model && model.pendingPredictions.length > 0 && (
-          <section className="animate-fade-in mt-8" style={{ animationDelay: "140ms" }}>
-            <h2 className="text-sm font-medium text-zinc-400">Podría venir</h2>
-            <ul className="mt-3 space-y-2">
-              {model.pendingPredictions.map((prediction, index) => (
-                <li
-                  key={`${prediction.triggeredAt.getTime()}-${index}`}
-                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
-                >
-                  {prediction.description}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
         {model && model.topBeliefs.length > 0 && (
           <section className="animate-fade-in mt-8" style={{ animationDelay: "160ms" }}>
             <h2 className="text-sm font-medium text-zinc-400">Lo que más creo saber de ti</h2>
@@ -211,6 +254,19 @@ export default async function LifeIdentityPage() {
                           en formación
                         </span>
                       )}
+                      {/*
+                        War Room 2026-08-09: `deriveBeliefTrend` ya
+                        existía, nunca antes en este resumen -- "new"
+                        no se muestra (es el estado por defecto de casi
+                        toda creencia con poca historia, no dice nada
+                        que "en formación" no diga ya mejor).
+                      */}
+                      {(() => {
+                        const trend = trendByBeliefId.get(belief.id);
+                        return trend && trend !== "new" ? (
+                          <span>{BELIEF_TREND_LABELS[trend]}</span>
+                        ) : null;
+                      })()}
                       {belief.confidence.score}/100
                     </span>
                   </Link>
@@ -237,37 +293,79 @@ export default async function LifeIdentityPage() {
           </section>
         )}
 
-        {model && model.topReasoningConclusions.length > 0 && (
-          <section className="animate-fade-in mt-8" style={{ animationDelay: "240ms" }}>
-            <h2 className="text-sm font-medium text-zinc-400">Conexiones que he hecho</h2>
-            <ul className="mt-3 space-y-2">
-              {model.topReasoningConclusions.map((conclusion) => (
-                <li
-                  key={conclusion.id}
-                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
-                >
-                  {conclusion.statement}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/*
+          UX_ARCHITECTURE_REFINEMENT_V1.md §2 ("el segundo ofensor" de
+          densidad, nunca corregido hasta hoy): predicciones,
+          conclusiones de razonamiento y tensiones abiertas comparten
+          la misma naturaleza -- "cosas que LUZ infirió," que merecen
+          su propia explicación antes de aceptarse, no apilarse en
+          línea por defecto igual que áreas/creencias/conceptos
+          (contenido más directo). Una sola expansión, no tres
+          separadas -- el punto es "un paso más," no tres pasos
+          distintos. `<details>` nativo, cero JS de cliente: cierra el
+          mismo criterio que ya usa el resto de esta página (formularios
+          GET, sin estado de cliente en `/memories`).
+        */}
+        {model &&
+          (model.pendingPredictions.length > 0 ||
+            model.topReasoningConclusions.length > 0 ||
+            model.openContradictions.length > 0) && (
+            <details className="animate-fade-in group mt-8" style={{ animationDelay: "240ms" }}>
+              <summary className="cursor-pointer text-sm font-medium text-zinc-400 hover:text-zinc-200">
+                Cómo llegué a esto
+              </summary>
 
-        {model && model.openContradictions.length > 0 && (
-          <section className="animate-fade-in mt-8" style={{ animationDelay: "280ms" }}>
-            <h2 className="text-sm font-medium text-zinc-400">Tensiones que noto</h2>
-            <ul className="mt-3 space-y-2">
-              {model.openContradictions.map((contradiction) => (
-                <li
-                  key={contradiction.id}
-                  className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
-                >
-                  {contradiction.description}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+              <div className="mt-4 space-y-8">
+                {model.pendingPredictions.length > 0 && (
+                  <section>
+                    <h2 className="text-sm font-medium text-zinc-400">Podría venir</h2>
+                    <ul className="mt-3 space-y-2">
+                      {model.pendingPredictions.map((prediction, index) => (
+                        <li
+                          key={`${prediction.triggeredAt.getTime()}-${index}`}
+                          className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
+                        >
+                          {prediction.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {model.topReasoningConclusions.length > 0 && (
+                  <section>
+                    <h2 className="text-sm font-medium text-zinc-400">Conexiones que he hecho</h2>
+                    <ul className="mt-3 space-y-2">
+                      {model.topReasoningConclusions.map((conclusion) => (
+                        <li
+                          key={conclusion.id}
+                          className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
+                        >
+                          {conclusion.statement}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {model.openContradictions.length > 0 && (
+                  <section>
+                    <h2 className="text-sm font-medium text-zinc-400">Tensiones que noto</h2>
+                    <ul className="mt-3 space-y-2">
+                      {model.openContradictions.map((contradiction) => (
+                        <li
+                          key={contradiction.id}
+                          className="rounded-lg border border-zinc-800 px-4 py-3 text-sm text-zinc-300"
+                        >
+                          {contradiction.description}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            </details>
+          )}
 
         {model && (
           <p className="animate-fade-in mt-10 text-xs text-zinc-600" style={{ animationDelay: "320ms" }}>

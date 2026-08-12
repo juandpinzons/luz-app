@@ -6,6 +6,7 @@ import type {
 } from "../../core/life";
 import type { MemoryType } from "../../core/memory-engine";
 import type { InsightType } from "../../core/knowledge-engine";
+import type { BeliefTrend } from "../../core/belief-engine";
 
 /** Etiquetas en español para los value objects de Life — solo presentación, nunca una segunda fuente de verdad sobre el estado. */
 
@@ -72,4 +73,18 @@ export const LIFE_DOMAIN_UI_LABELS: Record<LifeDomainType, string> = {
   leisure: "Ocio",
   home: "Hogar",
   spirituality: "Espiritualidad",
+};
+
+/**
+ * War Room 2026-08-09 -- antes vivía duplicado como un `Record` local
+ * dentro de `app/life/[kind]/[id]/page.tsx` (su único consumidor hasta
+ * hoy); movido acá para que `/life/identity` (segundo consumidor real,
+ * el resumen donde el Founder de verdad la encuentra primero) use
+ * exactamente las mismas palabras, nunca una segunda redacción.
+ */
+export const BELIEF_TREND_LABELS: Record<BeliefTrend, string> = {
+  new: "recién identificada",
+  strengthening: "fortaleciéndose",
+  weakening: "debilitándose",
+  stable: "estable",
 };
