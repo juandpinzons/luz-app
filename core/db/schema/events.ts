@@ -40,6 +40,17 @@ export const eventTypeEnum = pgEnum("event_type", [
    * esta tabla existe para modelar.
    */
   "conversation_signal_shown",
+  /**
+   * War Room 13-ago-2026 (terremoto de Cali) -- una fila cada vez que
+   * `detectCrisisSignal` (`features/chat/services/detect-crisis-signal.ts`)
+   * encuentra lenguaje explícito de crisis/autolesión en un mensaje del
+   * usuario. Nunca lleva el texto del mensaje en `metadata` (mismo
+   * criterio de privacidad que `recordQuery`/Memory Engine en todo el
+   * dominio) -- solo que ocurrió, para quién y cuándo, suficiente para
+   * que un operador humano pueda hacer seguimiento real sin que esta
+   * tabla se vuelva un registro de contenido sensible.
+   */
+  "crisis_signal_detected",
 ]);
 
 export const events = pgTable(

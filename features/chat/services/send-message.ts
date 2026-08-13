@@ -17,6 +17,7 @@ import { recordEvent } from "../../../core/observability/record-event";
 import { logTraceSummary, runTrace, span } from "../../../core/observability/trace";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
+import { detectCrisisSignal, CRISIS_RESOURCE_MESSAGE } from "./detect-crisis-signal";
 import {
   buildContext,
   renderContextToMessages,
@@ -159,6 +160,8 @@ interface PreparedMessage {
   conversationSignal: ConversationSignal | null;
   /** Null salvo que la estrategia ganadora sea `reopen`/`acknowledge_closure`. */
   seenPromptToMark: SeenPromptToMark | null;
+  /** Ver `detect-crisis-signal.ts` -- calculado una sola vez aquí, consumido igual por `sendMessage`/`sendMessageStream`. */
+  crisisSignalDetected: boolean;
 }
 
 /**
@@ -184,6 +187,31 @@ async function prepareMessageInner(
     userId: context.userId,
     conversationId,
   });
+
+  // Red de seguridad de crisis (War Room 13-ago-2026, terremoto de
+  // Cali) -- se calcula sobre el mensaje crudo, antes que cualquier
+  // otra cosa en esta función, para que ni un fallo de Context
+  // Builder/Memory Engine más abajo pueda dejarla sin correr. Se
+  // registra aquí (nunca con el contenido del mensaje, ver docblock del
+  // enum) independientemente de si la IA llega a responder con éxito --
+  // el Founder necesita el conteo real, no solo los casos que además
+  // tuvieron una respuesta exitosa.
+  const crisisSignalDetected = detectCrisisSignal(input.message);
+  if (crisisSignalDetected) {
+    logger.log({
+      event: "crisis_signal.detected",
+      severity: "warn",
+      requestId,
+      userId: context.userId,
+      conversationId,
+    });
+    await recordEvent(db, {
+      type: "crisis_signal_detected",
+      userId: context.userId,
+      route: input.route,
+      metadata: { conversationId, requestId },
+    });
+  }
 
   const dbWriteStart = Date.now();
   const { userMessage, history } = await span("Conversation.persistMessage", "repository", async () => {
@@ -379,6 +407,7 @@ async function prepareMessageInner(
     capturedMemory,
     conversationSignal,
     seenPromptToMark,
+    crisisSignalDetected,
   };
 }
 
@@ -681,6 +710,11 @@ export async function sendMessage(
     durationMs: Date.now() - openaiStart,
   });
 
+  // Agregado por código, nunca pedido al LLM -- ver `detect-crisis-signal.ts`.
+  if (prepared.crisisSignalDetected) {
+    reply = `${reply}\n\n${CRISIS_RESOURCE_MESSAGE}`;
+  }
+
   // Sin streaming de por medio: esta función corre síncronamente dentro
   // del scope de la petición original de `app/api/chat/route.ts`, así
   // que `after()` sí es válido acá (a diferencia de `sendMessageStream`,
@@ -758,6 +792,17 @@ export async function sendMessageStream(
           error: error instanceof Error ? error.message : String(error),
         });
         throw error;
+      }
+
+      // Agregado por código, nunca pedido al LLM -- ver
+      // `detect-crisis-signal.ts`. Un chunk SSE más, como cualquier otro
+      // fragmento de la respuesta -- el cliente no distingue su origen,
+      // y `fullReply` (lo que persiste `finalizeReply`) queda con el
+      // texto completo realmente mostrado, nunca solo la parte del LLM.
+      if (prepared.crisisSignalDetected) {
+        const resourceChunk = `\n\n${CRISIS_RESOURCE_MESSAGE}`;
+        fullReply += resourceChunk;
+        yield resourceChunk;
       }
 
       logger.log({

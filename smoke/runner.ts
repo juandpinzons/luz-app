@@ -19,6 +19,7 @@ import { aiProviderRegistryFlow } from "./ai-provider-registry.test";
 import { memoryRankingFlow } from "./memory-ranking.test";
 import { aggregationQueryFlow } from "./aggregation-query.test";
 import { editorialPhraseFlow } from "./editorial-phrase.test";
+import { crisisSignalFlow } from "./crisis-signal.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -46,6 +47,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   memoryRankingFlow,
   aggregationQueryFlow,
   editorialPhraseFlow,
+  crisisSignalFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {
