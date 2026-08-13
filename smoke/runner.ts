@@ -20,6 +20,7 @@ import { memoryRankingFlow } from "./memory-ranking.test";
 import { aggregationQueryFlow } from "./aggregation-query.test";
 import { editorialPhraseFlow } from "./editorial-phrase.test";
 import { crisisSignalFlow } from "./crisis-signal.test";
+import { gmailConnectionFlow } from "./gmail-connection.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -48,6 +49,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   aggregationQueryFlow,
   editorialPhraseFlow,
   crisisSignalFlow,
+  gmailConnectionFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {

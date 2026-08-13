@@ -730,6 +730,25 @@ export default async function DashboardPage() {
         </p>
       )}
 
+      {/*
+        Enlace estático, sin snapshot -- a propósito. Mostrar el
+        `EmailSnapshot` real aquí exigiría sumar `getLiveEmailContext`
+        al `Promise.all` de arriba, que hoy solo carga lo que ya cargaba
+        antes de esta misión (ver el docblock de ese `Promise.all`,
+        "el tiempo total sea el MÁXIMO de las cargas, no la SUMA" --
+        agregar una consulta más ahí es una decisión aparte, no un
+        efecto secundario de conectar Gmail). `/calendar` tuvo el mismo
+        primer paso (solo `/calendar` + este tipo de enlace) antes de
+        "conéctalo al dashboard principal" como misión propia, más
+        adelante -- mismo criterio aquí para `/gmail`.
+      */}
+      <p className="animate-fade-in mt-4 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
+        <Link href="/gmail" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
+          Conecta tu Gmail
+        </Link>{" "}
+        para ver qué correos son nuevos, importantes o siguen esperando respuesta.
+      </p>
+
       <Link
         href="/chat"
         className="mt-10 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"

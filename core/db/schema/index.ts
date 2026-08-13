@@ -19,5 +19,6 @@ export * from "./contradictions";
 export * from "./importance";
 export * from "./curiosity-engine";
 export * from "./calendar-connections";
+export * from "./email-connections";
 export * from "./seen-prompts";
 export * from "./continuity-engine";
