@@ -400,9 +400,10 @@ export async function enrichKnowledgeGraph(
     // etapas que aislar: construir los repositorios/estrategias o
     // resolver `triggeredInsights` (`listByEvidenceMemoryId`). Mismo
     // criterio que `life-capture-service.ts` (auditoría 2026-07-25,
-    // OBSERVABILITY_PLAN.md): detalle completo
-    // (`errorStack`/`errorQuery`/`errorParameters`) solo a consola vía
-    // `describeError`, nunca a `events.metadata`.
+    // OBSERVABILITY_PLAN.md, endurecido 2026-08-14): detalle completo
+    // (`errorStack`/`errorQuery`) solo a consola vía `describeError`
+    // (que ya ni siquiera devuelve valores de parámetros SQL), nunca a
+    // `events.metadata`.
     const detail = describeError(error);
     logger.log({
       event: "knowledge_graph.enrichment_failed",

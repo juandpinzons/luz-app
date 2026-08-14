@@ -8,6 +8,18 @@ import type { AIMessage, AIProvider, StructuredOutputRequest } from "../provider
  * del sistema que conoce el SDK `openai` — todo lo demás depende de la
  * interfaz `AIProvider`.
  */
+/**
+ * LUZ responde corto por diseño ("como un mensaje de texto real", ver
+ * `render-context.ts`, `voice.maxLines`) -- este techo nunca debería
+ * tocar una respuesta real, solo acotar el peor caso (costo/latencia de
+ * una generación que por lo que sea no termina de forma natural).
+ * Auditoría de seguridad, 2026-08-14: ninguna llamada a OpenAI tenía
+ * límite de tokens de salida ni timeout explícito.
+ */
+const MAX_COMPLETION_TOKENS = 1500;
+/** Bastante por debajo del `maxDuration = 60` de `/api/chat` (Vercel Hobby) -- falla limpio con un error claro en vez de esperar siempre el kill duro de la función. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export class OpenAIProvider implements AIProvider {
   readonly name = "openai";
 
@@ -15,13 +27,14 @@ export class OpenAIProvider implements AIProvider {
   private readonly model: string;
 
   constructor(apiKey: string = env.OPENAI_API_KEY, model: string = env.OPENAI_MODEL) {
-    this.client = new OpenAI({ apiKey });
+    this.client = new OpenAI({ apiKey, timeout: REQUEST_TIMEOUT_MS });
     this.model = model;
   }
 
   async generateReply(messages: AIMessage[]): Promise<string> {
     const completion = await this.client.chat.completions.create({
       model: this.model,
+      max_completion_tokens: MAX_COMPLETION_TOKENS,
       messages: messages.map((message) => ({
         role: message.role,
         content: message.content,
@@ -89,6 +102,7 @@ export class OpenAIProvider implements AIProvider {
   async *generateReplyStream(messages: AIMessage[]): AsyncIterable<string> {
     const stream = await this.client.chat.completions.create({
       model: this.model,
+      max_completion_tokens: MAX_COMPLETION_TOKENS,
       messages: messages.map((message) => ({
         role: message.role,
         content: message.content,

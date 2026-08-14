@@ -369,11 +369,12 @@ async function prepareMessageInner(
       );
     } catch (error) {
       // Mismo criterio que `life-capture-service.ts` (auditoría
-      // 2026-07-25, OBSERVABILITY_PLAN.md): detalle completo
-      // (`errorStack`/`errorQuery`/`errorParameters`) solo a consola vía
+      // 2026-07-25, OBSERVABILITY_PLAN.md, endurecido 2026-08-14):
+      // detalle completo (`errorStack`/`errorQuery`) solo a consola vía
       // `describeError` -- nunca a `events.metadata`, que persiste y es
-      // consultable desde /admin (cardinalidad no acotada + puede traer
-      // contenido real del usuario). Un fallo de captura aquí es más
+      // consultable desde /admin (cardinalidad no acotada; `describeError`
+      // ya ni siquiera devuelve los valores de parámetros SQL, solo la
+      // consulta). Un fallo de captura aquí es más
       // grave que uno de título (nada río abajo -- Knowledge Worker,
       // RealitySnapshot, todo el pipeline -- ve este mensaje si Memory
       // Engine no lo capturó).

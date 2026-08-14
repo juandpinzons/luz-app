@@ -87,11 +87,13 @@ export async function captureLifeEntityFromMemory(
         return;
     }
   } catch (error) {
-    // Detalle completo (incluye `errorStack`/`errorQuery`/`errorParameters`)
-    // solo a consola -- nunca a `events.metadata`: cardinalidad no
-    // acotada (un stack es distinto cada vez) y `errorParameters` puede
-    // traer contenido real del usuario (invariante de privacidad del
-    // dominio). Ver auditoría 2026-07-25 en OBSERVABILITY_PLAN.md.
+    // Detalle completo (incluye `errorStack`/`errorQuery`) solo a
+    // consola -- nunca a `events.metadata`: cardinalidad no acotada (un
+    // stack es distinto cada vez). `describeError` ya ni siquiera
+    // devuelve los valores de parámetros SQL (podían traer contenido
+    // real del usuario, invariante de privacidad del dominio) --
+    // endurecido 2026-08-14. Ver auditoría 2026-07-25 en
+    // OBSERVABILITY_PLAN.md.
     const detail = describeError(error);
     logger.log({
       event: "background.life_capture.failed",

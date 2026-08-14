@@ -24,7 +24,6 @@ export function describeError(error: unknown): Record<string, unknown> {
     column_name?: string;
     routine?: string;
     query?: string;
-    parameters?: unknown;
     cause?: unknown;
   };
 
@@ -41,9 +40,14 @@ export function describeError(error: unknown): Record<string, unknown> {
     errorTable: pgError.table_name,
     errorColumn: pgError.column_name,
     errorRoutine: pgError.routine,
-    // Algunas versiones de postgres-js adjuntan el SQL real que falló.
+    // Algunas versiones de postgres-js adjuntan el SQL real que falló --
+    // la ESTRUCTURA de la consulta (qué tabla/columnas), nunca los
+    // valores. `parameters` se omite a propósito (auditoría de
+    // seguridad, 2026-08-14): para un INSERT/UPDATE, esos valores son
+    // literalmente el contenido de la persona (una memoria, un mensaje,
+    // feedback) -- exactamente lo que un log operacional no debería
+    // convertirse en un segundo repositorio de datos íntimos.
     errorQuery: pgError.query,
-    errorParameters: pgError.parameters,
     errorCause:
       pgError.cause instanceof Error ? pgError.cause.message : pgError.cause,
     errorStack: pgError.stack,
