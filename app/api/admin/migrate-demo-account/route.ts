@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/core/db/client";
-import { conversations, memories, users } from "@/core/db/schema";
+import { conversations, lifeRelationships, memories, users } from "@/core/db/schema";
 import { accountIdentities } from "@/auth/schema";
 import { createEntityId } from "@/core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
@@ -13,10 +13,12 @@ import { DrizzleInsightRepository, type Insight } from "@/core/knowledge-engine"
 import {
   DrizzleGoalRepository,
   DrizzleProjectRepository,
+  DrizzleRelationshipRepository,
   findOrCreateGoal,
   findOrCreateProject,
   findOrCreateHabit,
   findOrCreateRelationship,
+  type RelationshipType,
 } from "@/core/life";
 
 /**
@@ -222,9 +224,6 @@ async function seedUnderstanding(context: LifeGraphContext) {
   await findOrCreateHabit(db, context, { title: "Correr martes, jueves y sábado", domain: "health" });
   await findOrCreateHabit(db, context, { title: "Llamar a la familia los domingos", domain: "relationships" });
 
-  await findOrCreateRelationship(db, context, { otherPersonName: "Daniela", type: "colleague" });
-  await findOrCreateRelationship(db, context, { otherPersonName: "Papá", type: "family" });
-
   return {
     concepts: concepts.length,
     beliefs: beliefs.length,
@@ -232,8 +231,40 @@ async function seedUnderstanding(context: LifeGraphContext) {
     goals: 3,
     projects: 2,
     habits: 2,
-    relationships: 2,
   };
+}
+
+/**
+ * Reemplaza TODAS las relaciones existentes de la cuenta por esta
+ * lista exacta -- a pedido del Founder, nunca se acumula sobre lo que
+ * `seedUnderstanding` haya sembrado antes. `type` usa el vocabulario
+ * cerrado de `RelationshipType` (no tiene "papá"/"hermano"/
+ * "co-founder" como valores propios); el rol específico que pidió se
+ * guarda en `notes`, campo real de `Relationship` para exactamente
+ * esto.
+ */
+const REAL_RELATIONSHIPS: { name: string; type: RelationshipType; role: string }[] = [
+  { name: "Verónica", type: "partner", role: "Novia" },
+  { name: "Alfredo", type: "family", role: "Papá" },
+  { name: "Alejandro", type: "colleague", role: "Co-founder" },
+  { name: "Juanma", type: "friend", role: "Mejor amigo" },
+  { name: "Fernando", type: "colleague", role: "Compañero de trabajo" },
+  { name: "Juan Felipe", type: "family", role: "Hermano" },
+];
+
+async function seedRelationships(context: LifeGraphContext) {
+  await db.delete(lifeRelationships).where(eq(lifeRelationships.lifeGraphId, context.lifeGraphId));
+
+  const relationshipRepo = new DrizzleRelationshipRepository(db);
+  for (const entry of REAL_RELATIONSHIPS) {
+    const created = await findOrCreateRelationship(db, context, {
+      otherPersonName: entry.name,
+      type: entry.type,
+    });
+    await relationshipRepo.update(context, created.id, { notes: entry.role });
+  }
+
+  return { relationships: REAL_RELATIONSHIPS.length };
 }
 
 async function resolveAccount(
@@ -299,6 +330,21 @@ export async function POST(request: Request) {
       );
     }
     const result = await seedUnderstanding(target.context);
+    return NextResponse.json(result);
+  }
+
+  if (body?.action === "seed_relationships") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const result = await seedRelationships(target.context);
     return NextResponse.json(result);
   }
 
