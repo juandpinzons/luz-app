@@ -322,9 +322,12 @@ const RELATIONSHIP_MEMORIES: { content: string; type: MemoryCaptureInput["type"]
   },
 ];
 
-async function seedRelationshipMemories(context: LifeGraphContext) {
+async function captureMemoryBatch(
+  context: LifeGraphContext,
+  entries: { content: string; type: MemoryCaptureInput["type"]; daysAgoOccurred: number }[],
+): Promise<number> {
   const engine = createMemoryEngine(db);
-  for (const entry of RELATIONSHIP_MEMORIES) {
+  for (const entry of entries) {
     await engine.capture(context, {
       content: entry.content,
       type: entry.type,
@@ -332,7 +335,46 @@ async function seedRelationshipMemories(context: LifeGraphContext) {
       occurredAt: daysAgo(entry.daysAgoOccurred),
     });
   }
-  return { relationshipMemories: RELATIONSHIP_MEMORIES.length };
+  return entries.length;
+}
+
+async function seedRelationshipMemories(context: LifeGraphContext) {
+  const count = await captureMemoryBatch(context, RELATIONSHIP_MEMORIES);
+  return { relationshipMemories: count };
+}
+
+/** Segunda tanda -- Verónica llegando a Bogotá, la llamada a mamá, la tesis de PhD de Juan Felipe, alemán, y el viaje a Europa de noviembre 2026. */
+const MORE_RELATIONSHIP_MEMORIES: { content: string; type: MemoryCaptureInput["type"]; daysAgoOccurred: number }[] = [
+  {
+    content: "Quiero tener todo listo antes de que Verónica llegue a Bogotá.",
+    type: "intention",
+    daysAgoOccurred: 1,
+  },
+  {
+    content: "Trato de llamar a mi mamá seguido para contarle cómo voy.",
+    type: "ritual",
+    daysAgoOccurred: 5,
+  },
+  {
+    content: "Mi hermano Juan Felipe está en la recta final de su tesis de PhD -- quiero preguntarle cómo va, sé que es importante para él.",
+    type: "intention",
+    daysAgoOccurred: 4,
+  },
+  {
+    content: "Sigo aprendiendo alemán, aunque algunas semanas es difícil sacar tiempo para practicar.",
+    type: "ritual",
+    daysAgoOccurred: 6,
+  },
+  {
+    content: "Todavía no he organizado el viaje a Europa de noviembre 2026 -- tengo que sentarme a planearlo.",
+    type: "intention",
+    daysAgoOccurred: 3,
+  },
+];
+
+async function seedMoreRelationshipMemories(context: LifeGraphContext) {
+  const count = await captureMemoryBatch(context, MORE_RELATIONSHIP_MEMORIES);
+  return { moreRelationshipMemories: count };
 }
 
 async function resolveAccount(
@@ -428,6 +470,21 @@ export async function POST(request: Request) {
       );
     }
     const result = await seedRelationshipMemories(target.context);
+    return NextResponse.json(result);
+  }
+
+  if (body?.action === "seed_more_relationship_memories") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const result = await seedMoreRelationshipMemories(target.context);
     return NextResponse.json(result);
   }
 
