@@ -23,6 +23,7 @@ import { crisisSignalFlow } from "./crisis-signal.test";
 import { gmailConnectionFlow } from "./gmail-connection.test";
 import { memorySuppressionFlow } from "./memory-suppression.test";
 import { wearableFoundationFlow } from "./wearable-foundation.test";
+import { calendarSignalInjectionFlow } from "./calendar-signal-injection.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -54,6 +55,7 @@ const ALL_FLOWS: SmokeFlow[] = [
   gmailConnectionFlow,
   memorySuppressionFlow,
   wearableFoundationFlow,
+  calendarSignalInjectionFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {

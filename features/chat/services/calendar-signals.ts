@@ -46,6 +46,31 @@ const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
   timeZone: TIME_ZONE,
 });
 
+const MAX_EXTERNAL_TEXT_LENGTH = 200;
+
+/**
+ * `event.title`/`event.location` los escribe quien envía la invitación
+ * -- nunca la persona dueña de LUZ ni LUZ misma (auditoría de
+ * seguridad, 2026-08-14: cualquiera que le mande una invitación de
+ * calendario controla este texto). Sin este paso llegarían tal cual al
+ * mensaje `system` del prompt (ver `render-context.ts`), el mismo
+ * bloque donde vive Conversation Strategy/Voice -- un título escrito
+ * para parecer una instrucción tendría, ahí, la misma autoridad que
+ * una instrucción real. Colapsa saltos de línea/control (la forma más
+ * simple de simular una línea nueva "de sistema") y acota el largo --
+ * mitigación razonable, no una garantía: ningún filtro de texto plano
+ * es 100% robusto contra inyección de prompt, por eso
+ * `SOURCE_GUIDANCE.signal` (`favor-prioritized-context-rule.ts`)
+ * también instruye al modelo explícitamente a tratar esto como dato,
+ * nunca como instrucción -- las dos capas juntas, no una sola.
+ */
+function sanitizeExternalText(value: string): string {
+  const collapsed = value.replace(/[\r\n\t]+/g, " ").trim();
+  return collapsed.length > MAX_EXTERNAL_TEXT_LENGTH
+    ? `${collapsed.slice(0, MAX_EXTERNAL_TEXT_LENGTH)}…`
+    : collapsed;
+}
+
 /**
  * Una frase natural por evento, nunca datos crudos -- el modelo lee
  * esto tal cual dentro de la sección "signal" del prompt (ver
@@ -55,11 +80,12 @@ const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
  * inventada.
  */
 function describeEvent(event: CalendarEvent, isToday: boolean): string {
-  const location = event.location ? ` en ${event.location}` : "";
+  const title = sanitizeExternalText(event.title);
+  const location = event.location ? ` en ${sanitizeExternalText(event.location)}` : "";
 
   if (event.timing.isAllDay) {
     const when = isToday ? "Hoy" : `El ${DATE_FORMAT.format(eventStart(event))}`;
-    return `${when} es "${event.title}"${location} (todo el día).`;
+    return `${when} es "${title}"${location} (todo el día).`;
   }
 
   const start = eventStart(event);
@@ -67,7 +93,7 @@ function describeEvent(event: CalendarEvent, isToday: boolean): string {
   const timeRange = `${TIME_FORMAT.format(start)} a ${TIME_FORMAT.format(end)}`;
   const when = isToday ? "Hoy tiene" : `El ${DATE_FORMAT.format(start)} tiene`;
 
-  return `${when} "${event.title}"${location} de ${timeRange}.`;
+  return `${when} "${title}"${location} de ${timeRange}.`;
 }
 
 function toSignal(event: CalendarEvent, isToday: boolean): ExternalSignal {
