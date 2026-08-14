@@ -25,6 +25,14 @@ export interface Memory {
   source: MemorySource;
   sourceId?: string;
   status: MemoryStatus;
+  /**
+   * Excluida de toda lectura orientada a un humano (chat, dashboard,
+   * /memories, /life) sin dejar de ser `active` para el procesamiento
+   * interno. `undefined`/`false` se tratan igual -- ausencia de bandera
+   * en literales construidos a mano (p. ej. Capture) nunca implica
+   * "suprimida".
+   */
+  suppressed?: boolean;
   rank?: MemoryRank;
   occurredAt?: Date;
   createdAt: Date;

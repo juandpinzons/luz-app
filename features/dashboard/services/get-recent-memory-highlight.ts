@@ -27,7 +27,13 @@ export async function getRecentMemoryHighlight(
   const [row] = await db
     .select({ content: memories.content, createdAt: memories.createdAt })
     .from(memories)
-    .where(and(eq(memories.lifeGraphId, context.lifeGraphId), eq(memories.status, "active")))
+    .where(
+      and(
+        eq(memories.lifeGraphId, context.lifeGraphId),
+        eq(memories.status, "active"),
+        eq(memories.suppressed, false),
+      ),
+    )
     .orderBy(desc(memories.createdAt))
     .limit(1);
 

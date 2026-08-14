@@ -48,6 +48,7 @@ function toMemory(row: MemoryRow): Memory {
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
+    suppressed: row.suppressed,
     rank:
       row.rankScore !== null && row.rankedAt !== null
         ? { score: row.rankScore, rankedAt: row.rankedAt }
@@ -149,6 +150,7 @@ export class StructuredMemoryRetrievalStrategy
     const conditions = [
       eq(memories.lifeGraphId, context.lifeGraphId),
       eq(memories.status, "active"),
+      eq(memories.suppressed, false),
     ];
 
     if (query.type) {

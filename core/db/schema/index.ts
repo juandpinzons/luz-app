@@ -20,5 +20,6 @@ export * from "./importance";
 export * from "./curiosity-engine";
 export * from "./calendar-connections";
 export * from "./email-connections";
+export * from "./wearable";
 export * from "./seen-prompts";
 export * from "./continuity-engine";

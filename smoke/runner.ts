@@ -21,6 +21,8 @@ import { aggregationQueryFlow } from "./aggregation-query.test";
 import { editorialPhraseFlow } from "./editorial-phrase.test";
 import { crisisSignalFlow } from "./crisis-signal.test";
 import { gmailConnectionFlow } from "./gmail-connection.test";
+import { memorySuppressionFlow } from "./memory-suppression.test";
+import { wearableFoundationFlow } from "./wearable-foundation.test";
 import type { SmokeFlow, SmokeResult } from "./types";
 
 /**
@@ -50,6 +52,8 @@ const ALL_FLOWS: SmokeFlow[] = [
   editorialPhraseFlow,
   crisisSignalFlow,
   gmailConnectionFlow,
+  memorySuppressionFlow,
+  wearableFoundationFlow,
 ];
 
 function parseFlowArg(argv: string[]): string | undefined {

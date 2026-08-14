@@ -319,3 +319,75 @@ const { connection: updated, cursor, messages, snapshot } =
 ```
 
 `provider`/`GmailClient` son las ÚNICAS piezas que saben que Gmail existe. Todo lo demás (`domain/`, `application/`) es válido sin cambios el día que exista `OutlookMailProvider`.
+
+# Wearable Foundation
+
+Estado: **funcional de punta a punta, sin verificación contra un archivo real de Garmin todavía** (ver "Consideraciones" abajo). A diferencia de Calendar/Gmail Foundation, esta fase SÍ persiste (`core/wearable-metrics/`) -- la razón se explica abajo.
+
+## Qué es Wearable Foundation
+
+`features/reality/` gana un tercer origen de realidad: dispositivos de salud/bienestar (hoy solo Garmin). Mismo puerto-y-adaptador que Calendar/Gmail (`WearableProvider`, `providers/garmin/GarminProvider`), con una diferencia estructural real: no existe hoy una API de Garmin con la que una persona pueda autenticarse el mismo día (Garmin Health API es B2B, requiere aprobación de partner, no self-serve -- confirmado 2026-08-13). Lo único disponible es un archivo que la persona ya exportó a mano desde Garmin Connect (export masivo de cuenta, o el endpoint interno `wellness-service` que el propio sitio usa). Por eso `WearableProvider.parseExport()` es **síncrona y pura** (recibe el contenido del archivo, no hace ninguna llamada de red), a diferencia de `CalendarProvider.sync()`/`EmailProvider.sync()`.
+
+## Por qué esta fase sí persiste (a diferencia de Calendar/Gmail)
+
+Calendar y Gmail Foundation no persisten nada a propósito: siempre pueden volver a preguntarle al proveedor en vivo, así que guardar una copia sería un caché a mantener sincronizado sin necesidad real. Wearable Foundation no tiene esa opción -- la fuente es un archivo que existió UNA vez. Sin persistencia, cada lectura tendría que volver a pedirle el archivo a la persona, imposible fuera del momento del import. `core/wearable-metrics/repository.ts` (`upsertDailyMetrics`/`listDailyMetrics`) es esa capa, presente desde esta primera fase, no una extensión futura.
+
+## Arquitectura
+
+```
+features/reality/
+  domain/
+    wearable-provider-kind.ts   — "garmin", extensible
+    wearable-daily-metrics.ts   — DailyWearableMetrics, SleepMetrics, SleepStageBreakdown
+    wearable-import-result.ts   — WearableImportResult (sin cursor/hasMore: no hay servidor al que preguntarle por más)
+    wearable-snapshot.ts        — WearableSnapshot (vista de producto)
+  providers/
+    wearable-provider.ts        — el puerto (parseExport, síncrono)
+    garmin/garmin-provider.ts   — único lugar que conoce la forma de un archivo de Garmin
+  application/
+    import-wearable-export.ts   — parsea + persiste (upsert por día)
+    get-wearable-snapshot.ts    — persistido → WearableSnapshot (puro)
+
+core/wearable-metrics/
+  repository.ts                 — persistencia real (upsert/list por lifeGraphId+provider+fecha)
+
+features/chat/services/
+  wearable-signals.ts                       — WearableSnapshot → ExternalSignal[] (puro)
+  get-wearable-signals-for-conversation.ts  — wrapper de I/O, nunca lanza, sin caché (lectura local, no red)
+```
+
+`assemble-reality-snapshot.ts` ya llama a `getWearableSignalsForConversation` junto a `getCalendarSignalsForConversation`, fusionando ambos en `RealitySnapshot.signals` -- el punto de extensión `"sensor"` que `external-signal-snapshot.ts` ya reservaba (ver su docblock), ahora lleno.
+
+## Qué cuenta como señal de chat
+
+Deliberadamente NO cada métrica del día -- solo lo que cruza un umbral real: `lowSleepAlert` (sueño de la noche más reciente por debajo de 6h) y `elevatedStressAlert` (estrés promedio del día por encima de 50/100, franja alta/muy alta de la escala 0-100 de Garmin). Recitar pasos/sueño/estrés en cada turno sería un dashboard leído en voz alta, no acompañamiento -- mismo criterio que el resto de `core/reality` ("ocasionalmente sorprender", ver ADR-0018).
+
+## Consideraciones de producción y limitaciones honestas
+
+- **Sin verificación contra un archivo real de Garmin todavía**: el parser (`GarminProvider`) fue escrito a partir de documentación de terceros sobre el formato de Garmin (ninguna es la documentación oficial pública de un export individual -- no existe una), con alias tolerantes para las dos convenciones de nombre más plausibles (camelCase del endpoint `wellness-service`, PascalCase del export masivo estilo Health API). Verificado con smoke test real (`smoke/wearable-foundation.test.ts`, PASS) usando fixtures que cubren ambas formas, y contra Postgres real -- pero no contra un archivo real todavía. Es el ÚNICO archivo que debería necesitar ajuste el día que aparezca un archivo real con nombres distintos.
+- **Sin actividades individuales (correr, ciclismo, ...)** -- solo métricas diarias agregadas (pasos, sueño, estrés, frecuencia cardíaca en reposo). Alcance deliberado: es la señal más rica para "cómo está esta persona hoy", que es lo que el chat necesita; una `wearable_activities` con detalle por actividad es una extensión futura, no construida.
+- **Sin UI dedicada** -- ni un flujo de import en `/settings` o similar, ni una tarjeta en `/dashboard`/`/life`. El import de esta fase se hace vía `.scratch/import-garmin-export.ts` (fuera de git, mismo criterio que el resto de `.scratch/verify-*.ts`). Una ruta real de import (arrastrar un archivo desde la UI) es trabajo de quien consuma esto, no de esta fase.
+- **Sin reintento ni deduplicación de días parcialmente inválidos**: si una entrada del archivo no tiene fecha reconocible, se descarta en silencio (no es un día válido); si NINGUNA entrada la tiene, `parseExport` lanza -- nunca finge un import exitoso de cero días.
+
+## Para quien consume esto (Product Engineering / i7)
+
+```ts
+import { importWearableExport } from "features/reality/application/import-wearable-export";
+import { GarminProvider } from "features/reality/providers/garmin";
+
+// 1) Construir el proveedor -- SOLO esta pieza conoce la forma del archivo de Garmin.
+const provider = new GarminProvider();
+
+// 2) Parsear + persistir en un solo paso (el contenido del archivo ya leído, no un path).
+const { daysImported } = await importWearableExport(db, lifeGraphContext, provider, rawFileContent);
+
+// 3) Leer para mostrar/usar en cualquier momento después -- nunca vuelve a pedir el archivo.
+import { listDailyMetrics } from "core/wearable-metrics/repository";
+import { getWearableSnapshot } from "features/reality/application/get-wearable-snapshot";
+
+const dailyMetrics = await listDailyMetrics(db, lifeGraphContext.lifeGraphId, "garmin");
+const snapshot = getWearableSnapshot(dailyMetrics);
+// snapshot.latestDay / snapshot.trend / snapshot.lowSleepAlert / snapshot.elevatedStressAlert
+```
+
+El chat ya recibe esto automáticamente (`assemble-reality-snapshot.ts`) -- ningún cambio adicional hace falta para que LUZ pueda mencionar sueño/estrés una vez hay datos importados.

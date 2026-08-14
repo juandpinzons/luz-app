@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -121,6 +122,15 @@ export const memories = pgTable(
     source: memorySourceEnum("source").notNull(),
     sourceId: text("source_id"),
     status: memoryStatusEnum("status").notNull().default("active"),
+    /**
+     * Distinto de `status`: una memoria `suppressed` sigue `active` para
+     * todo el procesamiento interno (rank/connect/lifecycle) -- solo se
+     * excluye de las lecturas que arman lo que un humano ve (retrieval de
+     * chat, dashboard, /memories, /life). Por defecto `false` para toda
+     * memoria existente y nueva; nadie la activa salvo una acción
+     * explícita sobre un registro puntual.
+     */
+    suppressed: boolean("suppressed").notNull().default(false),
     rankScore: integer("rank_score"),
     rankedAt: timestamp("ranked_at", { withTimezone: true }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }),

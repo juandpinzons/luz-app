@@ -1,0 +1,1 @@
+ALTER TABLE "memories" ADD COLUMN "suppressed" boolean DEFAULT false NOT NULL;

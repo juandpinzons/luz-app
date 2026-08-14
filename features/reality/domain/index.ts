@@ -14,3 +14,7 @@ export * from "./email-sync-cursor";
 export * from "./email-sync-options";
 export * from "./email-sync-result";
 export * from "./email-snapshot";
+export * from "./wearable-provider-kind";
+export * from "./wearable-daily-metrics";
+export * from "./wearable-import-result";
+export * from "./wearable-snapshot";

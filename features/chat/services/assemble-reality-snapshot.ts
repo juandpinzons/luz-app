@@ -24,6 +24,7 @@ import { span } from "../../../core/observability/trace";
 import { assembleIdentityEvolution } from "../../identity-evolution";
 import { explainInsight, type InsightExplanation } from "../../knowledge/services/explain-insight";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
+import { getWearableSignalsForConversation } from "./get-wearable-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
 /**
@@ -186,6 +187,7 @@ export async function assembleRealitySnapshot(
     pendingCuriosityQuestion,
     contradictions,
     calendarSignals,
+    wearableSignals,
     recentlyCompletedGoals,
     recentlyCompletedProjects,
     seenIntentionIds,
@@ -206,7 +208,9 @@ export async function assembleRealitySnapshot(
     ),
     span("Memory.focused", "repository", () =>
       options.focusMemoryId
-        ? new DrizzleMemoryRepository(db).getById(context, options.focusMemoryId)
+        ? new DrizzleMemoryRepository(db)
+            .getById(context, options.focusMemoryId)
+            .then((memory) => (memory && !memory.suppressed ? memory : null))
         : Promise.resolve(null),
     ),
     span("Life.activeGoals", "repository", () => listActiveGoals(db, context)),
@@ -230,6 +234,12 @@ export async function assembleRealitySnapshot(
     // en el mismo `Promise.all` que el resto sin arriesgar el
     // ensamblado completo por un problema de calendario.
     span("Calendar", "external_api", () => getCalendarSignalsForConversation(db, context)),
+    // Wearable Foundation (`features/reality/`) -- mismo criterio de
+    // tolerancia a fallos que Calendar (`getWearableSignalsForConversation`
+    // nunca lanza, degrada a `[]`), pero sin necesitar el mismo cuidado
+    // de tasa: es una lectura local, no una sincronización contra un
+    // servidor externo en cada mensaje.
+    span("Wearable", "repository", () => getWearableSignalsForConversation(db, context)),
     span("Life.recentlyCompletedGoals", "repository", () =>
       listRecentlyCompletedGoals(db, context, recentlyCompletedSince),
     ),
@@ -517,14 +527,15 @@ export async function assembleRealitySnapshot(
         };
       }),
     },
-    // Calendar Foundation (`features/reality/`) llena el punto de
-    // extensión que este campo ya reservaba (`external-signal-snapshot.ts`:
-    // "calendar" como fuente esperada) -- document/email/sensor siguen
-    // vacíos indefinidamente (ADR-0015, sin Connectors implementados
-    // todavía). Sin calendario conectado, `getCalendarSignalsForConversation`
-    // ya devuelve `[]` -- mismo criterio de ausencia real que el resto
-    // de este ensamblador.
-    signals: { signals: calendarSignals },
+    // Calendar Foundation + Wearable Foundation (`features/reality/`)
+    // llenan los puntos de extensión que este campo ya reservaba
+    // (`external-signal-snapshot.ts`: "calendar"/"sensor" como fuentes
+    // esperadas) -- document/email siguen vacíos indefinidamente
+    // (ADR-0015, sin Connectors implementados todavía). Sin calendario
+    // conectado o sin datos de reloj importados, cada
+    // `get*SignalsForConversation` ya devuelve `[]` -- mismo criterio
+    // de ausencia real que el resto de este ensamblador.
+    signals: { signals: [...calendarSignals, ...wearableSignals] },
     knowledgeGaps: { domains: rankKnowledgeGaps(signalsByDomain) },
     // Comprensión de segundo orden (Knowledge Engine V2, Reasoning
     // Engine) -- síntesis ya validada sobre varios insights a la vez,

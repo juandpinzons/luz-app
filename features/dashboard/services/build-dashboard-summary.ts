@@ -89,6 +89,7 @@ export async function buildDashboardSummary(
         and(
           eq(memories.lifeGraphId, lifeGraphContext.lifeGraphId),
           eq(memories.status, "active"),
+          eq(memories.suppressed, false),
         ),
       );
     memoriesStored = memoriesRow?.value ?? 0;

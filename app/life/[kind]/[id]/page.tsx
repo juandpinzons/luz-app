@@ -116,7 +116,9 @@ export default async function LifeDetailPage({
           memoryRepository.getById(lifeGraphContext, memoryId),
         ),
       );
-      relatedMemories = fetched.filter((memory): memory is Memory => memory !== null);
+      relatedMemories = fetched.filter(
+        (memory): memory is Memory => memory !== null && !memory.suppressed,
+      );
     } else {
       relatedMemories = await findMemoriesMentioning(db, lifeGraphContext, {
         title: entity.searchTerm,

@@ -22,6 +22,7 @@ function toMemory(row: MemoryRow): Memory {
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
+    suppressed: row.suppressed,
     rank:
       row.rankScore !== null && row.rankedAt !== null
         ? { score: row.rankScore, rankedAt: row.rankedAt }
@@ -91,7 +92,11 @@ export class DrizzleMemoryRepository implements MemoryRepository {
       .select()
       .from(memories)
       .where(
-        and(eq(memories.lifeGraphId, context.lifeGraphId), eq(memories.status, "active")),
+        and(
+          eq(memories.lifeGraphId, context.lifeGraphId),
+          eq(memories.status, "active"),
+          eq(memories.suppressed, false),
+        ),
       );
 
     return rows.map(toMemory);
@@ -120,6 +125,7 @@ export class DrizzleMemoryRepository implements MemoryRepository {
         source: memory.source,
         sourceId: memory.sourceId ?? null,
         status: memory.status,
+        suppressed: memory.suppressed ?? false,
         rankScore: memory.rank?.score ?? null,
         rankedAt: memory.rank?.rankedAt ?? null,
         occurredAt: memory.occurredAt ?? null,
@@ -135,6 +141,7 @@ export class DrizzleMemoryRepository implements MemoryRepository {
           source: memory.source,
           sourceId: memory.sourceId ?? null,
           status: memory.status,
+          suppressed: memory.suppressed ?? false,
           rankScore: memory.rank?.score ?? null,
           rankedAt: memory.rank?.rankedAt ?? null,
           occurredAt: memory.occurredAt ?? null,

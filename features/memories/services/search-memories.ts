@@ -75,6 +75,7 @@ function toActiveMemory(row: {
   source: Memory["source"];
   sourceId: string | null;
   status: Memory["status"];
+  suppressed: boolean;
   rankScore: number | null;
   rankedAt: Date | null;
   occurredAt: Date | null;
@@ -90,6 +91,7 @@ function toActiveMemory(row: {
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
+    suppressed: row.suppressed,
     rank:
       row.rankScore !== null && row.rankedAt !== null
         ? { score: row.rankScore, rankedAt: row.rankedAt }
@@ -108,7 +110,11 @@ async function listRecentActiveMemories(
     .select()
     .from(memories)
     .where(
-      and(eq(memories.lifeGraphId, context.lifeGraphId), eq(memories.status, "active")),
+      and(
+        eq(memories.lifeGraphId, context.lifeGraphId),
+        eq(memories.status, "active"),
+        eq(memories.suppressed, false),
+      ),
     )
     .orderBy(sql`${memories.occurredAt} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
     .limit(RESULT_CAP);
