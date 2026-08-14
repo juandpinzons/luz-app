@@ -104,6 +104,9 @@ const NEAR_BOTTOM_THRESHOLD_PX = 120;
 /** Techo del textarea que crece con el mensaje -- pasado esto, scroll interno en vez de seguir empujando la conversación hacia arriba. ~6 líneas a este tamaño de fuente. */
 const MESSAGE_INPUT_MAX_HEIGHT_PX = 160;
 
+/** Corte duro de una nota de voz -- defensa en profundidad junto al límite de tamaño del lado del servidor (`MAX_AUDIO_BYTES`, `/api/chat/transcribe`), nunca la única barrera. 2 min es generoso para hablar en voz alta, no para grabar por accidente y olvidar la grabación prendida. */
+const MAX_RECORDING_MS = 2 * 60 * 1000;
+
 function parseStartedAtParam(value: string | null): Date | null {
   if (!value) return null;
   const date = new Date(value);
@@ -198,6 +201,22 @@ function ChatPageContent() {
   /** Avatar V1 -- última actividad real (tecla presionada, mensaje enviado), nunca decorativa: alimenta `msSinceLastActivity` (`usePresenceAvatarState`), la misma métrica que decide `sleep`. */
   const [lastActivityAt, setLastActivityAt] = useState(() => new Date());
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  /**
+   * Nota de voz -- transcripción real (Whisper, `/api/chat/transcribe`),
+   * nunca la persona enviando audio a ciegas: el texto aparece en el
+   * input para que lo revise antes de "Enviar", igual que si lo hubiera
+   * escrito. `micSupported` arranca en `false` (mismo criterio que
+   * `showOpeningRitual`/`floating-avatar.tsx`: `navigator`/`MediaRecorder`
+   * no existen en el servidor) y se corrige en el efecto de abajo --
+   * nunca se muestra un botón roto en un navegador sin soporte real.
+   */
+  const [micSupported, setMicSupported] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -250,6 +269,15 @@ function ChatPageContent() {
     } else {
       window.localStorage.setItem(CHAT_RITUAL_SEEN_KEY, "true");
     }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMicSupported(
+      typeof navigator !== "undefined" &&
+        typeof window.MediaRecorder !== "undefined" &&
+        !!navigator.mediaDevices?.getUserMedia,
+    );
   }, []);
 
   function handleScroll() {
@@ -492,6 +520,95 @@ function ChatPageContent() {
   useEffect(() => {
     resizeMessageInput();
   }, [message]);
+
+  /**
+   * Sube la grabación completa y transcribe -- nunca en vivo palabra por
+   * palabra (eso exigiría `SpeechRecognition` nativo, sin soporte real en
+   * Firefox y poco confiable en Safari/iOS, justo los navegadores de una
+   * audiencia real en celular). El texto se AGREGA al mensaje, nunca lo
+   * reemplaza -- la persona pudo haber escrito algo antes de grabar.
+   */
+  async function transcribeAudio(blob: Blob) {
+    setIsTranscribing(true);
+    setMicError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("audio", blob, "nota-de-voz.webm");
+
+      const response = await fetch("/api/chat/transcribe", { method: "POST", body: formData });
+      const data: { text?: string; error?: string } = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.text) {
+        throw new Error(data.error ?? "No se pudo transcribir el audio.");
+      }
+
+      setMessage((current) => (current.trim() === "" ? data.text! : `${current} ${data.text}`));
+      setLastActivityAt(new Date());
+      inputRef.current?.focus();
+    } catch (error) {
+      setMicError(error instanceof Error ? error.message : "No se pudo transcribir el audio.");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }
+
+  async function startRecording() {
+    setMicError(null);
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setMicError("No pude acceder al micrófono -- revisa los permisos.");
+      return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    audioChunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) audioChunksRef.current.push(event.data);
+    };
+
+    recorder.onstop = () => {
+      stream.getTracks().forEach((track) => track.stop());
+      if (recordingStopTimerRef.current) {
+        clearTimeout(recordingStopTimerRef.current);
+        recordingStopTimerRef.current = null;
+      }
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      audioChunksRef.current = [];
+      if (blob.size > 0) {
+        transcribeAudio(blob);
+      }
+    };
+
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setIsRecording(true);
+    setLastActivityAt(new Date());
+
+    recordingStopTimerRef.current = setTimeout(() => {
+      recorder.stop();
+      setIsRecording(false);
+    }, MAX_RECORDING_MS);
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
+  }
+
+  // Suelta el micrófono si la persona navega fuera de /chat a mitad de una
+  // grabación -- sin esto, el indicador de "micrófono en uso" del navegador
+  // se queda prendido hasta recargar la página.
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stop();
+      if (recordingStopTimerRef.current) clearTimeout(recordingStopTimerRef.current);
+    };
+  }, []);
 
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;
@@ -750,7 +867,40 @@ function ChatPageContent() {
 
         {/* Input */}
         <footer className="flex-shrink-0 border-t border-zinc-800 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-6">
-          <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
+          {micError && (
+            <p className="mx-auto mb-2 max-w-4xl text-xs text-red-400">{micError}</p>
+          )}
+
+          <div className="mx-auto flex max-w-4xl items-end gap-2 sm:gap-3">
+            {micSupported && (
+              <button
+                type="button"
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={isSending || isTranscribing}
+                aria-label={isRecording ? "Detener grabación" : "Grabar nota de voz"}
+                aria-pressed={isRecording}
+                className={
+                  isRecording
+                    ? "flex-shrink-0 animate-pulse-soft rounded-xl bg-red-600 px-3 py-3 text-white transition focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 sm:px-4 sm:py-4"
+                    : "flex-shrink-0 rounded-xl bg-zinc-900 px-3 py-3 text-zinc-300 ring-1 ring-zinc-800 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 sm:px-4 sm:py-4"
+                }
+              >
+                {isTranscribing ? (
+                  <span className="block h-5 w-5 animate-spin rounded-full border-2 border-zinc-500 border-t-white" />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                    <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
+                    <path
+                      d="M5 11a7 7 0 0 0 14 0M12 18v3"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
+              </button>
+            )}
+
             <textarea
               ref={inputRef}
               rows={1}
