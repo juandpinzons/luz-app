@@ -101,6 +101,9 @@ function parseSSEMessage(raw: string): ParsedSSEEvent | null {
 /** Qué tan cerca del fondo (en px) cuenta como "ya estaba abajo" para el autoscroll inteligente. */
 const NEAR_BOTTOM_THRESHOLD_PX = 120;
 
+/** Techo del textarea que crece con el mensaje -- pasado esto, scroll interno en vez de seguir empujando la conversación hacia arriba. ~6 líneas a este tamaño de fuente. */
+const MESSAGE_INPUT_MAX_HEIGHT_PX = 160;
+
 function parseStartedAtParam(value: string | null): Date | null {
   if (!value) return null;
   const date = new Date(value);
@@ -194,7 +197,7 @@ function ChatPageContent() {
   const [orbSignature, setOrbSignature] = useState<OrbVisualState | undefined>();
   /** Avatar V1 -- última actividad real (tecla presionada, mensaje enviado), nunca decorativa: alimenta `msSinceLastActivity` (`usePresenceAvatarState`), la misma métrica que decide `sleep`. */
   const [lastActivityAt, setLastActivityAt] = useState(() => new Date());
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -470,6 +473,26 @@ function ChatPageContent() {
       });
   }
 
+  /**
+   * Crece con el contenido hasta `MESSAGE_INPUT_MAX_HEIGHT_PX`, después
+   * scroll interno -- `height: auto` primero para que achicar el texto
+   * también achique la caja, no solo agrandarla. Corre en un efecto (no
+   * llamado a mano en cada sitio que cambia `message`) para cubrir los
+   * cuatro caminos reales con un solo lugar: escribir, enviar (vuelve a
+   * ""), "Nueva conversación" (vuelve a ""), y la hidratación de un
+   * borrador guardado (`hydrateDraft`, puede llegar con saltos de línea).
+   */
+  function resizeMessageInput() {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, MESSAGE_INPUT_MAX_HEIGHT_PX)}px`;
+  }
+
+  useEffect(() => {
+    resizeMessageInput();
+  }, [message]);
+
   async function sendMessage() {
     if (message.trim() === "" || isSending) return;
 
@@ -698,8 +721,8 @@ function ChatPageContent() {
                       key={index}
                       className={
                         msg.role === "user"
-                          ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 text-black"
-                          : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 text-white"
+                          ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 whitespace-pre-wrap text-black"
+                          : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 whitespace-pre-wrap text-white"
                       }
                     >
                       {msg.content}
@@ -728,9 +751,9 @@ function ChatPageContent() {
         {/* Input */}
         <footer className="flex-shrink-0 border-t border-zinc-800 px-3 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-6">
           <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
-            <input
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               autoFocus
               placeholder="Escribe un mensaje..."
               aria-label="Escribe un mensaje para LUZ"
@@ -741,11 +764,18 @@ function ChatPageContent() {
                 setLastActivityAt(new Date());
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // Enter solo (sin Shift/Cmd/Ctrl) inserta un salto de línea --
+                // comportamiento nativo de un textarea, no se intercepta. Cmd/Ctrl+Enter
+                // envía como atajo, mismo criterio que Slack/Discord -- nunca Enter solo,
+                // a propósito: LUZ es un espacio para escribir en voz alta, un mensaje de
+                // varias líneas no debe partirse en varios envíos por accidente.
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
                   sendMessage();
                 }
               }}
-              className="min-w-0 flex-1 rounded-xl bg-zinc-900 px-3 py-3 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50 sm:px-5 sm:py-4"
+              className="min-w-0 flex-1 resize-none rounded-xl bg-zinc-900 px-3 py-3 outline-none ring-1 ring-zinc-800 focus:ring-white focus-visible:ring-luz disabled:opacity-50 sm:px-5 sm:py-4"
+              style={{ maxHeight: MESSAGE_INPUT_MAX_HEIGHT_PX }}
             />
 
             <button
