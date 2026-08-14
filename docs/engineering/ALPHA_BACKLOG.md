@@ -375,9 +375,27 @@ limpios.
 
 ## P3 — Futuro
 
-### P3-1. Alpha-2 (Gmail)
-Pausado explícitamente por el Founder hasta que el Founder Acceptance
-Test se sienta sólido. Ver `docs/engineering/BETA_ROADMAP_V1.md`.
+### P3-1. Alpha-2 (Gmail) — ✅ Resuelto (2026-08-13/14)
+Estaba pausado explícitamente por el Founder hasta que el Founder
+Acceptance Test se sintiera sólido -- el propio Founder reabrió esto
+directamente (barrido completo backend→UI pedido en sesión, Gmail
+Foundation era el único hueco real confirmado). Construido: flujo OAuth
+completo (`/api/gmail/connect|callback|disconnect`, scope incremental
+`gmail.metadata` sobre el cliente Google ya usado para login, nunca
+tocando la pantalla de consentimiento del login), tabla
+`email_connections` cifrada (mismo patrón que `calendar_connections`),
+página `/gmail`, y señal `waiting_reply` conectada al dashboard
+principal (`app/dashboard/page.tsx`) -- mismo criterio de "cero
+fabricación" que la biblioteca editorial: sin nada esperando respuesta,
+la sección no se muestra. Verificado: redirect real contra
+`accounts.google.com` confirmado aceptado (ya no `redirect_uri_mismatch`
+tras registrar la redirect URI en Google Cloud Console), smoke test
+contra Postgres real, `needs_reauth` verificado end-to-end con una
+conexión expirada sembrada (round-trip de red real a Gmail, nunca
+mockeado). **Pendiente, no mío**: el consentimiento real de una cuenta
+Gmail (requiere login interactivo del Founder) todavía no se completó
+-- mismo límite que el propio README de Gmail Foundation ya documentaba,
+sin forma de completarlo desde este entorno.
 
 ### P3-2. Sistema de feedback dentro de la app — ✅ Resuelto
 Desplegado (commit `0969afc`): `/feedback`, `/api/feedback`,
