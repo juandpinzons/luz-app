@@ -7,6 +7,17 @@ import { createEntityId } from "@/core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
 import { GarminProvider } from "@/features/reality/providers/garmin";
 import { importWearableExport } from "@/features/reality/application/import-wearable-export";
+import { DrizzleBeliefRepository, type Belief } from "@/core/belief-engine";
+import { DrizzleConceptRepository, type Concept } from "@/core/concept-graph";
+import { DrizzleInsightRepository, type Insight } from "@/core/knowledge-engine";
+import {
+  DrizzleGoalRepository,
+  DrizzleProjectRepository,
+  findOrCreateGoal,
+  findOrCreateProject,
+  findOrCreateHabit,
+  findOrCreateRelationship,
+} from "@/core/life";
 
 /**
  * HERRAMIENTA DE EMERGENCIA, DE UN SOLO USO -- Colombia Tech Week,
@@ -78,6 +89,153 @@ function SYNTHETIC_WEARABLE_WEEK() {
   ];
 }
 
+/**
+ * Siembra directa de las ramas de `/life` que solo se llenan vía
+ * procesamiento asíncrono real (Belief/Concept/Insight -- Knowledge
+ * Engine) o captura explícita (Goal/Project/Habit/Relationship) --
+ * ninguna de las dos corre sobre las memorias insertadas en bloque más
+ * arriba. Sin esto, la cuenta demo se ve con "Recuerdos: 275" y todo
+ * lo demás en 0, y la estrategia de conversación (`buildContinuityLine`)
+ * repite siempre la misma apertura por falta de señal real donde elegir.
+ * Contenido genérico/positivo, coherente con las memorias ya sembradas
+ * (constancia al correr, lectura de Zero to One, llamadas familiares,
+ * nervios antes de presentar).
+ */
+async function seedUnderstanding(context: LifeGraphContext) {
+  const now = new Date();
+  const conceptRepo = new DrizzleConceptRepository(db);
+  const beliefRepo = new DrizzleBeliefRepository(db);
+  const insightRepo = new DrizzleInsightRepository(db);
+
+  const concepts: Omit<Concept, "id">[] = [
+    { lifeGraphId: context.lifeGraphId, label: "Disciplina", domain: "health", createdAt: now, updatedAt: now },
+    { lifeGraphId: context.lifeGraphId, label: "Curiosidad", domain: "personal_growth", createdAt: now, updatedAt: now },
+    { lifeGraphId: context.lifeGraphId, label: "Resiliencia", domain: "career", createdAt: now, updatedAt: now },
+  ];
+  for (const concept of concepts) {
+    await conceptRepo.save(context, { ...concept, id: createEntityId(crypto.randomUUID()) });
+  }
+
+  const beliefs: Omit<Belief, "id">[] = [
+    {
+      lifeGraphId: context.lifeGraphId,
+      subjectPersonId: context.personId,
+      statement: "Prioriza el crecimiento personal incluso cuando compite con el descanso inmediato.",
+      domain: "personal_growth",
+      category: "life_domain",
+      status: "active",
+      confidence: { score: 68, assignedAt: now },
+      firstObservedAt: now,
+      lastReinforcedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      lifeGraphId: context.lifeGraphId,
+      subjectPersonId: context.personId,
+      statement: "El vínculo con su familia es un ancla estable en medio de la presión de emprender.",
+      domain: "relationships",
+      category: "life_domain",
+      status: "active",
+      confidence: { score: 72, assignedAt: now },
+      firstObservedAt: now,
+      lastReinforcedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      lifeGraphId: context.lifeGraphId,
+      subjectPersonId: context.personId,
+      statement: "Se exige mucho a sí mismo antes de los momentos que más le importan.",
+      domain: "career",
+      category: "life_domain",
+      status: "active",
+      confidence: { score: 65, assignedAt: now },
+      firstObservedAt: now,
+      lastReinforcedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+  for (const belief of beliefs) {
+    await beliefRepo.save(context, { ...belief, id: createEntityId(crypto.randomUUID()) });
+  }
+
+  const insights: Omit<Insight, "id">[] = [
+    {
+      lifeGraphId: context.lifeGraphId,
+      type: "pattern",
+      description: "Corre tres veces por semana de forma consistente, siempre temprano en la mañana.",
+      confidence: { score: 70, assignedAt: now },
+      status: "validated",
+      createdAt: now,
+      updatedAt: now,
+      validatedAt: now,
+    },
+    {
+      lifeGraphId: context.lifeGraphId,
+      type: "preference",
+      description: "Cocinar los domingos es su forma preferida de desconectarse antes de una semana exigente.",
+      confidence: { score: 62, assignedAt: now },
+      status: "validated",
+      createdAt: now,
+      updatedAt: now,
+      validatedAt: now,
+    },
+    {
+      lifeGraphId: context.lifeGraphId,
+      type: "fact",
+      description: "Está preparando el pitch y la ronda pre-seed de LUZ en paralelo a Colombia Tech Week.",
+      confidence: { score: 75, assignedAt: now },
+      status: "validated",
+      createdAt: now,
+      updatedAt: now,
+      validatedAt: now,
+    },
+    {
+      lifeGraphId: context.lifeGraphId,
+      type: "recommendation",
+      description: "Un ritual corto de descompresión (respiración, meditación breve) antes de dormir podría ayudarle en semanas de alta exigencia.",
+      confidence: { score: 58, assignedAt: now },
+      status: "validated",
+      createdAt: now,
+      updatedAt: now,
+      validatedAt: now,
+    },
+  ];
+  for (const insight of insights) {
+    await insightRepo.save(context, { ...insight, id: createEntityId(crypto.randomUUID()) });
+  }
+
+  const goalRepo = new DrizzleGoalRepository(db);
+  const projectRepo = new DrizzleProjectRepository(db);
+
+  await findOrCreateGoal(db, context, { title: "Cerrar la ronda pre-seed de LUZ", domain: "finances" });
+  await findOrCreateGoal(db, context, { title: "Correr una media maratón antes de fin de año", domain: "health" });
+  const goalCompleted = await findOrCreateGoal(db, context, { title: "Terminar la arquitectura V1 del producto", domain: "career" });
+  await goalRepo.update(context, goalCompleted.id, { status: "completed" });
+
+  await findOrCreateProject(db, context, { title: "Beta pública de LUZ", domain: "career" });
+  const projectCompleted = await findOrCreateProject(db, context, { title: "Preparar el pitch de Colombia Tech Week", domain: "career" });
+  await projectRepo.update(context, projectCompleted.id, { status: "completed" });
+
+  await findOrCreateHabit(db, context, { title: "Correr martes, jueves y sábado", domain: "health" });
+  await findOrCreateHabit(db, context, { title: "Llamar a la familia los domingos", domain: "relationships" });
+
+  await findOrCreateRelationship(db, context, { otherPersonName: "Daniela", type: "colleague" });
+  await findOrCreateRelationship(db, context, { otherPersonName: "Papá", type: "family" });
+
+  return {
+    concepts: concepts.length,
+    beliefs: beliefs.length,
+    insights: insights.length,
+    goals: 3,
+    projects: 2,
+    habits: 2,
+    relationships: 2,
+  };
+}
+
 async function resolveAccount(
   email: string,
 ): Promise<{ userId: string; context: LifeGraphContext } | null> {
@@ -127,6 +285,21 @@ export async function POST(request: Request) {
       JSON.stringify(SYNTHETIC_WEARABLE_WEEK()),
     );
     return NextResponse.json({ wearableDaysSeeded: daysImported });
+  }
+
+  if (body?.action === "seed_understanding") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const result = await seedUnderstanding(target.context);
+    return NextResponse.json(result);
   }
 
   if (!body?.sourceEmail || !body?.targetEmail) {
