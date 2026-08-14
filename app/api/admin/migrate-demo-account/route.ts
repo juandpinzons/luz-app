@@ -5,6 +5,8 @@ import { conversations, memories, users } from "@/core/db/schema";
 import { accountIdentities } from "@/auth/schema";
 import { createEntityId } from "@/core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
+import { GarminProvider } from "@/features/reality/providers/garmin";
+import { importWearableExport } from "@/features/reality/application/import-wearable-export";
 
 /**
  * HERRAMIENTA DE EMERGENCIA, DE UN SOLO USO -- Colombia Tech Week,
@@ -51,6 +53,31 @@ function containsSensitiveKeyword(content: string): boolean {
   return SENSITIVE_KEYWORDS.some((keyword) => lower.includes(keyword));
 }
 
+function isoDaysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Semana sintética y sana, con un bajón real de sueño el día antes de
+ * la presentación -- narrativa auténtica para el demo, no alarmante
+ * ("dormí poco, pero no estoy ansioso, estoy listo"). Mismos datos que
+ * `.scratch/seed-demo-account.ts`, reimplementados aquí porque esta
+ * ruta corre en el runtime de Vercel, no localmente.
+ */
+function SYNTHETIC_WEARABLE_WEEK() {
+  return [
+    { calendarDate: isoDaysAgo(6), steps: 8500, restingHeartRate: 58, averageStressLevel: 30, sleepTimeSeconds: 420 * 60 },
+    { calendarDate: isoDaysAgo(5), steps: 9200, restingHeartRate: 57, averageStressLevel: 28, sleepTimeSeconds: 410 * 60 },
+    { calendarDate: isoDaysAgo(4), steps: 7800, restingHeartRate: 59, averageStressLevel: 35, sleepTimeSeconds: 400 * 60 },
+    { calendarDate: isoDaysAgo(3), steps: 10200, restingHeartRate: 56, averageStressLevel: 25, sleepTimeSeconds: 430 * 60 },
+    { calendarDate: isoDaysAgo(2), steps: 6500, restingHeartRate: 60, averageStressLevel: 45, sleepTimeSeconds: 380 * 60 },
+    { calendarDate: isoDaysAgo(1), steps: 5200, restingHeartRate: 63, averageStressLevel: 58, sleepTimeSeconds: 330 * 60 },
+    { calendarDate: isoDaysAgo(0), steps: 4100, restingHeartRate: 60, averageStressLevel: 48, sleepTimeSeconds: 340 * 60 },
+  ];
+}
+
 async function resolveAccount(
   email: string,
 ): Promise<{ userId: string; context: LifeGraphContext } | null> {
@@ -79,8 +106,29 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { sourceEmail?: string; targetEmail?: string }
+    | { sourceEmail?: string; targetEmail?: string; action?: string }
     | null;
+
+  if (body?.action === "seed_wearable") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const { daysImported } = await importWearableExport(
+      db,
+      target.context,
+      new GarminProvider(),
+      JSON.stringify(SYNTHETIC_WEARABLE_WEEK()),
+    );
+    return NextResponse.json({ wearableDaysSeeded: daysImported });
+  }
+
   if (!body?.sourceEmail || !body?.targetEmail) {
     return NextResponse.json({ error: "sourceEmail y targetEmail son requeridos" }, { status: 400 });
   }
