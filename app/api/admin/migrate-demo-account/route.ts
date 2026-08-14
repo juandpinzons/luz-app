@@ -275,6 +275,40 @@ async function seedRelationships(context: LifeGraphContext) {
 }
 
 /**
+ * Se SUMA a `REAL_RELATIONSHIPS`, nunca reemplaza (a diferencia de
+ * `seedRelationships` -- el Founder pidió "otros 9", no una lista
+ * nueva). "Juan Felipe (equipo)" para el desarrollador: ya existe un
+ * "Juan Felipe" (el hermano, `REAL_RELATIONSHIPS`) y `findOrCreatePerson`
+ * dedup por nombre exacto -- sin distinguir el string, `findOrCreateRelationship`
+ * habría devuelto la relación de "Hermano" ya existente en vez de crear
+ * una nueva. Avisado al Founder para que confirme si el nombre real del
+ * developer es otro.
+ */
+const MORE_COLLEAGUES: { name: string; type: RelationshipType; role: string }[] = [
+  { name: "Juan Felipe (equipo)", type: "colleague", role: "Desarrollador" },
+  { name: "Camilo", type: "colleague", role: "Desarrollador" },
+  { name: "Nicolás", type: "colleague", role: "Desarrollador" },
+  { name: "Santiago", type: "colleague", role: "Psicólogo, equipo de salud" },
+  { name: "Esteban", type: "colleague", role: "Psicólogo, equipo de salud" },
+  { name: "María Camila", type: "colleague", role: "Psicóloga, equipo de salud" },
+  { name: "Germán", type: "colleague", role: "Psiquiatra, equipo de salud" },
+  { name: "Alejandra", type: "colleague", role: "Jurídico" },
+  { name: "Martín", type: "colleague", role: "Jurídico" },
+];
+
+async function seedMoreColleagues(context: LifeGraphContext) {
+  const relationshipRepo = new DrizzleRelationshipRepository(db);
+  for (const entry of MORE_COLLEAGUES) {
+    const created = await findOrCreateRelationship(db, context, {
+      otherPersonName: entry.name,
+      type: entry.type,
+    });
+    await relationshipRepo.update(context, created.id, { notes: entry.role });
+  }
+  return { moreColleagues: MORE_COLLEAGUES.length };
+}
+
+/**
  * Memorias que nombran explícitamente a las personas reales de
  * `REAL_RELATIONSHIPS` -- material concreto y variado para que
  * `ConversationStrategyEngine` (`buildContinuityLine`,
@@ -455,6 +489,21 @@ export async function POST(request: Request) {
       );
     }
     const result = await seedRelationships(target.context);
+    return NextResponse.json(result);
+  }
+
+  if (body?.action === "seed_more_colleagues") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const result = await seedMoreColleagues(target.context);
     return NextResponse.json(result);
   }
 
