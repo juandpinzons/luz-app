@@ -43,7 +43,12 @@ export type LiveEmailOutcome =
 export async function getLiveEmailContext(db: Database, lifeGraphId: EntityId): Promise<LiveEmailOutcome> {
   const stored = await getStoredEmailConnection(db, lifeGraphId, "gmail");
 
-  if (!stored || stored.connection.status === "disconnected") {
+  // La segunda condición es redundante en el camino feliz (una conexión
+  // `disconnected` siempre tiene `credentials: null`, ver
+  // `disconnectStoredEmailConnection`) -- se deja explícita para que
+  // TypeScript angoste `stored.credentials` a no-null de aquí en
+  // adelante, sin un cast.
+  if (!stored || stored.connection.status === "disconnected" || !stored.credentials) {
     return { status: "not_connected" };
   }
 

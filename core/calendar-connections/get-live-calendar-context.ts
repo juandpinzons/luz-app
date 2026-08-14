@@ -52,7 +52,12 @@ export type LiveCalendarOutcome =
 export async function getLiveCalendarContext(db: Database, lifeGraphId: EntityId): Promise<LiveCalendarOutcome> {
   const stored = await getStoredCalendarConnection(db, lifeGraphId, "apple");
 
-  if (!stored || stored.connection.status === "disconnected") {
+  // La segunda condición es redundante en el camino feliz (una conexión
+  // `disconnected` siempre tiene `credentials: null`, ver
+  // `disconnectStoredCalendarConnection`) -- se deja explícita para que
+  // TypeScript angoste `stored.credentials` a no-null de aquí en
+  // adelante, sin un cast.
+  if (!stored || stored.connection.status === "disconnected" || !stored.credentials) {
     return { status: "not_connected" };
   }
 

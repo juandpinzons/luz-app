@@ -20,7 +20,8 @@ import type { CalendarConnection, CalendarProviderKind } from "../../features/re
 
 export interface StoredCalendarConnection {
   connection: CalendarConnection;
-  credentials: AppleCalendarCredentials;
+  /** `null` si la conexión está `disconnected` -- `disconnectStoredCalendarConnection` limpia el secreto en reposo, nunca solo cambia `status`. */
+  credentials: AppleCalendarCredentials | null;
 }
 
 function toDomainConnection(row: CalendarConnectionRow): CalendarConnection {
@@ -35,8 +36,17 @@ function toDomainConnection(row: CalendarConnectionRow): CalendarConnection {
   };
 }
 
-/** Hoy el único proveedor real es Apple (ver `features/reality/README.md`) -- lanza explícito en vez de devolver credenciales con una forma que el llamador no pidió. */
-function toAppleCredentials(row: CalendarConnectionRow): AppleCalendarCredentials {
+/**
+ * Hoy el único proveedor real es Apple (ver `features/reality/README.md`)
+ * -- lanza explícito en vez de devolver credenciales con una forma que
+ * el llamador no pidió. `null` si `encryptedCredentials` ya se limpió
+ * (conexión `disconnected`) -- nunca intenta descifrar un valor que ya
+ * no existe.
+ */
+function toAppleCredentials(row: CalendarConnectionRow): AppleCalendarCredentials | null {
+  if (row.encryptedCredentials === null) {
+    return null;
+  }
   if (row.providerKind !== "apple") {
     throw new Error(
       `toAppleCredentials: la conexión ${row.id} es de proveedor "${row.providerKind}", no "apple" -- ningún otro proveedor tiene un adaptador real todavía.`,
@@ -114,7 +124,14 @@ export async function markCalendarConnectionError(db: Database, id: EntityId): P
   await db.update(calendarConnections).set({ status: "error", updatedAt: new Date() }).where(eq(calendarConnections.id, id));
 }
 
-/** Transición de estado pura del lado de LUZ (mismo criterio que `disconnectCalendar` en Calendar Foundation) -- conserva la fila, nunca la borra. */
+/**
+ * Conserva la fila (historial de que existió esta conexión), nunca la
+ * borra -- pero SÍ borra el secreto en reposo (`encryptedCredentials:
+ * null`), no solo cambia `status`. Auditoría de seguridad, 2026-08-14:
+ * antes de este cambio, desconectar era una transición de estado pura
+ * que dejaba la contraseña de app de Apple cifrada y recuperable
+ * indefinidamente.
+ */
 export async function disconnectStoredCalendarConnection(
   db: Database,
   lifeGraphId: EntityId,
@@ -122,6 +139,6 @@ export async function disconnectStoredCalendarConnection(
 ): Promise<void> {
   await db
     .update(calendarConnections)
-    .set({ status: "disconnected", updatedAt: new Date() })
+    .set({ status: "disconnected", encryptedCredentials: null, updatedAt: new Date() })
     .where(and(eq(calendarConnections.lifeGraphId, lifeGraphId), eq(calendarConnections.providerKind, providerKind)));
 }

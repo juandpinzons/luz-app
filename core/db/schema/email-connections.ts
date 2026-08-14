@@ -31,8 +31,15 @@ export const emailConnections = pgTable(
       .references((): AnyPgColumn => lifeGraphs.id, { onDelete: "cascade" }),
     providerKind: text("provider_kind").notNull().$type<EmailProviderKind>(),
     externalAccountId: text("external_account_id").notNull(),
-    /** Cifrado -- ver docblock de arriba. Nunca leer/loguear esta columna directo, siempre a través de `core/email-connections/repository.ts`. */
-    encryptedCredentials: text("encrypted_credentials").notNull(),
+    /**
+     * Cifrado -- ver docblock de arriba. Nunca leer/loguear esta
+     * columna directo, siempre a través de
+     * `core/email-connections/repository.ts`. Nullable a propósito
+     * (auditoría de seguridad, 2026-08-14): `disconnectStoredEmailConnection`
+     * la limpia -- desconectar debe borrar el secreto en reposo, no
+     * solo cambiar `status`.
+     */
+    encryptedCredentials: text("encrypted_credentials"),
     status: text("status").notNull().$type<EmailConnectionStatus>().default("active"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

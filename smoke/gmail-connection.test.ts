@@ -63,6 +63,7 @@ export const gmailConnectionFlow: SmokeFlow = {
 
       const stored = await getStoredEmailConnection(db, lifeGraphId, "gmail");
       assert(stored !== null, "getStoredEmailConnection debería encontrar la fila recién guardada");
+      assert(stored.credentials !== null, "una conexión recién guardada debería tener credentials no-null");
       assert(
         stored.credentials.accessToken === FAKE_CREDENTIALS.accessToken &&
           stored.credentials.refreshToken === FAKE_CREDENTIALS.refreshToken &&
@@ -77,6 +78,16 @@ export const gmailConnectionFlow: SmokeFlow = {
       assert(
         disconnectedOutcome.status === "not_connected",
         `tras desconectar, getLiveEmailContext debería devolver not_connected, obtuvo: ${disconnectedOutcome.status}`,
+      );
+
+      // Auditoría de seguridad, 2026-08-14: desconectar debe borrar el
+      // secreto en reposo, no solo cambiar `status` -- verificación
+      // real de que `encryptedCredentials` ya no existe en la fila.
+      const afterDisconnect = await getStoredEmailConnection(db, lifeGraphId, "gmail");
+      assert(afterDisconnect !== null, "la fila debería seguir existiendo tras desconectar (nunca se borra)");
+      assert(
+        afterDisconnect.credentials === null,
+        "tras desconectar, credentials debería ser null -- el secreto cifrado no debería seguir en la fila",
       );
     } finally {
       await db

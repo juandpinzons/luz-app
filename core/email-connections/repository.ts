@@ -21,7 +21,8 @@ import type { EmailConnection, EmailProviderKind } from "../../features/reality/
 
 export interface StoredEmailConnection {
   connection: EmailConnection;
-  credentials: GmailCredentials;
+  /** `null` si la conexión está `disconnected` -- `disconnectStoredEmailConnection` limpia el secreto en reposo, nunca solo cambia `status`. */
+  credentials: GmailCredentials | null;
 }
 
 function toDomainConnection(row: EmailConnectionRow): EmailConnection {
@@ -36,8 +37,17 @@ function toDomainConnection(row: EmailConnectionRow): EmailConnection {
   };
 }
 
-/** Hoy el único proveedor real es Gmail (ver `features/reality/README.md`) -- lanza explícito en vez de devolver credenciales con una forma que el llamador no pidió. */
-function toGmailCredentials(row: EmailConnectionRow): GmailCredentials {
+/**
+ * Hoy el único proveedor real es Gmail (ver `features/reality/README.md`)
+ * -- lanza explícito en vez de devolver credenciales con una forma que
+ * el llamador no pidió. `null` si `encryptedCredentials` ya se limpió
+ * (conexión `disconnected`) -- nunca intenta descifrar un valor que ya
+ * no existe.
+ */
+function toGmailCredentials(row: EmailConnectionRow): GmailCredentials | null {
+  if (row.encryptedCredentials === null) {
+    return null;
+  }
   if (row.providerKind !== "gmail") {
     throw new Error(
       `toGmailCredentials: la conexión ${row.id} es de proveedor "${row.providerKind}", no "gmail" -- ningún otro proveedor tiene un adaptador real todavía.`,
@@ -134,7 +144,14 @@ export async function markEmailConnectionNeedsReauth(db: Database, id: EntityId)
   await db.update(emailConnections).set({ status: "needs_reauth", updatedAt: new Date() }).where(eq(emailConnections.id, id));
 }
 
-/** Transición de estado pura del lado de LUZ -- conserva la fila, nunca la borra. */
+/**
+ * Conserva la fila (historial de que existió esta conexión), nunca la
+ * borra -- pero SÍ borra el secreto en reposo (`encryptedCredentials:
+ * null`), no solo cambia `status`. Auditoría de seguridad, 2026-08-14:
+ * antes de este cambio, desconectar era una transición de estado pura
+ * que dejaba el refresh token/contraseña de app cifrados y recuperables
+ * indefinidamente.
+ */
 export async function disconnectStoredEmailConnection(
   db: Database,
   lifeGraphId: EntityId,
@@ -142,6 +159,6 @@ export async function disconnectStoredEmailConnection(
 ): Promise<void> {
   await db
     .update(emailConnections)
-    .set({ status: "disconnected", updatedAt: new Date() })
+    .set({ status: "disconnected", encryptedCredentials: null, updatedAt: new Date() })
     .where(and(eq(emailConnections.lifeGraphId, lifeGraphId), eq(emailConnections.providerKind, providerKind)));
 }
