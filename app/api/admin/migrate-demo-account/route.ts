@@ -7,6 +7,7 @@ import { createEntityId } from "@/core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "@/core/life/life-graph-context";
 import { GarminProvider } from "@/features/reality/providers/garmin";
 import { importWearableExport } from "@/features/reality/application/import-wearable-export";
+import { createMemoryEngine, type MemoryCaptureInput } from "@/core/memory-engine";
 import { DrizzleBeliefRepository, type Belief } from "@/core/belief-engine";
 import { DrizzleConceptRepository, type Concept } from "@/core/concept-graph";
 import { DrizzleInsightRepository, type Insight } from "@/core/knowledge-engine";
@@ -70,6 +71,12 @@ function isoDaysAgo(n: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString().slice(0, 10);
+}
+
+function daysAgo(n: number): Date {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d;
 }
 
 /**
@@ -267,6 +274,67 @@ async function seedRelationships(context: LifeGraphContext) {
   return { relationships: REAL_RELATIONSHIPS.length };
 }
 
+/**
+ * Memorias que nombran explícitamente a las personas reales de
+ * `REAL_RELATIONSHIPS` -- material concreto y variado para que
+ * `ConversationStrategyEngine` (`buildContinuityLine`,
+ * `features/dashboard/services/build-morning-brief.ts`) tenga más de
+ * un "reason" real donde elegir en vez de repetir siempre la misma
+ * postura. NO resuelve del todo "un tema distinto en cada refresh" --
+ * `buildContinuityLine` pasa `recentStrategyTypes: []` fijo (el
+ * Dashboard todavía no comparte el historial de diversidad que sí usa
+ * el chat, ver su propio comentario en ese archivo), así que la
+ * selección sigue siendo determinística dado el mismo snapshot. Tocar
+ * ese cableado de diversidad es un cambio real al motor compartido,
+ * deliberadamente NO hecho acá bajo esta ventana de tiempo -- más
+ * señal real es la mitigación segura disponible ahora mismo.
+ */
+const RELATIONSHIP_MEMORIES: { content: string; type: MemoryCaptureInput["type"]; daysAgoOccurred: number }[] = [
+  {
+    content: "Con Alejandro nos juntamos cada semana para revisar cómo va LUZ.",
+    type: "ritual",
+    daysAgoOccurred: 10,
+  },
+  {
+    content: "Alejandro y yo nos reunimos la semana pasada para revisar cómo va la ronda pre-seed.",
+    type: "event",
+    daysAgoOccurred: 7,
+  },
+  {
+    content: "Quiero comprarle rosas a Verónica esta semana -- ha sido un pilar increíble mientras preparo todo esto.",
+    type: "intention",
+    daysAgoOccurred: 2,
+  },
+  {
+    content: "Fernando me ayudó a revisar los últimos detalles técnicos antes del evento.",
+    type: "event",
+    daysAgoOccurred: 3,
+  },
+  {
+    content: "Juanma me escribió deseándome suerte para la presentación.",
+    type: "event",
+    daysAgoOccurred: 1,
+  },
+  {
+    content: "Mi hermano Juan Felipe siempre me dice que confíe más en mi instinto.",
+    type: "fact",
+    daysAgoOccurred: 14,
+  },
+];
+
+async function seedRelationshipMemories(context: LifeGraphContext) {
+  const engine = createMemoryEngine(db);
+  for (const entry of RELATIONSHIP_MEMORIES) {
+    await engine.capture(context, {
+      content: entry.content,
+      type: entry.type,
+      source: "manual",
+      occurredAt: daysAgo(entry.daysAgoOccurred),
+    });
+  }
+  return { relationshipMemories: RELATIONSHIP_MEMORIES.length };
+}
+
 async function resolveAccount(
   email: string,
 ): Promise<{ userId: string; context: LifeGraphContext } | null> {
@@ -345,6 +413,21 @@ export async function POST(request: Request) {
       );
     }
     const result = await seedRelationships(target.context);
+    return NextResponse.json(result);
+  }
+
+  if (body?.action === "seed_relationship_memories") {
+    if (!body.targetEmail) {
+      return NextResponse.json({ error: "targetEmail es requerido" }, { status: 400 });
+    }
+    const target = await resolveAccount(body.targetEmail);
+    if (!target) {
+      return NextResponse.json(
+        { error: `sin cuenta/LifeGraph: ${body.targetEmail} -- esa cuenta debe iniciar sesión en la app al menos una vez primero` },
+        { status: 404 },
+      );
+    }
+    const result = await seedRelationshipMemories(target.context);
     return NextResponse.json(result);
   }
 
