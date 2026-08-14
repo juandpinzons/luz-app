@@ -10,6 +10,7 @@ import type {
 } from "../services/build-life-graph";
 import type { RelationshipWithDisplayName } from "../services/list-all-relationships";
 import type { Memory } from "../../../core/memory-engine";
+import { RELATIONSHIP_TYPE_LABELS } from "../labels";
 
 const VIEW_SIZE = 600;
 const CENTER = VIEW_SIZE / 2;
@@ -482,7 +483,7 @@ function RelationshipRow({ relationship }: { relationship: RelationshipWithDispl
           <span className="block truncate text-sm text-zinc-200">
             {relationship.otherPersonName}
           </span>
-          <span className="block text-xs text-zinc-500">{relationship.type}</span>
+          <span className="block text-xs text-zinc-500">{RELATIONSHIP_TYPE_LABELS[relationship.type]}</span>
         </span>
       </Link>
     </li>

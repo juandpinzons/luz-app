@@ -4,7 +4,7 @@ import type { EntityId, Goal, Habit, Project } from "../../../core/life";
 import type { Memory } from "../../../core/memory-engine";
 import type { InsightExplanation } from "../../knowledge/services/explain-insight";
 import type { ValidatedInsights } from "../../knowledge/services/list-validated-insights";
-import { INSIGHT_TYPE_LABELS, MEMORY_TYPE_LABELS } from "../labels";
+import { INSIGHT_TYPE_LABELS, LIFE_DOMAIN_UI_LABELS, MEMORY_TYPE_LABELS, RELATIONSHIP_TYPE_LABELS } from "../labels";
 import type { RelationshipWithDisplayName } from "./list-all-relationships";
 import type { LifeTimeline } from "./get-life-timeline";
 
@@ -133,7 +133,7 @@ export function assembleLifeGraph(input: {
       items: relationships.map((relationship) => ({
         id: relationship.id,
         title: relationship.otherPersonName,
-        subtitle: relationship.type,
+        subtitle: RELATIONSHIP_TYPE_LABELS[relationship.type],
         href: `/life/relationships/${relationship.id}`,
       })),
     },
@@ -168,7 +168,7 @@ export function assembleLifeGraph(input: {
       items: activeBeliefs.map((belief) => ({
         id: belief.id,
         title: belief.statement,
-        subtitle: belief.domain,
+        subtitle: belief.domain ? LIFE_DOMAIN_UI_LABELS[belief.domain] : undefined,
         href: `/life/beliefs/${belief.id}`,
       })),
     },
@@ -179,7 +179,7 @@ export function assembleLifeGraph(input: {
       items: concepts.map((concept) => ({
         id: concept.id,
         title: concept.label,
-        subtitle: concept.domain,
+        subtitle: concept.domain ? LIFE_DOMAIN_UI_LABELS[concept.domain] : undefined,
         href: `/life/concepts/${concept.id}`,
       })),
     },
