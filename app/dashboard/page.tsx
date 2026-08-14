@@ -5,10 +5,12 @@ import { after } from "next/server";
 import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
+import { getLiveEmailContext } from "@/core/email-connections/get-live-email-context";
 import { DrizzleContinuityLoopRepository } from "@/core/continuity-engine";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { EventRow } from "@/features/home/components/event-row";
+import { EmailRow } from "@/features/home/components/email-row";
 import {
   buildMorningBrief,
   timeOfDayGreeting,
@@ -194,6 +196,7 @@ export default async function DashboardPage() {
     avatarMood: AvatarMoodSignal | null;
     brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
     calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
+    emailOutcome: Awaited<ReturnType<typeof getLiveEmailContext>> | null;
     editorialPhrase: string | null;
     isFirstVisit: boolean;
   }> {
@@ -385,7 +388,45 @@ export default async function DashboardPage() {
     }
   }
 
-  // Las seis solo necesitan `lifeGraphContext`/`userId`, ya resueltos
+  /**
+   * Correo en vivo -- mismo criterio exacto que `loadCalendarOutcome`
+   * (misma tolerancia a fallos, mismo `try/catch` para lo inesperado
+   * antes de `getLiveEmailContext`). Se une a este mismo `Promise.all`
+   * en vez de quedarse detrás de un enlace estático (ver el commit que
+   * conectó Gmail): "conéctalo al dashboard principal" para Gmail,
+   * mismo paso que Calendar ya dio.
+   */
+  async function loadEmailOutcome(): Promise<Awaited<ReturnType<typeof getLiveEmailContext>> | null> {
+    if (!lifeGraphContext) return null;
+    try {
+      const outcome = await getLiveEmailContext(db, lifeGraphContext.lifeGraphId);
+      if (outcome.status === "error") {
+        logger.log({
+          event: "dashboard.gmail_sync_failed",
+          severity: "error",
+          requestId,
+          route: ROUTE,
+          userId,
+          lifeGraphId: lifeGraphContext.lifeGraphId,
+          ...describeError(outcome.error),
+        });
+      }
+      return outcome;
+    } catch (error) {
+      logger.log({
+        event: "dashboard.gmail_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+      return null;
+    }
+  }
+
+  // Las siete solo necesitan `lifeGraphContext`/`userId`, ya resueltos
   // arriba -- ninguna depende del resultado de otra, así que corren
   // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
   // dos `select` simples que antes solo se pedían DESPUÉS de tener
@@ -395,6 +436,7 @@ export default async function DashboardPage() {
     homeStateBaseResult,
     brief,
     calendarOutcome,
+    emailOutcome,
     recentPrimaryKeys,
     previousFingerprint,
     editorialPhrase,
@@ -403,6 +445,7 @@ export default async function DashboardPage() {
     span("Home State", "orchestration", loadHomeStateBase),
     span("Morning Brief", "orchestration", loadMorningBrief),
     span("Calendar", "external_api", loadCalendarOutcome),
+    span("Gmail", "external_api", loadEmailOutcome),
     span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
     span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
     span("Editorial Phrase", "repository", loadEditorialPhrase),
@@ -530,6 +573,7 @@ export default async function DashboardPage() {
       avatarMood,
       brief,
       calendarOutcome,
+      emailOutcome,
       editorialPhrase,
       isFirstVisit,
     };
@@ -548,6 +592,7 @@ export default async function DashboardPage() {
     avatarMood,
     brief,
     calendarOutcome,
+    emailOutcome,
     editorialPhrase,
     isFirstVisit,
   } = dashboardData;
@@ -731,23 +776,50 @@ export default async function DashboardPage() {
       )}
 
       {/*
-        Enlace estático, sin snapshot -- a propósito. Mostrar el
-        `EmailSnapshot` real aquí exigiría sumar `getLiveEmailContext`
-        al `Promise.all` de arriba, que hoy solo carga lo que ya cargaba
-        antes de esta misión (ver el docblock de ese `Promise.all`,
-        "el tiempo total sea el MÁXIMO de las cargas, no la SUMA" --
-        agregar una consulta más ahí es una decisión aparte, no un
-        efecto secundario de conectar Gmail). `/calendar` tuvo el mismo
-        primer paso (solo `/calendar` + este tipo de enlace) antes de
-        "conéctalo al dashboard principal" como misión propia, más
-        adelante -- mismo criterio aquí para `/gmail`.
+        "Esperando tu respuesta" -- la señal `waiting_reply` es la única
+        de las cinco de `EmailSnapshot` que pide una acción real (a
+        diferencia de "nuevo"/"no leído", que son solo estado). Mismo
+        criterio de "cero fabricación" que la biblioteca editorial
+        (`PRESENCE_PRINCIPLES.md` #9, ver P2-6 en el backlog): sin nada
+        esperando respuesta, esta sección simplemente no se muestra --
+        nunca un "bandeja al día" inventado para llenar el espacio.
       */}
-      <p className="animate-fade-in mt-4 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
-        <Link href="/gmail" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
-          Conecta tu Gmail
-        </Link>{" "}
-        para ver qué correos son nuevos, importantes o siguen esperando respuesta.
-      </p>
+      {emailOutcome?.status === "connected" && emailOutcome.snapshot.waitingReply.length > 0 && (
+        <section className="animate-fade-in mt-8" style={{ animationDelay: "190ms" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-400">Esperando tu respuesta</h2>
+            <Link href="/gmail" className="text-xs text-zinc-500 hover:text-zinc-300">
+              Ver todo →
+            </Link>
+          </div>
+          <ul className="mt-3 space-y-2">
+            <EmailRow message={emailOutcome.snapshot.waitingReply[0]} />
+          </ul>
+          {emailOutcome.snapshot.waitingReply.length > 1 && (
+            <Link href="/gmail" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
+              +{emailOutcome.snapshot.waitingReply.length - 1} más
+            </Link>
+          )}
+        </section>
+      )}
+
+      {emailOutcome?.status === "not_connected" && (
+        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
+          <Link href="/gmail" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
+            Conecta tu Gmail
+          </Link>{" "}
+          para ver qué correos son nuevos, importantes o siguen esperando respuesta.
+        </p>
+      )}
+
+      {emailOutcome?.status === "needs_reauth" && (
+        <p className="animate-fade-in mt-8 text-sm text-amber-500/80" style={{ animationDelay: "190ms" }}>
+          Tu acceso a Gmail expiró.{" "}
+          <Link href="/gmail" className="underline decoration-amber-700 underline-offset-4 transition hover:text-amber-300">
+            Reconectar
+          </Link>
+        </p>
+      )}
 
       <Link
         href="/chat"

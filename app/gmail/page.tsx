@@ -6,6 +6,7 @@ import { getLiveEmailContext } from "@/core/email-connections/get-live-email-con
 import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
+import { EmailRow } from "@/features/home/components/email-row";
 import { DisconnectButton } from "./disconnect-button";
 
 const ROUTE = "/gmail";
@@ -158,24 +159,5 @@ export default async function GmailPage({
         )}
       </div>
     </main>
-  );
-}
-
-function EmailRow({
-  message,
-}: {
-  message: { id: string; sender: { email: string; displayName?: string }; subject: string; snippet: string; unread: boolean };
-}) {
-  return (
-    <li className="rounded-lg border border-zinc-800 px-4 py-3">
-      <div className="flex items-center justify-between gap-2">
-        <p className={`truncate text-sm ${message.unread ? "font-medium text-white" : "text-zinc-300"}`}>
-          {message.sender.displayName ?? message.sender.email}
-        </p>
-        {message.unread && <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-luz" />}
-      </div>
-      <p className="mt-0.5 truncate text-sm text-zinc-400">{message.subject || "(sin asunto)"}</p>
-      <p className="mt-0.5 truncate text-xs text-zinc-600">{message.snippet}</p>
-    </li>
   );
 }
