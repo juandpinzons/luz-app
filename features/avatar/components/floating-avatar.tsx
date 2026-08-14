@@ -14,6 +14,21 @@ const AVATAR_SIZE_PX = 160;
 const EDGE_MARGIN_PX = 16;
 /** Deja espacio para el header de `/chat` (no tapar el link "Historial" al aparecer la primera vez). */
 const DEFAULT_TOP_OFFSET_PX = 88;
+/**
+ * `DEFAULT_TOP_OFFSET_PX` se calibró contra el header de una sola fila
+ * de `AppShell` (desktop) -- en mobile (`sm` de Tailwind, 640px, mismo
+ * umbral que ya usa `app-shell.tsx`) ese header envuelve a dos filas
+ * (wordmark+nav, luego cuenta+cerrar sesión), así que el header propio
+ * de `/chat` (con "Historial") empieza más abajo de lo que este offset
+ * fijo asumía -- el resplandor del avatar terminaba tapándolo (bug
+ * real, encontrado visualmente en mobile, nunca visible en desktop).
+ */
+const MOBILE_BREAKPOINT_PX = 640;
+const MOBILE_TOP_OFFSET_PX = 210;
+
+function defaultTopOffset(): number {
+  return window.innerWidth < MOBILE_BREAKPOINT_PX ? MOBILE_TOP_OFFSET_PX : DEFAULT_TOP_OFFSET_PX;
+}
 
 export type FloatingAvatarProps = Omit<PresenceAvatarProps, "size" | "className">;
 
@@ -59,7 +74,7 @@ export function FloatingAvatar(props: FloatingAvatarProps) {
     // montar, calcularse contra el tamaño real de la ventana.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPosition(
-      clampPosition(window.innerWidth - AVATAR_SIZE_PX - EDGE_MARGIN_PX, DEFAULT_TOP_OFFSET_PX),
+      clampPosition(window.innerWidth - AVATAR_SIZE_PX - EDGE_MARGIN_PX, defaultTopOffset()),
     );
 
     function handleResize() {
