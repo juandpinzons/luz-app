@@ -21,18 +21,34 @@ export interface WelcomeSignature {
   orb: OrbVisualState;
 }
 
+/**
+ * Investigación real 2026-08-15: `greeting` truncaba visiblemente a
+ * mitad de frase en producción -- reproducido de verdad, no
+ * hipotético: de 6 generaciones reales de prueba, 1 llegó a
+ * exactamente 220 (el tope anterior) y terminó en "...en el cuerpo y
+ * en la cabeza, la" -- la salida estructurada de OpenAI corta la
+ * cadena para cumplir `maxLength` del schema en vez de dejar que el
+ * modelo termine la frase antes. La instrucción de longitud (ver
+ * `SYSTEM_PROMPT_SUFFIX`) ahora es explícita en caracteres, apuntando
+ * bien por debajo de este tope -- 140 es la meta real, 220 queda como
+ * margen de seguridad para que ese tope casi nunca se alcance, nunca
+ * el objetivo en sí.
+ */
+const GREETING_TARGET_CHARS = 140;
+const GREETING_MAX_CHARS = 220;
+
 const welcomeSchema = z.object({
   cue: z.string().min(1).max(24),
-  greeting: z.string().min(1).max(220),
+  greeting: z.string().min(1).max(GREETING_MAX_CHARS),
 });
 
 const SYSTEM_PROMPT_SUFFIX = `Vas a escribir el primer momento de una conversación nueva -- lo primero que esta persona lee al llegar, antes de escribir una sola palabra.
 
 Escribe dos cosas:
 - "cue": una palabra o frase muy corta (1-3 palabras), el trazo inicial de un gesto de apertura -- nunca literalmente "Welcome" ni "Bienvenido/a", nunca un saludo genérico.
-- "greeting": una o dos frases, en español, que abran la conversación con presencia real -- nunca una pregunta de menú ("¿en qué puedo ayudarte?"), nunca genérica, nunca la misma estructura dos veces. Puede notar la hora, el tiempo que pasó, o algo concreto y real de lo que ya sabes de la persona -- solo si de verdad aporta, nunca forzado. Si no hay nada real que mencionar, un momento de presencia simple basta -- eso también es honesto.
+- "greeting": UNA frase completa, en español, que abra la conversación con presencia real -- una segunda frase corta SOLO si de verdad hace falta, nunca por costumbre. Apunta a no más de ${GREETING_TARGET_CHARS} caracteres (el límite real es ${GREETING_MAX_CHARS}, pero quedarte cerca de ahí es señal de que se te fue de largo) -- mejor una frase corta y precisa que dos genéricas. Nunca una pregunta de menú ("¿en qué puedo ayudarte?"), nunca genérica, nunca la misma estructura dos veces. Puede notar la hora, el tiempo que pasó, o algo concreto y real de lo que ya sabes de la persona -- solo si de verdad aporta, nunca forzado. Si no hay nada real que mencionar, un momento de presencia simple basta -- eso también es honesto.
 
-Nunca inventes datos que no te dieron. Nunca prometas nada. Varía el tono, el largo y el ritmo cada vez -- esto debe sentirse escrito ahora, no recitado.`;
+Nunca inventes datos que no te dieron. Nunca prometas nada. Varía el tono y el ritmo cada vez -- esto debe sentirse escrito ahora, no recitado. Termina siempre la frase que empezaste -- nunca la dejes a medias.`;
 
 export interface GenerateWelcomeInput {
   isFirstEverConversation: boolean;
