@@ -375,6 +375,22 @@ async function prepareMessageInner(
     }
   }
 
+  // Sin esto, el reply de texto (LLM, sin saber que el código YA va a generar
+  // una imagen este mismo turno -- ver `imageRequestPrompt`/`tryGenerateImage`
+  // más abajo) suele preguntar "¿qué estilo prefieres?" en el mismo mensaje
+  // donde la imagen ya llega -- redundante e incoherente, la persona ve la
+  // imagen Y una pregunta sobre algo que ya pasó. Una sola instrucción de
+  // sistema, insertada justo antes del turno actual (misma posición que la
+  // imagen adjunta arriba) resuelve esto sin una segunda llamada a IA solo
+  // para decidir "¿debería preguntar primero?".
+  if (imageRequestPrompt) {
+    aiMessages.splice(aiMessages.length - 1, 0, {
+      role: "system",
+      content:
+        "Ya vas a generar y mostrar una imagen en tu respuesta a este mensaje -- el sistema la adjunta automáticamente, vos no la generás. No preguntes por estilo, colores, ni ningún otro detalle antes de mostrarla: usa tu propio criterio para interpretar el pedido y comenta la imagen con calidez una vez lista, como si ya la hubieras visto. Si de verdad la persona quiere otra versión, puede pedirla en un mensaje después.",
+    });
+  }
+
   // Memory Engine (Beta 1 Roadmap, Sprint B1): captura el mensaje como
   // evidencia real — ranqueada y conectada por Memory Engine, no solo
   // guardada como texto de historial. Aditivo: `conversationMessages`

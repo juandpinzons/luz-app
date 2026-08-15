@@ -37,6 +37,7 @@ import {
 import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
 import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
+import { DeleteAccountButton } from "@/components/delete-account-button";
 import { selectEditorialPhrase } from "@/features/dashboard/services/select-editorial-phrase";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
@@ -842,6 +843,25 @@ export default async function DashboardPage() {
         summary={summary}
         hasUpcomingDeadline={(homeState?.upcoming.length ?? 0) > 0}
       />
+
+      {/*
+        Política de datos (`docs/legal/PRIVACY_POLICY_WORKING_DRAFT_V1.md`,
+        §15): el mecanismo real de borrado (`DeleteAccountButton`,
+        `/api/account/delete`) ya existía -- transaccional, en cascada,
+        con confirmación en dos pasos -- pero no estaba montado en
+        ninguna pantalla. Al final de Hoy, nunca arriba ni compitiendo
+        con el saludo: es la acción menos frecuente y más irreversible
+        de toda la app, coherente con dónde ya vive "¿Cómo vamos?".
+      */}
+      <div className="mt-10 border-t border-zinc-900 pt-4">
+        <p className="text-xs text-zinc-600">
+          Puedes eliminar tu cuenta y todos tus datos (conversaciones, memorias, creencias, conexiones) en cualquier
+          momento -- es permanente, sin forma de deshacerlo.
+        </p>
+        <div className="mt-2">
+          <DeleteAccountButton />
+        </div>
+      </div>
     </>
   );
 
