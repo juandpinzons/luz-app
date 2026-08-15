@@ -76,12 +76,12 @@ function runScenario(name: string, run: () => void) {
 }
 
 runScenario("sin calendario conectado -- nunca inventa una señal", () => {
-  assert(buildCalendarSignals(null).length === 0, "calendar null debía producir 0 señales");
+  assert(buildCalendarSignals(null).signals.length === 0, "calendar null debía producir 0 señales");
 });
 
 runScenario("evento de hoy -- frase natural, dueDate = inicio del evento", () => {
   const standup = timedEvent("standup", "Standup del equipo", "2026-07-31T09:00:00-05:00", "2026-07-31T09:30:00-05:00");
-  const signals = buildCalendarSignals(makeCalendar([standup], []));
+  const { signals } = buildCalendarSignals(makeCalendar([standup], []));
 
   assert(signals.length === 1, "debía producir exactamente 1 señal");
   const signal = signals[0]!;
@@ -94,7 +94,7 @@ runScenario("evento de hoy -- frase natural, dueDate = inicio del evento", () =>
 
 runScenario("evento futuro (no hoy) -- usa fecha, no 'Hoy'", () => {
   const planning = timedEvent("planning", "Planning Q3", "2026-08-05T09:00:00-05:00", "2026-08-05T10:00:00-05:00");
-  const signals = buildCalendarSignals(makeCalendar([], [planning]));
+  const { signals } = buildCalendarSignals(makeCalendar([], [planning]));
 
   assert(signals.length === 1, "debía producir exactamente 1 señal");
   assert(!signals[0]!.content.startsWith("Hoy"), `un evento futuro no debía decir "Hoy", llegó: "${signals[0]!.content}"`);
@@ -104,7 +104,7 @@ runScenario("evento futuro (no hoy) -- usa fecha, no 'Hoy'", () => {
 runScenario("ubicación real se incluye, nunca inventada", () => {
   const withLocation = timedEvent("con-ubicacion", "Cena", "2026-07-31T19:00:00-05:00", "2026-07-31T21:00:00-05:00", "Restaurante La Central");
   const withoutLocation = timedEvent("sin-ubicacion", "Llamada", "2026-07-31T10:00:00-05:00", "2026-07-31T10:30:00-05:00");
-  const signals = buildCalendarSignals(makeCalendar([withLocation, withoutLocation], []));
+  const { signals } = buildCalendarSignals(makeCalendar([withLocation, withoutLocation], []));
 
   assert(signals[0]!.content.includes("en Restaurante La Central"), "debía incluir la ubicación real cuando existe");
   assert(!signals[1]!.content.includes(" en "), "no debía inventar una ubicación cuando el evento no trae ninguna");
@@ -112,7 +112,7 @@ runScenario("ubicación real se incluye, nunca inventada", () => {
 
 runScenario("evento de todo el día -- sin horas, marcado como tal", () => {
   const holiday = allDayEvent("feriado", "Día festivo", "2026-08-07", "2026-08-08");
-  const signals = buildCalendarSignals(makeCalendar([], [holiday]));
+  const { signals } = buildCalendarSignals(makeCalendar([], [holiday]));
 
   assert(signals[0]!.content.includes("todo el día"), "debía marcar el evento como de todo el día");
   assert(!signals[0]!.content.includes(":"), "un evento de todo el día no debía incluir una hora inventada");
@@ -121,7 +121,7 @@ runScenario("evento de todo el día -- sin horas, marcado como tal", () => {
 runScenario("today + upcoming se combinan, sin duplicar la exclusión que ya hace HomeCalendarContext", () => {
   const todayEvent = timedEvent("hoy-1", "Evento de hoy", "2026-07-31T14:00:00-05:00", "2026-07-31T15:00:00-05:00");
   const upcomingEvent = timedEvent("prox-1", "Evento futuro", "2026-08-01T14:00:00-05:00", "2026-08-01T15:00:00-05:00");
-  const signals = buildCalendarSignals(makeCalendar([todayEvent], [upcomingEvent]));
+  const { signals } = buildCalendarSignals(makeCalendar([todayEvent], [upcomingEvent]));
 
   assert(signals.length === 2, "debía combinar today + upcomingEvents (2 señales)");
 });

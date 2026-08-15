@@ -64,11 +64,24 @@ const MAX_EXTERNAL_TEXT_LENGTH = 200;
  * también instruye al modelo explícitamente a tratar esto como dato,
  * nunca como instrucción -- las dos capas juntas, no una sola.
  */
-function sanitizeExternalText(value: string): string {
+/**
+ * `wasModified` es la señal real de "esto tenía algo que colapsar/
+ * acotar" -- la base del conteo `calendar_signal_sanitized` (tablero de
+ * salud diario, 2026-08-14) que un operador humano puede vigilar sin
+ * que esta función deje de ser pura (sigue sin tocar `db`/logging --
+ * quien la llama, `get-calendar-signals-for-conversation.ts`, decide
+ * si registra el evento).
+ */
+function sanitizeExternalText(value: string): { text: string; wasModified: boolean } {
+  // `wasModified` marca solo las dos señales que de verdad importan
+  // (saltos de línea/control, o largo excesivo) -- un simple espacio
+  // sobrante al final de un título real (`.trim()`) no cuenta como
+  // sospechoso, sería puro ruido en el conteo del tablero de salud.
+  const hadControlChars = /[\r\n\t]/.test(value);
   const collapsed = value.replace(/[\r\n\t]+/g, " ").trim();
-  return collapsed.length > MAX_EXTERNAL_TEXT_LENGTH
-    ? `${collapsed.slice(0, MAX_EXTERNAL_TEXT_LENGTH)}…`
-    : collapsed;
+  const wasTruncated = collapsed.length > MAX_EXTERNAL_TEXT_LENGTH;
+  const text = wasTruncated ? `${collapsed.slice(0, MAX_EXTERNAL_TEXT_LENGTH)}…` : collapsed;
+  return { text, wasModified: hadControlChars || wasTruncated };
 }
 
 /**
@@ -79,13 +92,15 @@ function sanitizeExternalText(value: string): string {
  * ubicación se incluye solo si el proveedor la trajo -- nunca
  * inventada.
  */
-function describeEvent(event: CalendarEvent, isToday: boolean): string {
+function describeEvent(event: CalendarEvent, isToday: boolean): { text: string; wasSanitized: boolean } {
   const title = sanitizeExternalText(event.title);
-  const location = event.location ? ` en ${sanitizeExternalText(event.location)}` : "";
+  const location = event.location ? sanitizeExternalText(event.location) : null;
+  const wasSanitized = title.wasModified || (location?.wasModified ?? false);
+  const locationSuffix = location ? ` en ${location.text}` : "";
 
   if (event.timing.isAllDay) {
     const when = isToday ? "Hoy" : `El ${DATE_FORMAT.format(eventStart(event))}`;
-    return `${when} es "${title}"${location} (todo el día).`;
+    return { text: `${when} es "${title.text}"${locationSuffix} (todo el día).`, wasSanitized };
   }
 
   const start = eventStart(event);
@@ -93,16 +108,15 @@ function describeEvent(event: CalendarEvent, isToday: boolean): string {
   const timeRange = `${TIME_FORMAT.format(start)} a ${TIME_FORMAT.format(end)}`;
   const when = isToday ? "Hoy tiene" : `El ${DATE_FORMAT.format(start)} tiene`;
 
-  return `${when} "${title}"${location} de ${timeRange}.`;
+  return { text: `${when} "${title.text}"${locationSuffix} de ${timeRange}.`, wasSanitized };
 }
 
-function toSignal(event: CalendarEvent, isToday: boolean): ExternalSignal {
+function toSignal(event: CalendarEvent, isToday: boolean): { signal: ExternalSignal; wasSanitized: boolean } {
   const start = eventStart(event);
+  const described = describeEvent(event, isToday);
   return {
-    source: "calendar",
-    content: describeEvent(event, isToday),
-    occurredAt: start,
-    dueDate: start,
+    signal: { source: "calendar", content: described.text, occurredAt: start, dueDate: start },
+    wasSanitized: described.wasSanitized,
   };
 }
 
@@ -120,14 +134,28 @@ function toSignal(event: CalendarEvent, isToday: boolean): ExternalSignal {
  * (`build-calendar-context.ts`, `excludeToday`) -- nunca se repite la
  * exclusión aquí. `null` (sin calendario conectado) produce `[]`,
  * nunca una señal inventada.
+ *
+ * `sanitizedCount` (auditoría de seguridad, 2026-08-14): cuántos
+ * eventos de este lote tenían un título/ubicación con saltos de línea
+ * o largo excesivo -- la señal más simple de un intento real de
+ * inyección de prompt. Quien llama con acceso a `db`
+ * (`get-calendar-signals-for-conversation.ts`) decide si registra el
+ * evento operacional; esta función se queda pura.
  */
-export function buildCalendarSignals(calendar: HomeCalendarContext | null): ExternalSignal[] {
+export function buildCalendarSignals(
+  calendar: HomeCalendarContext | null,
+): { signals: ExternalSignal[]; sanitizedCount: number } {
   if (!calendar) {
-    return [];
+    return { signals: [], sanitizedCount: 0 };
   }
 
-  return [
+  const results = [
     ...calendar.today.map((event) => toSignal(event, true)),
     ...calendar.upcomingEvents.map((event) => toSignal(event, false)),
   ];
+
+  return {
+    signals: results.map((result) => result.signal),
+    sanitizedCount: results.filter((result) => result.wasSanitized).length,
+  };
 }

@@ -56,8 +56,9 @@ export const calendarSignalInjectionFlow: SmokeFlow = {
       meetingMoments: [],
     };
 
-    const signals = buildCalendarSignals(context);
+    const { signals, sanitizedCount } = buildCalendarSignals(context);
     assert(signals.length === 1, `esperaba 1 señal, obtuvo ${signals.length}`);
+    assert(sanitizedCount === 1, `esperaba sanitizedCount=1 (título con salto de línea), obtuvo ${sanitizedCount}`);
 
     const content = signals[0]?.content ?? "";
     assert(
@@ -67,7 +68,7 @@ export const calendarSignalInjectionFlow: SmokeFlow = {
     assert(content.includes("Reunión"), "la señal debería seguir mencionando el evento real, no vaciarse por completo");
 
     const longTitle = "A".repeat(500);
-    const longSignals = buildCalendarSignals({
+    const longResult = buildCalendarSignals({
       status: "up_to_date",
       today: [fakeEvent({ title: longTitle, location: undefined })],
       upcomingEvents: [],
@@ -75,10 +76,24 @@ export const calendarSignalInjectionFlow: SmokeFlow = {
       recurringCommitments: [],
       meetingMoments: [],
     });
-    const longContent = longSignals[0]?.content ?? "";
+    const longContent = longResult.signals[0]?.content ?? "";
     assert(
       longContent.length < 400,
       `un título de 500 caracteres debería quedar acotado, la señal completa midió ${longContent.length}`,
+    );
+    assert(longResult.sanitizedCount === 1, `un título de 500 caracteres debería contar como sanitizado, obtuvo ${longResult.sanitizedCount}`);
+
+    const cleanResult = buildCalendarSignals({
+      status: "up_to_date",
+      today: [fakeEvent({ title: "Reunión normal", location: "Oficina" })],
+      upcomingEvents: [],
+      freeBlocks: [],
+      recurringCommitments: [],
+      meetingMoments: [],
+    });
+    assert(
+      cleanResult.sanitizedCount === 0,
+      `un evento normal no debería contar como sanitizado (falso positivo), obtuvo ${cleanResult.sanitizedCount}`,
     );
   },
 };

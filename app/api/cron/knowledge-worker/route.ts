@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAccountIdentityResolver } from "@/auth/drizzle-identity-resolver";
 import { db } from "@/core/db/client";
 import { createKnowledgeEngine } from "@/core/knowledge-engine";
+import { isCronAuthorized } from "@/core/observability/is-cron-authorized";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
 import {
@@ -25,18 +26,8 @@ export const maxDuration = 60;
 
 const TIME_BUDGET_MS = 50_000; // margen de seguridad sobre maxDuration=60s
 
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-
-  if (!secret) {
-    return false;
-  }
-
-  return request.headers.get("authorization") === `Bearer ${secret}`;
-}
-
 export async function GET(request: Request): Promise<Response> {
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
   }
 

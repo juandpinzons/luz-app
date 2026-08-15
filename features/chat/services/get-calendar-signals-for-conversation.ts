@@ -3,6 +3,7 @@ import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
+import { recordEvent } from "../../../core/observability/record-event";
 import type { ExternalSignal } from "../../../core/reality";
 import type { HomeCalendarContext } from "../../home/domain/home-state";
 import { buildCalendarSignals } from "./calendar-signals";
@@ -65,6 +66,16 @@ export async function getCalendarContextForConversation(
       lifeGraphId: context.lifeGraphId,
       ...describeError(error),
     });
+    // Persistido además de logueado (auditoría de seguridad,
+    // 2026-08-14) -- reutiliza el tipo `error` ya existente, filtrado
+    // por `route` en el tablero de salud diario ("fallos de pipeline"
+    // del punto "prompt externo"). `recordEvent` nunca lanza, así que
+    // esto no puede convertir una degradación tolerada en un error real.
+    await recordEvent(db, {
+      type: "error",
+      route: "chat.calendar_context_failed",
+      message: error instanceof Error ? error.message : String(error),
+    });
     return cached?.calendar ?? null;
   }
 }
@@ -74,5 +85,14 @@ export async function getCalendarSignalsForConversation(
   db: Database,
   context: LifeGraphContext,
 ): Promise<ExternalSignal[]> {
-  return buildCalendarSignals(await getCalendarContextForConversation(db, context));
+  const { signals, sanitizedCount } = buildCalendarSignals(await getCalendarContextForConversation(db, context));
+
+  if (sanitizedCount > 0) {
+    await recordEvent(db, {
+      type: "calendar_signal_sanitized",
+      metadata: { count: sanitizedCount },
+    });
+  }
+
+  return signals;
 }
