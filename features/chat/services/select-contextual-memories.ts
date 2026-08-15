@@ -1,8 +1,10 @@
+import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life";
 import { DeterministicMemoryClassifier } from "../../../core/memory-engine/classification/deterministic-memory-classifier";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import {
+  AISemanticMemoryRetrievalStrategy,
   createMemoryEngine,
   DrizzleMemoryRepository,
   type Memory,
@@ -48,6 +50,20 @@ const AGGREGATION_LIMIT = 15;
 const SHARED_TOKEN_WEIGHT = 20;
 const TYPE_MATCH_BONUS = 15;
 const RANK_WEIGHT = 0.3;
+/**
+ * `AISemanticMemoryRetrievalStrategy` (`core/memory-engine`, Fase B de
+ * MEMORY_ENGINE_MIGRATION_PLAN.md) -- deliberadamente el peso MÁS BAJO
+ * de los cuatro: esta función cerró un P0 del Alpha (2026-08-09)
+ * afinada solo con señales estructurales; el objetivo de este cambio es
+ * sumar una señal real que antes no existía (memorias relevantes en
+ * significado, cero palabras compartidas), nunca desplazar el peso ya
+ * validado de `SHARED_TOKEN_WEIGHT`/`TYPE_MATCH_BONUS`/`RANK_WEIGHT`.
+ * `cosineDistance` cae típicamente en [0, 1] para pares de texto real
+ * (0 = idéntico) -- `(1 - distance)` lo convierte en una similitud
+ * ascendente antes de escalar. Ajustable con evidencia real, igual que
+ * el resto de estos pesos (ver docblock de `selectContextualMemories`).
+ */
+const SEMANTIC_SIMILARITY_WEIGHT = 10;
 
 function tokenize(text: string): Set<string> {
   return new Set(
@@ -70,12 +86,17 @@ function countShared(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
  * Selecciona qué memorias necesita recordar LUZ para ESTE mensaje — no
  * las de mayor score global (P0, cierre del Alpha: "LUZ no debe
  * recordar 'lo más importante de toda la vida', debe recordar lo más
- * relevante para este mensaje"). Reutiliza únicamente lo que ya existe
- * — sin embeddings, sin infraestructura nueva:
+ * relevante para este mensaje"). Escrita originalmente (2026-08-09)
+ * reutilizando solo señal estructural — sin embeddings, sin
+ * infraestructura nueva; **actualizado (MEMORY_ENGINE_MIGRATION_PLAN.md
+ * Fase B)** para sumar `AISemanticMemoryRetrievalStrategy` como una
+ * señal más (`SEMANTIC_SIMILARITY_WEIGHT`, peso deliberadamente bajo),
+ * nunca en reemplazo de lo ya afinado:
  *
  * - `retrieve()` (ya real) trae un lote de candidatas más amplio que el
  *   límite final, todavía ordenado por rank — sigue siendo la única
- *   consulta a la base de datos para candidatas.
+ *   consulta a la base de datos para candidatas estructuradas; corre en
+ *   paralelo con la búsqueda semántica, nunca encadenada.
  * - `DeterministicMemoryClassifier` (ya real, ya usado en `capture()`)
  *   clasifica el mensaje actual — coincidir de tipo con una candidata
  *   es una señal real de relevancia.
@@ -114,12 +135,40 @@ export async function selectContextualMemories(
   currentMessage: string,
   limit: number,
 ): Promise<Memory[]> {
-  const candidates = await createMemoryEngine(db).retrieve(context, {
-    limit: CANDIDATE_POOL_SIZE,
-  });
+  // Estructurada + semántica en paralelo (mismo criterio que la
+  // corrección de latencia del Dashboard, 2026-08-02: independientes,
+  // nunca encadenadas). Un fallo real de `embed()` (proveedor sin
+  // configurar, OpenAI caído) no debe tumbar la selección de memorias
+  // completa -- degrada a `[]`, el turno sigue con solo la señal
+  // estructural, igual que se comportaba antes de este cambio.
+  const [candidates, semanticMatches] = await Promise.all([
+    createMemoryEngine(db).retrieve(context, { limit: CANDIDATE_POOL_SIZE }),
+    new AISemanticMemoryRetrievalStrategy(db, getAIProvider())
+      .retrieve(context, { text: currentMessage, limit: CANDIDATE_POOL_SIZE })
+      .catch(() => [] as Memory[]),
+  ]);
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && semanticMatches.length === 0) {
     return [];
+  }
+
+  /**
+   * Posición en `semanticMatches` (ya ordenado por similitud
+   * descendente) en vez del `cosineDistance` crudo -- `retrieve()`
+   * devuelve `Memory[]`, el mismo contrato que la mitad estructurada,
+   * nunca expone su distancia interna a quien la consume. Decaimiento
+   * armónico (`peso / (posición + 1)`) para que el primer resultado
+   * pese claramente más que el décimo sin necesitar la distancia real.
+   */
+  const semanticRank = new Map(semanticMatches.map((memory, index) => [memory.id, index]));
+
+  const allCandidates = [...candidates];
+  const candidateIds = new Set(candidates.map((memory) => memory.id));
+  for (const memory of semanticMatches) {
+    if (!candidateIds.has(memory.id)) {
+      allCandidates.push(memory);
+      candidateIds.add(memory.id);
+    }
   }
 
   const messageType = await new DeterministicMemoryClassifier().classify(
@@ -130,15 +179,18 @@ export async function selectContextualMemories(
   const aggregation = isAggregationQuery(currentMessage);
   const effectiveLimit = aggregation ? Math.max(limit, AGGREGATION_LIMIT) : limit;
 
-  const scored = candidates
+  const scored = allCandidates
     .map((memory) => {
       const shared = countShared(messageTokens, tokenize(memory.content));
       const typeBonus = memory.type === messageType ? TYPE_MATCH_BONUS : 0;
       const rankComponent = (memory.rank?.score ?? 0) * RANK_WEIGHT;
+      const semanticPosition = semanticRank.get(memory.id);
+      const semanticBonus =
+        semanticPosition === undefined ? 0 : SEMANTIC_SIMILARITY_WEIGHT / (semanticPosition + 1);
 
       return {
         memory,
-        score: shared * SHARED_TOKEN_WEIGHT + typeBonus + rankComponent,
+        score: shared * SHARED_TOKEN_WEIGHT + typeBonus + rankComponent + semanticBonus,
       };
     })
     .sort((a, b) => b.score - a.score);
@@ -187,7 +239,7 @@ export async function selectContextualMemories(
 
       if (selectedIds.has(connectedId)) continue;
 
-      const connectedMemory = candidates.find((memory) => memory.id === connectedId);
+      const connectedMemory = allCandidates.find((memory) => memory.id === connectedId);
       if (connectedMemory) {
         selected.push(connectedMemory);
         selectedIds.add(connectedId);

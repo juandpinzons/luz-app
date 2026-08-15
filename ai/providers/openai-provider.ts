@@ -164,4 +164,25 @@ export class OpenAIProvider implements AIProvider {
 
     return `data:image/png;base64,${b64}`;
   }
+
+  /**
+   * `text-embedding-3-small` -- 1536 dimensiones por defecto, igual a
+   * `EMBEDDING_DIMENSIONS` (`core/db/schema/memory.ts`) sin pedir
+   * truncamiento (`dimensions` no se pasa). Modelo fijo, distinto de
+   * `this.model` (conversacional) -- misma separación que ya tiene
+   * `generateImage` con `gpt-image-1`.
+   */
+  async embed(text: string): Promise<number[]> {
+    const response = await this.client.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text,
+    });
+
+    const embedding = response.data[0]?.embedding;
+    if (!embedding) {
+      throw new Error("OpenAIProvider: la respuesta de embeddings no contiene datos.");
+    }
+
+    return embedding;
+  }
 }

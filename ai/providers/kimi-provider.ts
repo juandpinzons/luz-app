@@ -127,4 +127,9 @@ export class KimiProvider implements AIProvider {
   async generateImage(): Promise<string> {
     throw new Error("KimiProvider: generación de imágenes no soportada -- Kimi K3 no expone ese endpoint.");
   }
+
+  /** Mismo criterio que `generateImage` -- Moonshot AI no documenta un endpoint de embeddings compatible. */
+  async embed(): Promise<number[]> {
+    throw new Error("KimiProvider: embeddings no soportados -- Kimi K3 no expone ese endpoint.");
+  }
 }

@@ -143,4 +143,28 @@ export class LoggingAIProvider implements AIProvider {
       throw error;
     }
   }
+
+  async embed(text: string): Promise<number[]> {
+    const startedAt = Date.now();
+    try {
+      const embedding = await this.inner.embed(text);
+      logger.log({
+        event: "ai_provider.call_completed",
+        provider: this.name,
+        method: "embed",
+        durationMs: Date.now() - startedAt,
+      });
+      return embedding;
+    } catch (error) {
+      logger.log({
+        event: "ai_provider.call_failed",
+        severity: "error",
+        provider: this.name,
+        method: "embed",
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
 }

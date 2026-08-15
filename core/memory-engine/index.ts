@@ -30,6 +30,10 @@ export * from "./ranking/deterministic-memory-ranking-strategy";
 export * from "./retrieval/memory-query";
 export * from "./retrieval/memory-retrieval-strategy";
 export * from "./retrieval/structured-memory-retrieval-strategy";
+export * from "./retrieval/ai-semantic-memory-retrieval-strategy";
+
+// Embedding
+export * from "./embedding/generate-memory-embedding";
 
 // Classification
 export * from "./classification/memory-classifier";

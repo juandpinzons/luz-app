@@ -1,9 +1,13 @@
 import { and, asc, eq, lt, or } from "drizzle-orm";
 import type { AccountIdentityResolver } from "../../../auth/identity-resolver";
+import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import { type KnowledgeJob, knowledgeJobs } from "../../../core/db/schema";
 import type { KnowledgeEngine } from "../../../core/knowledge-engine";
 import { createEntityId } from "../../../core/life";
+import { DrizzleMemoryRepository, generateMemoryEmbedding } from "../../../core/memory-engine";
+import { logger } from "../../../core/observability/logger";
+import { recordEvent } from "../../../core/observability/record-event";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 import { enrichKnowledgeGraph } from "./enrich-knowledge-graph";
 
@@ -100,6 +104,37 @@ export async function processKnowledgeJob(
     // Detection, Importance Engine. Corre después del pipeline base y
     // nunca lo puede fallar (ver docblock de `enrichKnowledgeGraph`).
     await enrichKnowledgeGraph(db, snapshot, lifeGraphContext, triggeringMemoryId);
+
+    // Embedding semántico de la Memory que disparó este job -- mismo
+    // aislamiento por etapa que `enrichKnowledgeGraph.runStage`: un
+    // fallo acá (OpenAI caído, embeddings sin configurar) nunca debe
+    // impedir que el resto del job (ya corrido arriba) se marque
+    // completado. Sin este paso, `AISemanticMemoryRetrievalStrategy`
+    // nunca tendría nada real que comparar (ver
+    // MEMORY_ENGINE_MIGRATION_PLAN.md Fase B).
+    try {
+      const memory = await new DrizzleMemoryRepository(db).getById(
+        lifeGraphContext,
+        triggeringMemoryId,
+      );
+      if (memory) {
+        await generateMemoryEmbedding(db, getAIProvider(), lifeGraphContext, memory);
+      }
+    } catch (error) {
+      logger.log({
+        event: "knowledge_worker.embedding_failed",
+        severity: "warn",
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        memoryId: triggeringMemoryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await recordEvent(db, {
+        type: "error",
+        route: "background.memory_embedding",
+        message: error instanceof Error ? error.message : String(error),
+        metadata: { lifeGraphId: lifeGraphContext.lifeGraphId, memoryId: triggeringMemoryId },
+      });
+    }
 
     await db
       .update(knowledgeJobs)

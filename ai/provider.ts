@@ -87,4 +87,15 @@ export interface AIProvider {
    * ya usan -- un solo formato de imagen en todo el sistema, nunca dos.
    */
   generateImage(prompt: string): Promise<string>;
+
+  /**
+   * Vector de embedding para un texto -- capacidad distinta de conversar,
+   * mismo criterio que `generateImage` (nunca toma `AIMessage[]`, no hay
+   * "contexto de conversación" para un embedding). Longitud fija en
+   * `EMBEDDING_DIMENSIONS` (`core/db/schema/memory.ts`, hoy 1536) --
+   * cada implementación es responsable de que su modelo produzca
+   * exactamente esa dimensión; un proveedor que no pueda debe lanzar,
+   * nunca devolver un vector de otro tamaño en silencio.
+   */
+  embed(text: string): Promise<number[]>;
 }
