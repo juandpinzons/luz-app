@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/knowledge-worker",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/continuity-worker",
+      "schedule": "0 6 * * *"
     }
   ]
 }

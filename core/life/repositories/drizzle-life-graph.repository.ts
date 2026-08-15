@@ -7,6 +7,7 @@ import {
   persons,
 } from "../../db/schema";
 import type { LifeGraph } from "../entities/life-graph";
+import type { LifeGraphContext } from "../life-graph-context";
 import type { Person } from "../entities/person";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
 import type { LifeGraphRepository } from "./life-graph.repository";
@@ -88,6 +89,19 @@ export class DrizzleLifeGraphRepository implements LifeGraphRepository {
       .where(eq(persons.lifeGraphId, lifeGraphId));
 
     return rows.map(toPerson);
+  }
+
+  async listAllContexts(): Promise<LifeGraphContext[]> {
+    const rows = await this.db
+      .select({ id: lifeGraphs.id, ownerPersonId: lifeGraphs.ownerPersonId })
+      .from(lifeGraphs);
+
+    return rows
+      .filter((row): row is { id: string; ownerPersonId: string } => row.ownerPersonId !== null)
+      .map((row) => ({
+        lifeGraphId: createEntityId(row.id),
+        personId: createEntityId(row.ownerPersonId),
+      }));
   }
 
   async saveMember(person: Person): Promise<void> {
