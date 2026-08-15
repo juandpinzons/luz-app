@@ -11,7 +11,6 @@ import {
   type LifeGraphContext,
 } from "../../../core/life";
 import type { Memory } from "../../../core/memory-engine";
-import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
@@ -40,10 +39,10 @@ const relationshipSchema = z.object({
 /**
  * Único punto donde una Memory clasificada se convierte en una fila
  * real de `core/life` — disparado únicamente por lo que el Memory
- * Engine ya produjo (`memory.type` + `memory.rank.score`), nunca por
- * un análisis independiente del mensaje/respuesta en crudo. Reemplaza
- * a `features/chat/services/extract-life-entities.ts` (retirado):
- * ese flujo decidía "¿es esto un Goal?" con su propia llamada de IA,
+ * Engine ya produjo (`memory.type`), nunca por un análisis
+ * independiente del mensaje/respuesta en crudo. Reemplaza a
+ * `features/chat/services/extract-life-entities.ts` (retirado): ese
+ * flujo decidía "¿es esto un Goal?" con su propia llamada de IA,
  * duplicando el juicio que `DeterministicMemoryClassifier` ya hace —
  * exactamente el "pipeline paralelo" que esto existe para eliminar.
  * Un solo origen de verdad: Conversación → Memory Engine → Life.
@@ -55,6 +54,22 @@ const relationshipSchema = z.object({
  * false`) — mismo criterio de "no inventar" que ya regía la extracción
  * anterior.
  *
+ * Investigación real (2026-08-15, cuenta del Founder en producción):
+ * este función ANTES exigía además `memory.rank.score >=
+ * MIN_SCORE_WITH_UNDERSTANDING_SIGNAL` (45) -- ese umbral mide una
+ * pregunta distinta ("¿esta memoria revela algo profundo?", ver
+ * `UNDERSTANDING_SIGNALS`), no "¿el clasificador determinista está
+ * seguro de que esto es un Goal/Relationship real?", que es lo único
+ * que `memory.type` ya responde por su cuenta. Evidencia real: 13
+ * memorias reales de tipo `relationship` (pareja, familia, un amigo
+ * nombrado) nunca se capturaron porque ninguna cruzó rank_score 45 --
+ * `relationship_change` (la única categoría de `UNDERSTANDING_SIGNALS`
+ * relacionada) está deliberadamente acotada a crisis/reconciliación
+ * ("nos distanciamos", "me fue infiel"), nunca a una mención rutinaria
+ * de una relación real. Quitado -- `memory.type` ya es la señal de
+ * confianza correcta para esta decisión, el score gate solo bloqueaba
+ * exactamente el contenido que este código existe para capturar.
+ *
  * Nunca lanza: cualquier fallo (IA o escritura) se traga acá y se
  * loguea con detalle real (`describeError`) — la conversación nunca
  * depende de que esto funcione, mismo criterio que ya protege la
@@ -65,10 +80,6 @@ export async function captureLifeEntityFromMemory(
   context: LifeGraphContext,
   memory: Memory,
 ): Promise<void> {
-  if ((memory.rank?.score ?? 0) < MIN_SCORE_WITH_UNDERSTANDING_SIGNAL) {
-    return;
-  }
-
   try {
     switch (memory.type) {
       case "goal":
