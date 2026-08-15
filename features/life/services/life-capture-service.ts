@@ -86,15 +86,28 @@ export async function captureLifeEntityFromMemory(
         await captureGoalOrProject(db, context, memory.content);
         break;
       case "pattern":
+      case "ritual":
+        // `DeterministicMemoryClassifier` nunca asigna "pattern" (su
+        // propio docblock: detectar un patrón exige comparar varias
+        // memorias entre sí, no leer una sola) -- "ritual" es el tipo
+        // que SÍ produce para exactamente este contenido ("todos los
+        // días", "cada semana", rutinas recurrentes), y es lo que
+        // `captureHabit` ya esperaba semánticamente (su propio prompt:
+        // "ya fue clasificada como un patrón de comportamiento
+        // recurrente"). Investigación real 2026-08-15: `case "pattern"`
+        // nunca corría para nadie: Hábitos siempre en cero, no por un
+        // fallo, por una rama muerta. `pattern` se queda en el switch
+        // por si un futuro engine de comparación entre memorias llega
+        // a asignarlo de verdad.
         await captureHabit(db, context, memory.content);
         break;
       case "relationship":
         await captureRelationship(db, context, memory.content);
         break;
       default:
-        // fact/ritual/preference/event/intention: sin mapeo a una
-        // entidad de Life en V1 — no toda Memory debe convertirse en
-        // algo, ver docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §1.4.
+        // fact/preference/event/intention: sin mapeo a una entidad de
+        // Life en V1 — no toda Memory debe convertirse en algo, ver
+        // docs/product/ALPHA_EXPERIENCE_V1_DESIGN.md §1.4.
         return;
     }
   } catch (error) {

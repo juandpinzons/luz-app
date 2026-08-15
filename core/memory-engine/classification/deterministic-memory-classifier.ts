@@ -64,12 +64,19 @@ const TYPE_SIGNALS: ReadonlyArray<{
     type: "goal",
     keywords: [
       "mi meta",
+      // Investigación real 2026-08-15: "Mis metas para los próximos 30
+      // días son: ..." -- plural real, "mi meta" (singular) nunca lo
+      // atrapaba, esa memoria caía a "fact" (el tipo de reserva) pese a
+      // ser una declaración de metas explícita y sin ambigüedad.
+      "mis metas",
       "mi objetivo",
+      "mis objetivos",
       "aspiro a",
       "quiero lograr",
       "quiero conseguir",
       "mi sueño",
       "my goal",
+      "my goals",
       "i aim to",
       "i want to achieve",
       "i'm working towards",
@@ -115,6 +122,24 @@ const TYPE_SIGNALS: ReadonlyArray<{
       "as a routine",
       "usually i",
       "i always",
+      // Investigación real 2026-08-15 (cuenta del Founder en
+      // producción): mismo contenido de rutina, forma
+      // adjetival/adverbial en vez de "cada X" -- "10 km semanal"
+      // registrando una meta de carrera semanal. Una persona real
+      // registrando hábitos no siempre usa la frase "cada semana", a
+      // veces solo el adjetivo de frecuencia. Alcance acotado a formas
+      // de frecuencia explícitas, no a cualquier mención de un número
+      // de días -- "días de" quedó fuera a propósito (falso positivo
+      // real considerado: "los días de mi cumpleaños" no es una
+      // rutina).
+      "semanal",
+      "semanalmente",
+      "diariamente",
+      "a diario",
+      "por semana",
+      "a la semana",
+      "weekly",
+      "daily basis",
     ],
   },
   {
