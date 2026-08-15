@@ -3,7 +3,7 @@
  * Fuente real: editorial/<categoria>/phrases.yaml (ver editorial/README.md).
  * Volver a correr `node editorial/build-phrases.mjs` después de
  * cualquier cambio a los YAML -- este archivo no se regenera solo.
- * 99 frases totales, 11 categorías.
+ * 107 frases totales, 11 categorías.
  */
 export type EditorialCategory = "busy_day" | "celebration" | "curiosity" | "identity" | "morning" | "night" | "observation" | "progress" | "reflection" | "silence" | "welcome_back";
 
@@ -127,6 +127,14 @@ export const REFLECTION_PHRASES: EditorialPhrase[] = [
   { id: "reflection_020", text: "Hay algo distinto en cada día, aunque se parezcan.", category: "reflection", tone: "quiet", energy: "low", length: "medium", repeatAfterDays: 30 },
   { id: "reflection_021", text: "El tiempo no avisa cuándo está pasando algo importante.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
   { id: "reflection_022", text: "Esto también es vivir, aunque no lo parezca.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_023", text: "A veces dejar huella solo nace de creer en algo de verdad.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_024", text: "Detrás de un logro real casi siempre hubo foco, deseo y constancia.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_025", text: "A veces se pierde más de lo que parece cuando solo se mira lo evidente.", category: "reflection", tone: "curious", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_026", text: "Elegir con quién caminas también es parte de decidir quién quieres ser.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_027", text: "No conformarse no es urgencia, es no dejar de creer que hay más.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_028", text: "Mirar hacia otro lado también es una forma de decidir.", category: "reflection", tone: "quiet", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_029", text: "Lo que aprendes hoy rara vez deja de rendir frutos.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
+  { id: "reflection_030", text: "El miedo a ser distinto ha frenado más ideas buenas de las que imaginamos.", category: "reflection", tone: "grounded", energy: "low", length: "medium", repeatAfterDays: 30 },
 ];
 
 export const SILENCE_PHRASES: EditorialPhrase[] = [

@@ -198,3 +198,75 @@
   season: any
   weather: any
   repeat_after: 30 days
+
+- id: reflection_023
+  text: "A veces dejar huella solo nace de creer en algo de verdad."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_024
+  text: "Detrás de un logro real casi siempre hubo foco, deseo y constancia."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_025
+  text: "A veces se pierde más de lo que parece cuando solo se mira lo evidente."
+  tone: curious
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_026
+  text: "Elegir con quién caminas también es parte de decidir quién quieres ser."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_027
+  text: "No conformarse no es urgencia, es no dejar de creer que hay más."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_028
+  text: "Mirar hacia otro lado también es una forma de decidir."
+  tone: quiet
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_029
+  text: "Lo que aprendes hoy rara vez deja de rendir frutos."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
+
+- id: reflection_030
+  text: "El miedo a ser distinto ha frenado más ideas buenas de las que imaginamos."
+  tone: grounded
+  energy: low
+  length: medium
+  season: any
+  weather: any
+  repeat_after: 30 days
