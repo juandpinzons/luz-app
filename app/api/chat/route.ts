@@ -250,7 +250,7 @@ async function handleStreamRequest(
     );
   }
 
-  const { conversationId, textStream, backgroundTasksReady } = streamResult;
+  const { conversationId, textStream, backgroundTasksReady, imageReady } = streamResult;
 
   // `after()` debe registrarse acá, todavía en el scope síncrono de la
   // petición — nunca dentro del `ReadableStream` de abajo (`start`/
@@ -298,6 +298,15 @@ async function handleStreamRequest(
         }
 
         if (done) {
+          // `imageReady` ya resolvió por definición en este punto -- se
+          // llena dentro de `generate()` (`sendMessageStream`) ANTES de
+          // que el generador termine de iterar, así que `textStream`
+          // nunca reporta `done: true` sin que esto ya esté listo.
+          const image = await imageReady;
+          if (image && !clientDisconnected) {
+            controller.enqueue(encoder.encode(sseMessage("image", { imageData: image })));
+          }
+
           controller.close();
           logger.log({
             event: "api.request_completed",

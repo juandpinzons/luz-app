@@ -77,4 +77,14 @@ export interface AIProvider {
    * fragmento si su proveedor no soporta streaming).
    */
   generateReplyStream(messages: AIMessage[]): AsyncIterable<string>;
+
+  /**
+   * Genera una imagen a partir de una descripción en texto -- capacidad
+   * distinta de conversar (nunca toma `AIMessage[]`, no hay "contexto
+   * de conversación" que un generador de imágenes entienda). Devuelve
+   * una data URI completa (`data:image/...;base64,...`), la misma
+   * forma que `AIMessage.imageDataUri` y `conversation_messages.image_data`
+   * ya usan -- un solo formato de imagen en todo el sistema, nunca dos.
+   */
+  generateImage(prompt: string): Promise<string>;
 }

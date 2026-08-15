@@ -847,6 +847,21 @@ function ChatPageContent() {
                 return next;
               });
             }
+          } else if (parsed?.event === "image") {
+            // Llega DESPUÉS de todo el texto (ver docblock de `imageReady`,
+            // `send-message.ts`) -- siempre se adjunta al último mensaje de
+            // LUZ ya en curso, nunca crea uno nuevo por su cuenta.
+            const { imageData } = parsed.data as { imageData: string };
+            setIsThinking(false);
+            setMessages((prev) => {
+              if (prev.length === 0 || prev[prev.length - 1].role !== "assistant") {
+                return [...prev, { role: "assistant", content: "", imageData }];
+              }
+              const next = [...prev];
+              const last = next[next.length - 1];
+              next[next.length - 1] = { ...last, imageData };
+              return next;
+            });
           }
 
           boundary = buffer.indexOf("\n\n");

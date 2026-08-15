@@ -115,4 +115,16 @@ export class KimiProvider implements AIProvider {
       }
     }
   }
+
+  /**
+   * Kimi K3 es un modelo de texto/razonamiento -- Moonshot AI no
+   * documenta un endpoint de generación de imágenes compatible con la
+   * API de OpenAI. Lanza explícito en vez de fingir soporte: mismo
+   * criterio que el constructor (un estado no válido nunca se degrada
+   * en silencio). Sin consumidor real hoy (`ai/index.ts` no enruta a
+   * este proveedor), así que esto nunca corre en producción todavía.
+   */
+  async generateImage(): Promise<string> {
+    throw new Error("KimiProvider: generación de imágenes no soportada -- Kimi K3 no expone ese endpoint.");
+  }
 }

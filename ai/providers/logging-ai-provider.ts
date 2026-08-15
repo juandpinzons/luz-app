@@ -119,4 +119,28 @@ export class LoggingAIProvider implements AIProvider {
       throw error;
     }
   }
+
+  async generateImage(prompt: string): Promise<string> {
+    const startedAt = Date.now();
+    try {
+      const image = await this.inner.generateImage(prompt);
+      logger.log({
+        event: "ai_provider.call_completed",
+        provider: this.name,
+        method: "generateImage",
+        durationMs: Date.now() - startedAt,
+      });
+      return image;
+    } catch (error) {
+      logger.log({
+        event: "ai_provider.call_failed",
+        severity: "error",
+        provider: this.name,
+        method: "generateImage",
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  }
 }

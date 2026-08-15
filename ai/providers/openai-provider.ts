@@ -134,4 +134,34 @@ export class OpenAIProvider implements AIProvider {
       }
     }
   }
+
+  /**
+   * `gpt-image-1`, no el `this.model` conversacional (`generateReply`
+   * usa `gpt-5.1` hoy -- ni conversa ni genera imágenes, son
+   * capacidades distintas del mismo proveedor). `quality: "low"` a
+   * propósito: LUZ es una compañera de conversación, no una
+   * herramienta profesional de generación de imágenes -- costo/latencia
+   * bajos importan más que resolución máxima, mismo criterio de "lo
+   * suficiente" que `MAX_COMPLETION_TOKENS`. Los modelos GPT image
+   * devuelven `b64_json` por defecto (a diferencia de `dall-e-2/3`, que
+   * devuelven una URL salvo que se pida lo contrario) -- se arma la
+   * data URI acá, mismo formato que `AIMessage.imageDataUri` en todo
+   * el resto del sistema.
+   */
+  async generateImage(prompt: string): Promise<string> {
+    const result = await this.client.images.generate({
+      model: "gpt-image-1",
+      prompt,
+      n: 1,
+      size: "1024x1024",
+      quality: "low",
+    });
+
+    const b64 = result.data?.[0]?.b64_json;
+    if (!b64) {
+      throw new Error("OpenAIProvider: la respuesta de generación de imagen no contiene datos.");
+    }
+
+    return `data:image/png;base64,${b64}`;
+  }
 }

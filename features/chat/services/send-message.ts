@@ -18,6 +18,7 @@ import { logTraceSummary, runTrace, span } from "../../../core/observability/tra
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
 import { detectCrisisSignal, CRISIS_RESOURCE_MESSAGE } from "./detect-crisis-signal";
+import { detectImageGenerationRequest } from "./detect-image-generation-request";
 import {
   buildContext,
   renderContextToMessages,
@@ -73,6 +74,7 @@ export interface SendMessageInput {
 export interface SendMessageResult {
   conversationId: string;
   reply: string;
+  imageData?: string;
 }
 
 /**
@@ -92,6 +94,8 @@ export interface SendMessageStreamResult {
   conversationId: string;
   textStream: AsyncGenerator<string, void, void>;
   backgroundTasksReady: Promise<Promise<unknown>[]>;
+  /** Ver docblock junto a `resolveImageReady`, dentro de `sendMessageStream`. */
+  imageReady: Promise<string | undefined>;
 }
 
 interface ConversationRef {
@@ -164,6 +168,8 @@ interface PreparedMessage {
   seenPromptToMark: SeenPromptToMark | null;
   /** Ver `detect-crisis-signal.ts` -- calculado una sola vez aquí, consumido igual por `sendMessage`/`sendMessageStream`. */
   crisisSignalDetected: boolean;
+  /** Ver `detect-image-generation-request.ts` -- `null` si este turno no pide generar una imagen. */
+  imageRequestPrompt: string | null;
 }
 
 /**
@@ -199,6 +205,11 @@ async function prepareMessageInner(
   // el Founder necesita el conteo real, no solo los casos que además
   // tuvieron una respuesta exitosa.
   const crisisSignalDetected = detectCrisisSignal(input.message);
+  // Ver `detect-image-generation-request.ts` -- determinista, calculado sobre el mensaje
+  // crudo igual que la señal de crisis. La generación real (llamada a OpenAI) pasa después
+  // de tener la respuesta de texto (`finalizeReply`/`sendMessage`/`sendMessageStream`), nunca
+  // acá -- esta función solo prepara, no genera nada todavía.
+  const imageRequestPrompt = detectImageGenerationRequest(input.message);
   if (crisisSignalDetected) {
     logger.log({
       event: "crisis_signal.detected",
@@ -428,6 +439,7 @@ async function prepareMessageInner(
     conversationSignal,
     seenPromptToMark,
     crisisSignalDetected,
+    imageRequestPrompt,
   };
 }
 
@@ -440,6 +452,42 @@ async function prepareMessageInner(
  * (`chat.prepare_context`). Nunca cambia el resultado ni los errores --
  * `runTrace` relanza tal cual lo que `prepareMessageInner` lance.
  */
+/**
+ * Nunca lanza -- una imagen es un extra sobre la respuesta de texto,
+ * nunca un requisito para que el turno se complete (mismo criterio de
+ * tolerancia a fallos que Memory Engine/Context Builder en el resto de
+ * este archivo). `undefined` en caso de error, nunca un mensaje de
+ * error fabricado dentro de la respuesta de LUZ -- la persona ve su
+ * texto normal sin la imagen, no una disculpa inventada.
+ */
+async function tryGenerateImage(
+  aiProvider: ReturnType<typeof getAIProvider>,
+  prompt: string,
+  context: { userId: string; requestId?: string; conversationId: string },
+): Promise<string | undefined> {
+  const startedAt = Date.now();
+  try {
+    const image = await aiProvider.generateImage(prompt);
+    logger.log({
+      event: "image_generation.completed",
+      requestId: context.requestId,
+      conversationId: context.conversationId,
+      durationMs: Date.now() - startedAt,
+    });
+    return image;
+  } catch (error) {
+    logger.log({
+      event: "image_generation.failed",
+      severity: "error",
+      requestId: context.requestId,
+      conversationId: context.conversationId,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
 async function prepareMessage(input: SendMessageInput): Promise<PreparedMessage> {
   const { result, summary } = await runTrace(
     input.requestId ?? "unknown",
@@ -459,6 +507,8 @@ interface FinalizeReplyInput {
   requestId?: string;
   startedAt: number;
   reply: string;
+  /** Ya generada (o `undefined` si este turno no la pedía, o si `generateImage` falló) -- `finalizeReply` solo persiste, nunca genera. */
+  imageData?: string;
   /** La Memory que Memory Engine ya clasificó y rankeó (`prepareMessage`) — único disparador de Life Capture y de Knowledge Engine, ver `life-capture-service.ts` y `core/knowledge-engine`. Reemplaza a `userMessageId`, que ya no se usa acá (P0, cierre del Alpha: Knowledge Engine se dispara por Memory, no por el mensaje crudo). */
   capturedMemory: Memory | null;
   /** Qué decidió Context Builder este turno (`prepareMessage`) -- ver docblock de `PreparedMessage.conversationSignal`. */
@@ -503,6 +553,7 @@ async function finalizeReplyInner(
     requestId,
     startedAt,
     reply,
+    imageData,
     capturedMemory,
     conversationSignal,
     seenPromptToMark,
@@ -524,6 +575,7 @@ async function finalizeReplyInner(
         userId: context.userId,
         role: "assistant",
         content: reply,
+        imageData,
       }),
     ),
     // Diversidad conversacional (redesign del pipeline conversacional,
@@ -803,6 +855,17 @@ export async function sendMessage(
     reply = `${reply}\n\n${CRISIS_RESOURCE_MESSAGE}`;
   }
 
+  // Ver `detect-image-generation-request.ts` -- después de la respuesta de
+  // texto, nunca antes: si la generación de imagen falla o tarda, el
+  // texto ya está listo y no depende de ella.
+  const imageData = prepared.imageRequestPrompt
+    ? await tryGenerateImage(aiProvider, prepared.imageRequestPrompt, {
+        userId: input.context.userId,
+        requestId: input.requestId,
+        conversationId: prepared.conversationId,
+      })
+    : undefined;
+
   // Sin streaming de por medio: esta función corre síncronamente dentro
   // del scope de la petición original de `app/api/chat/route.ts`, así
   // que `after()` sí es válido acá (a diferencia de `sendMessageStream`,
@@ -816,6 +879,7 @@ export async function sendMessage(
     requestId: input.requestId,
     startedAt,
     reply,
+    imageData,
     capturedMemory: prepared.capturedMemory,
     conversationSignal: prepared.conversationSignal,
     seenPromptToMark: prepared.seenPromptToMark,
@@ -823,7 +887,7 @@ export async function sendMessage(
   });
   after(() => Promise.all(backgroundTasks));
 
-  return { conversationId: prepared.conversationId, reply };
+  return { conversationId: prepared.conversationId, reply, imageData };
 }
 
 /**
@@ -853,6 +917,18 @@ export async function sendMessageStream(
   let resolveBackgroundTasks!: (tasks: Promise<unknown>[]) => void;
   const backgroundTasksReady = new Promise<Promise<unknown>[]>((resolve) => {
     resolveBackgroundTasks = resolve;
+  });
+
+  /**
+   * Mismo patrón que `backgroundTasksReady` -- resuelve una sola vez,
+   * con la imagen ya generada (o `undefined`: no se pidió, o falló) DESPUÉS
+   * de que el stream de texto termina. `app/api/chat/route.ts` la espera
+   * justo antes de cerrar el stream SSE, para mandar un evento `image`
+   * final si hay algo que mandar.
+   */
+  let resolveImageReady!: (image: string | undefined) => void;
+  const imageReady = new Promise<string | undefined>((resolve) => {
+    resolveImageReady = resolve;
   });
 
   async function* generate(): AsyncGenerator<string, void, void> {
@@ -916,6 +992,19 @@ export async function sendMessageStream(
         replyLength: fullReply.length,
       });
 
+      // Ver `detect-image-generation-request.ts` -- después del texto completo,
+      // nunca antes ni en paralelo con él: el stream de texto ya le llegó a la
+      // persona a su ritmo normal, esto solo puede sumarle latencia al final,
+      // nunca restarle nada a la respuesta que ya recibió.
+      const imageData = prepared.imageRequestPrompt
+        ? await tryGenerateImage(aiProvider, prepared.imageRequestPrompt, {
+            userId: input.context.userId,
+            requestId: input.requestId,
+            conversationId: prepared.conversationId,
+          })
+        : undefined;
+      resolveImageReady(imageData);
+
       const { backgroundTasks } = await finalizeReply({
         context: input.context,
         lifeGraphContext: input.lifeGraphContext,
@@ -925,6 +1014,7 @@ export async function sendMessageStream(
         requestId: input.requestId,
         startedAt,
         reply: fullReply,
+        imageData,
         capturedMemory: prepared.capturedMemory,
         conversationSignal: prepared.conversationSignal,
         seenPromptToMark: prepared.seenPromptToMark,
@@ -939,7 +1029,9 @@ export async function sendMessageStream(
       // que el llamador registra en `app/api/chat/route.ts` queda
       // esperando para siempre (hasta `maxDuration`). El error real ya
       // se relanza tal cual: `pull()` en la ruta lo captura y registra.
+      // Mismo criterio para `imageReady` -- nunca debe quedar sin resolver.
       resolveBackgroundTasks([]);
+      resolveImageReady(undefined);
       throw error;
     }
   }
@@ -948,5 +1040,6 @@ export async function sendMessageStream(
     conversationId: prepared.conversationId,
     textStream: generate(),
     backgroundTasksReady,
+    imageReady,
   };
 }
