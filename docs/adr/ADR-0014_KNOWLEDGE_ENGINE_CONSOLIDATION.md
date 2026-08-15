@@ -1,7 +1,7 @@
 # ADR-0014 Knowledge Engine Consolidation
 
-Status: Proposed — awaiting Founder confirmation\
-Date: July 2026\
+Status: Accepted — Phase B and the Phase C cutover both executed\
+Date: July 2026 (confirmed executed 2026-07-25, doc corrected 2026-08-15)\
 Owner: Founder
 
 ## Context
@@ -154,3 +154,24 @@ documented here rather than solved:
 - ADR-0013 Reality Snapshot Contract
 - `docs/architecture/KNOWLEDGE_ENGINE_MIGRATION_PLAN.md`
 - `docs/product/HUMAN_EXPERIENCE_DATASET_V1.md`
+
+## Correction — 2026-08-15
+
+This ADR's Context/Phased-plan sections above describe the state as it
+was when written (`core/knowledge-engine` unimplemented, Phase C
+unauthorized) — preserved as-is for the historical record, not
+rewritten. That state no longer matches reality and hadn't for three
+weeks: `ALPHA_BACKLOG.md` P1-1 ("Knowledge Engine desconectado")
+records Phase B (all six stages, `DefaultKnowledgeEngine`, real
+`AIInsightGenerationStrategy`) and the Phase C cutover (worker +
+`send-message.ts` migrated to `core/knowledge-engine`, legacy
+`core/knowledge/pipeline/`+`knowledge-engine.ts` stub stages retired)
+both executed together on 2026-07-25 (commit `e426771`) — confirmed
+today by direct read of `worker/index.ts` (imports `createKnowledgeEngine`
+from `core/knowledge-engine`, not `core/knowledge`) and `core/knowledge/`'s
+current contents (only `jobs.ts`/`types.ts` remain, exactly the "live
+queue infrastructure, untouched through cutover" row in this ADR's own
+mapping table). `core/knowledge-engine` is today's real engine, 22 real
+consumers. Found while auditing for disconnected modules — this ADR's
+stale status almost got reported as a live gap; fixing the status line
+so a future read doesn't make the same mistake.

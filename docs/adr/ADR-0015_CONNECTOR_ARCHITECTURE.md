@@ -1,6 +1,6 @@
 # ADR-0015 Connector Architecture
 
-Status: Proposed — awaiting Founder confirmation\
+Status: Superseded — never implemented, real integrations shipped without it (see Correction, 2026-08-15)\
 Date: July 2026\
 Owner: Founder
 
@@ -100,3 +100,27 @@ actually needs it.
 - ADR-0013 Reality Snapshot Contract
 - `core/reality/external-signal-snapshot.ts`
 - `auth/schema.ts` (`accounts`)
+
+## Correction — 2026-08-15
+
+This ADR was never formally accepted (`Status: Proposed`, unchanged
+since July), and `core/connectors/`'s two files
+(`Connector`/`ConnectorCredentials`) have zero real consumers today —
+confirmed by repo-wide import resolution, not grep pattern-matching.
+Gmail (`core/email-connections`), Calendar
+(`features/reality/providers/calendar-provider.ts`), and Garmin
+(`core/wearable-metrics`) were all built and shipped as real, working,
+production integrations without implementing this interface — two of
+them only reference it in docblock comments ("mirrors the shape of
+`core/connectors/Connector`"), never as an actual `implements`. Each
+integration ended up owning its own credential/fetch shape instead.
+
+Three independent real integrations shipping without this contract is
+itself the evidence needed to resolve the ADR's own open question — the
+shared interface wasn't load-bearing to ship any of them. Recommending
+this ADR be formally closed as superseded and `core/connectors/`
+deleted as dead code, rather than retrofitting three already-working,
+real-user-facing integrations for interface conformance with no
+functional benefit (the kind of over-architecture ADR-0018 later warned
+against). Left the two files in place pending explicit confirmation —
+deleting is a one-line follow-up once agreed.
