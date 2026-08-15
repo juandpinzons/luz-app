@@ -7,6 +7,7 @@ import { getConversationDetail } from "../../conversations/services/get-conversa
 export interface LatestConversationMessage {
   role: "user" | "assistant";
   content: string;
+  imageData: string | null;
 }
 
 export interface LatestConversation {

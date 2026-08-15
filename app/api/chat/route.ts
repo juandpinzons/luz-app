@@ -112,6 +112,7 @@ export async function POST(request: Request): Promise<Response> {
     context,
     lifeGraphContext,
     message: parsed.data.message,
+    image: parsed.data.image,
     conversationId: parsed.data.conversationId,
     requestId,
     route,
@@ -125,6 +126,7 @@ interface SharedRequestParams {
   context: UserContext;
   lifeGraphContext: LifeGraphContext | null;
   message: string;
+  image: string | undefined;
   conversationId: string | undefined;
   requestId: string;
   route: string;
@@ -135,7 +137,7 @@ interface SharedRequestParams {
 async function handleJsonRequest(
   params: SharedRequestParams,
 ): Promise<Response> {
-  const { context, lifeGraphContext, message, conversationId, requestId, route, startedAt } =
+  const { context, lifeGraphContext, message, image, conversationId, requestId, route, startedAt } =
     params;
 
   try {
@@ -144,6 +146,7 @@ async function handleJsonRequest(
       lifeGraphContext,
       conversationId,
       message,
+      image,
       requestId,
       route,
     });
@@ -208,7 +211,7 @@ function sseMessage(event: string, data: unknown): string {
 async function handleStreamRequest(
   params: SharedRequestParams,
 ): Promise<Response> {
-  const { context, lifeGraphContext, message, conversationId: inputConversationId, requestId, route, startedAt } =
+  const { context, lifeGraphContext, message, image, conversationId: inputConversationId, requestId, route, startedAt } =
     params;
 
   let streamResult;
@@ -218,6 +221,7 @@ async function handleStreamRequest(
       lifeGraphContext,
       conversationId: inputConversationId,
       message,
+      image,
       requestId,
       route,
     });

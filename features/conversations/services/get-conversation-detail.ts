@@ -6,6 +6,8 @@ import type { UserContext } from "../../../core/identity/user-context";
 export interface ConversationDetailMessage {
   role: "user" | "assistant";
   content: string;
+  /** Data URI completa de una imagen adjunta a este mensaje -- `null` en casi todos. */
+  imageData: string | null;
 }
 
 export interface ConversationDetail {
@@ -45,6 +47,7 @@ export async function getConversationDetail(
     .select({
       role: conversationMessages.role,
       content: conversationMessages.content,
+      imageData: conversationMessages.imageData,
     })
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, conversation.id))

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { env } from "../../core/config/env";
 import type { AIMessage, AIProvider, StructuredOutputRequest } from "../provider";
@@ -31,14 +32,33 @@ export class OpenAIProvider implements AIProvider {
     this.model = model;
   }
 
+  /**
+   * Sin `imageDataUri`, `content` sigue siendo el string plano de
+   * siempre -- ningún mensaje existente cambia de forma. Con imagen,
+   * `content` pasa a ser un arreglo de partes (texto + `image_url`),
+   * la forma multimodal que la API de OpenAI ya entiende de forma
+   * nativa sobre el mismo endpoint de chat completions -- ningún
+   * modelo/endpoint nuevo, mismo `gpt-5.1` configurado hoy.
+   */
+  private toChatMessage(message: AIMessage): ChatCompletionMessageParam {
+    if (!message.imageDataUri) {
+      return { role: message.role, content: message.content };
+    }
+
+    return {
+      role: message.role,
+      content: [
+        { type: "text", text: message.content },
+        { type: "image_url", image_url: { url: message.imageDataUri } },
+      ],
+    } as ChatCompletionMessageParam;
+  }
+
   async generateReply(messages: AIMessage[]): Promise<string> {
     const completion = await this.client.chat.completions.create({
       model: this.model,
       max_completion_tokens: MAX_COMPLETION_TOKENS,
-      messages: messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      messages: messages.map((message) => this.toChatMessage(message)),
     });
 
     const reply = completion.choices[0]?.message?.content;
@@ -103,10 +123,7 @@ export class OpenAIProvider implements AIProvider {
     const stream = await this.client.chat.completions.create({
       model: this.model,
       max_completion_tokens: MAX_COMPLETION_TOKENS,
-      messages: messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      messages: messages.map((message) => this.toChatMessage(message)),
       stream: true,
     });
 

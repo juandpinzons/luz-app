@@ -72,6 +72,17 @@ export const conversationMessages = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     role: messageRoleEnum("role").notNull(),
     content: text("content").notNull(),
+    /**
+     * Data URI completa (`data:image/jpeg;base64,...`), nunca solo el
+     * base64 crudo -- así el mime type viaja pegado al dato, sin una
+     * columna aparte que pueda desincronizarse. `null` en casi todos los
+     * mensajes -- imagen adjunta (usuario) o generada (LUZ) son la
+     * excepción, no la norma. Sin almacenamiento de blobs todavía (no
+     * hay Vercel Blob/S3 configurado en este proyecto) -- guardar la
+     * imagen inline en Postgres es la opción real disponible hoy, no la
+     * ideal a largo plazo; documentado, no escondido.
+     */
+    imageData: text("image_data"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -12,6 +12,17 @@ export type AIMessageRole = "system" | "user" | "assistant";
 export interface AIMessage {
   role: AIMessageRole;
   content: string;
+  /**
+   * Data URI completa de una imagen adjunta a ESTE mensaje (`data:image/jpeg;base64,...`)
+   * -- opcional y aditivo, `undefined` en el camino normal de texto.
+   * Nunca reemplaza `content`: un mensaje con imagen sigue teniendo su
+   * texto normal (la pregunta/comentario de la persona, o vacío), la
+   * imagen viaja aparte. Cada implementación de `AIProvider` decide
+   * cómo construir la llamada multimodal a su proveedor real; el
+   * contrato solo promete que, si el proveedor soporta visión, la
+   * imagen efectivamente se envía.
+   */
+  imageDataUri?: string;
 }
 
 /**

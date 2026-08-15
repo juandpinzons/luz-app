@@ -48,6 +48,8 @@ const NEUTRAL_AVATAR_MOOD: AvatarMoodSignal = {
 type Message = {
   role: "user" | "assistant";
   content: string;
+  /** Data URI completa de una imagen adjunta a este mensaje -- ver `core/db/schema/conversations.ts`. */
+  imageData?: string | null;
 };
 
 /**
@@ -107,6 +109,13 @@ const MESSAGE_INPUT_MAX_HEIGHT_PX = 160;
 /** Corte duro de una nota de voz -- defensa en profundidad junto al límite de tamaño del lado del servidor (`MAX_AUDIO_BYTES`, `/api/chat/transcribe`), nunca la única barrera. 2 min es generoso para hablar en voz alta, no para grabar por accidente y olvidar la grabación prendida. */
 const MAX_RECORDING_MS = 2 * 60 * 1000;
 
+/** Lado más largo tras reescalar -- de sobra para que LUZ vea lo relevante de una foto real, lejos de la resolución nativa de una cámara de celular. */
+const MAX_IMAGE_DIMENSION_PX = 1600;
+/** JPEG, no PNG -- el formato de salida es siempre este, sin importar el original (HEIC de iPhone incluido). 0.82 es el punto donde el ojo ya no nota la diferencia pero el archivo sí baja bastante. */
+const IMAGE_JPEG_QUALITY = 0.82;
+/** Techo sobre el ARCHIVO ORIGINAL, antes de comprimir -- solo para no intentar procesar algo absurdo; el límite real que le llega al servidor es `MAX_IMAGE_DATA_URI_LENGTH` (`features/chat/types.ts`), ya sobre la versión comprimida. */
+const MAX_IMAGE_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+
 function parseStartedAtParam(value: string | null): Date | null {
   if (!value) return null;
   const date = new Date(value);
@@ -145,6 +154,57 @@ function formatHistoricalLabel(date: Date): string {
   }
 
   return `Retomando una conversación del ${formatted}`;
+}
+
+/** Cuánto se queda el ✓ visible antes de volver al ícono de copiar. */
+const COPY_CONFIRMATION_MS = 1500;
+
+/**
+ * Debajo de cada burbuja, propia o de LUZ -- copia el texto tal cual
+ * (con sus saltos de línea reales, ver `whitespace-pre-wrap` en la
+ * burbuja) al portapapeles. `navigator.clipboard` exige un contexto
+ * seguro (https, o localhost en dev) -- ya garantizado, la app entera
+ * corre sobre eso.
+ */
+function CopyMessageButton({ content, align }: { content: string; align: "left" | "right" }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), COPY_CONFIRMATION_MS);
+    } catch {
+      // Silencioso a propósito -- un fallo al copiar no es un error real
+      // de la conversación, solo un permiso de navegador denegado.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      aria-label={copied ? "Mensaje copiado" : "Copiar mensaje"}
+      className={`mt-1 flex items-center gap-1 rounded px-1 text-xs text-zinc-600 transition hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz ${align === "right" ? "self-end" : "self-start"}`}
+    >
+      {copied ? (
+        <>
+          <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Copiado
+        </>
+      ) : (
+        <>
+          <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+            <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+          Copiar
+        </>
+      )}
+    </button>
+  );
 }
 
 /**
@@ -217,6 +277,17 @@ function ChatPageContent() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Imagen adjunta al PRÓXIMO mensaje -- data URI ya comprimida del lado
+   * del cliente (`compressImageFile`), lista para enviar tal cual. La
+   * persona la ve en una vista previa antes de "Enviar", igual que la
+   * transcripción de voz aparece en el input antes de enviarse -- nunca
+   * algo que se manda a ciegas.
+   */
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   /** Evita que el efecto de carga de historial reponga la conversación anterior justo después de "Nueva conversación" (ver `startNewConversation`). */
   const suppressNextLoadRef = useRef(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -600,6 +671,55 @@ function ChatPageContent() {
     setIsRecording(false);
   }
 
+  /**
+   * Comprime del lado del cliente ANTES de convertir a base64 -- una
+   * foto de celular real (12-48MP) puede pesar varios MB crudos; sin
+   * esto, cada imagen viajaría entera en el cuerpo del POST y en cada
+   * lectura de historial de la conversación para siempre. Reescala al
+   * lado más largo (nunca recorta), siempre a JPEG -- el formato de
+   * salida no depende del original (HEIC de iPhone incluido, que ni
+   * OpenAI acepta directo), `canvas.toDataURL` ya lo resuelve.
+   */
+  async function compressImageFile(file: File): Promise<string> {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION_PX / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No se pudo procesar la imagen.");
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    return canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY);
+  }
+
+  async function handleImageSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // permite adjuntar el mismo archivo dos veces seguidas
+    if (!file) return;
+
+    if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
+      setImageError("La imagen es demasiado grande (máximo 20MB).");
+      return;
+    }
+
+    setImageError(null);
+    setIsProcessingImage(true);
+    try {
+      const dataUri = await compressImageFile(file);
+      setPendingImage(dataUri);
+      setLastActivityAt(new Date());
+    } catch {
+      setImageError("No se pudo procesar esa imagen.");
+    } finally {
+      setIsProcessingImage(false);
+    }
+  }
+
   // Suelta el micrófono si la persona navega fuera de /chat a mitad de una
   // grabación -- sin esto, el indicador de "micrófono en uso" del navegador
   // se queda prendido hasta recargar la página.
@@ -611,10 +731,13 @@ function ChatPageContent() {
   }, []);
 
   async function sendMessage() {
-    if (message.trim() === "" || isSending) return;
+    // Un mensaje solo-imagen (sin texto) es un caso real -- mismo criterio
+    // que `sendMessageRequestSchema` en el servidor.
+    if ((message.trim() === "" && !pendingImage) || isSending) return;
 
     setLastActivityAt(new Date());
     const userMessage = message;
+    const userImage = pendingImage;
 
     // Enviar siempre ancla abajo, sin importar dónde estaba el scroll —
     // misma convención que cualquier app de mensajería: la persona debe
@@ -627,10 +750,13 @@ function ChatPageContent() {
       {
         role: "user",
         content: userMessage,
+        imageData: userImage,
       },
     ]);
 
     setMessage("");
+    setPendingImage(null);
+    setImageError(null);
     setIsSending(true);
     setIsThinking(true);
 
@@ -651,6 +777,7 @@ function ChatPageContent() {
         },
         body: JSON.stringify({
           message: userMessage,
+          image: userImage ?? undefined,
           conversationId,
         }),
       });
@@ -838,11 +965,28 @@ function ChatPageContent() {
                       key={index}
                       className={
                         msg.role === "user"
-                          ? "ml-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-white px-5 py-3 whitespace-pre-wrap text-black"
-                          : "mr-auto w-fit max-w-[80%] animate-fade-in rounded-2xl bg-zinc-800 px-5 py-3 whitespace-pre-wrap text-white"
+                          ? "ml-auto flex w-fit max-w-[80%] flex-col items-end"
+                          : "mr-auto flex w-fit max-w-[80%] flex-col items-start"
                       }
                     >
-                      {msg.content}
+                      <div
+                        className={
+                          msg.role === "user"
+                            ? "animate-fade-in w-fit overflow-hidden rounded-2xl bg-white text-black"
+                            : "animate-fade-in w-fit overflow-hidden rounded-2xl bg-zinc-800 text-white"
+                        }
+                      >
+                        {msg.imageData && (
+                          // eslint-disable-next-line @next/next/no-img-element -- data URI, `next/image` no optimiza esto y exige dimensiones fijas que no tenemos.
+                          <img
+                            src={msg.imageData}
+                            alt="Imagen adjunta"
+                            className="max-h-80 w-full object-cover"
+                          />
+                        )}
+                        {msg.content && <div className="px-5 py-3 whitespace-pre-wrap">{msg.content}</div>}
+                      </div>
+                      <CopyMessageButton content={msg.content} align={msg.role === "user" ? "right" : "left"} />
                     </div>
                   ))}
 
@@ -870,8 +1014,59 @@ function ChatPageContent() {
           {micError && (
             <p className="mx-auto mb-2 max-w-4xl text-xs text-red-400">{micError}</p>
           )}
+          {imageError && (
+            <p className="mx-auto mb-2 max-w-4xl text-xs text-red-400">{imageError}</p>
+          )}
+
+          {pendingImage && (
+            <div className="mx-auto mb-2 max-w-4xl">
+              <div className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URI local, mismo criterio que la burbuja de mensaje. */}
+                <img src={pendingImage} alt="Vista previa" className="h-20 w-20 rounded-lg object-cover ring-1 ring-zinc-700" />
+                <button
+                  type="button"
+                  onClick={() => setPendingImage(null)}
+                  aria-label="Quitar imagen"
+                  className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-white ring-1 ring-zinc-700 transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="mx-auto flex max-w-4xl items-end gap-2 sm:gap-3">
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={isSending || isProcessingImage}
+              aria-label="Adjuntar imagen"
+              className="flex-shrink-0 rounded-xl bg-zinc-900 px-3 py-3 text-zinc-300 ring-1 ring-zinc-800 transition hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-50 sm:px-4 sm:py-4"
+            >
+              {isProcessingImage ? (
+                <span className="block h-5 w-5 animate-spin rounded-full border-2 border-zinc-500 border-t-white" />
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
+                  <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
+                  <path
+                    d="m4.5 17 5-5 4 4 3-3 4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </button>
+
             {micSupported && (
               <button
                 type="button"

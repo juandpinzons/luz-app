@@ -62,6 +62,8 @@ export interface SendMessageInput {
   lifeGraphContext: LifeGraphContext | null;
   conversationId?: string;
   message: string;
+  /** Data URI completa (`data:image/jpeg;base64,...`) de una imagen adjunta a este turno -- opcional, ver `AIMessage.imageDataUri`. */
+  image?: string;
   /** Para correlacionar logs de un mismo request (Sprint de Observabilidad). */
   requestId?: string;
   /** Tag de `route` para `events` (`message_sent`/`error` quedan agrupables por ruta -- OBSERVABILITY_PLAN.md). */
@@ -222,6 +224,7 @@ async function prepareMessageInner(
         userId: context.userId,
         role: "user",
         content: input.message,
+        imageData: input.image,
       })
       .returning();
 
@@ -342,6 +345,22 @@ async function prepareMessageInner(
         durationMs: Date.now() - contextBuilderStart,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  // La imagen adjunta viaja SOLO en el último mensaje de `aiMessages` --
+  // el turno actual, siempre al final por construcción tanto en el
+  // camino de Context Builder (`renderContextToMessages`, system
+  // primero, `context.conversation` al final) como en el de respaldo
+  // (`aiMessages = conversation` sin tocar, arriba): ambos terminan en
+  // el mismo `ConversationTurn` que se acaba de insertar, con el
+  // timestamp más reciente. Nunca se adjunta a un mensaje de historial
+  // -- eso reenviaría la misma imagen a OpenAI en cada turno siguiente
+  // de la conversación, cada vez más caro sin ningún beneficio real.
+  if (input.image) {
+    const lastMessage = aiMessages[aiMessages.length - 1];
+    if (lastMessage) {
+      lastMessage.imageDataUri = input.image;
     }
   }
 
@@ -645,6 +664,60 @@ async function finalizeReplyInner(
  * al cierre de esta función, fuera de alcance de esta misión --
  * documentado como límite conocido, no un olvido.
  */
+/**
+ * Tablero de salud diario, auditoría de seguridad 2026-08-14: la base
+ * de "timeouts/429/500" -- el SDK de OpenAI adjunta `status` (HTTP) a
+ * sus errores reales; los de conexión/timeout no traen `status`, se
+ * distinguen por nombre. `"error"` es el resto (fallo de red genérico,
+ * respuesta sin contenido, etc.) -- nunca se descarta un caso a costa
+ * de fingir certeza sobre su causa.
+ */
+function classifyAiOutcome(error: unknown): "timeout" | "rate_limited" | "server_error" | "error" {
+  if (error && typeof error === "object") {
+    const err = error as { status?: number; name?: string; code?: string };
+    if (err.name === "APIConnectionTimeoutError" || err.code === "ETIMEDOUT") {
+      return "timeout";
+    }
+    if (err.status === 429) {
+      return "rate_limited";
+    }
+    if (err.status !== undefined && err.status >= 500) {
+      return "server_error";
+    }
+  }
+  return "error";
+}
+
+/**
+ * Un `ai_call_completed` por llamada real al proveedor -- éxito o
+ * falla, siempre. `inputLength` es la suma de `content.length` de
+ * todo lo que se le mandó al modelo (system + conversación), no solo
+ * el mensaje nuevo -- lo que de verdad determina costo/latencia de la
+ * llamada. Sin conteo de tokens/costo real: `AIProvider.generateReply`
+ * (`ai/provider.ts`) devuelve solo `string` a propósito (ADR de
+ * reemplazabilidad de LLM -- ningún proveedor debe filtrar su forma de
+ * `usage` al contrato compartido); duración + tamaño de entrada/salida
+ * son la aproximación disponible sin tocar esa interfaz.
+ */
+async function recordAiCallEvent(input: {
+  userId: string;
+  outcome: "success" | "timeout" | "rate_limited" | "server_error" | "error";
+  durationMs: number;
+  inputLength: number;
+  replyLength?: number;
+}): Promise<void> {
+  await recordEvent(db, {
+    type: "ai_call_completed",
+    userId: input.userId,
+    metadata: {
+      outcome: input.outcome,
+      durationMs: input.durationMs,
+      inputLength: input.inputLength,
+      replyLength: input.replyLength,
+    },
+  });
+}
+
 async function finalizeReply(
   input: FinalizeReplyInput,
 ): Promise<{ backgroundTasks: Promise<unknown>[] }> {
@@ -687,6 +760,7 @@ export async function sendMessage(
 
   const aiProvider = getAIProvider();
   const openaiStart = Date.now();
+  const inputLength = prepared.aiMessages.reduce((sum, message) => sum + message.content.length, 0);
   let reply: string;
   try {
     reply = await aiProvider.generateReply(prepared.aiMessages);
@@ -700,6 +774,12 @@ export async function sendMessage(
       durationMs: Date.now() - openaiStart,
       error: error instanceof Error ? error.message : String(error),
     });
+    await recordAiCallEvent({
+      userId: input.context.userId,
+      outcome: classifyAiOutcome(error),
+      durationMs: Date.now() - openaiStart,
+      inputLength,
+    });
     throw error;
   }
   logger.log({
@@ -709,6 +789,13 @@ export async function sendMessage(
     provider: aiProvider.name,
     replyLength: reply.length,
     durationMs: Date.now() - openaiStart,
+  });
+  await recordAiCallEvent({
+    userId: input.context.userId,
+    outcome: "success",
+    durationMs: Date.now() - openaiStart,
+    inputLength,
+    replyLength: reply.length,
   });
 
   // Agregado por código, nunca pedido al LLM -- ver `detect-crisis-signal.ts`.
@@ -770,6 +857,7 @@ export async function sendMessageStream(
 
   async function* generate(): AsyncGenerator<string, void, void> {
     const openaiStart = Date.now();
+    const inputLength = prepared.aiMessages.reduce((sum, message) => sum + message.content.length, 0);
     let fullReply = "";
     let firstChunkAt: number | undefined;
 
@@ -792,6 +880,12 @@ export async function sendMessageStream(
           durationMs: Date.now() - openaiStart,
           error: error instanceof Error ? error.message : String(error),
         });
+        await recordAiCallEvent({
+          userId: input.context.userId,
+          outcome: classifyAiOutcome(error),
+          durationMs: Date.now() - openaiStart,
+          inputLength,
+        });
         throw error;
       }
 
@@ -813,6 +907,13 @@ export async function sendMessageStream(
         provider: aiProvider.name,
         replyLength: fullReply.length,
         durationMs: Date.now() - openaiStart,
+      });
+      await recordAiCallEvent({
+        userId: input.context.userId,
+        outcome: "success",
+        durationMs: Date.now() - openaiStart,
+        inputLength,
+        replyLength: fullReply.length,
       });
 
       const { backgroundTasks } = await finalizeReply({
