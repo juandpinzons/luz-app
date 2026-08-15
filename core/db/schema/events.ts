@@ -51,6 +51,27 @@ export const eventTypeEnum = pgEnum("event_type", [
    * tabla se vuelva un registro de contenido sensible.
    */
   "crisis_signal_detected",
+  /**
+   * Auditoría de seguridad, 2026-08-14 -- una fila cada vez que
+   * `sanitizeExternalText` (`calendar-signals.ts`) de verdad modifica
+   * el título/ubicación de un evento (encontró un salto de línea o
+   * tuvo que acotar el largo), la señal más simple de un intento real
+   * de inyección de prompt vía una invitación de calendario. Nunca
+   * lleva el texto original en `metadata` -- mismo criterio de
+   * privacidad que `crisis_signal_detected`: suficiente para que un
+   * operador note un patrón, no un registro de contenido.
+   */
+  "calendar_signal_sanitized",
+  /**
+   * Auditoría de seguridad, 2026-08-14 -- una fila por cada llamada
+   * real a un `AIProvider` desde el camino de chat (`send-message.ts`),
+   * éxito o falla. `metadata.outcome` ("success"/"timeout"/
+   * "rate_limited"/"server_error"/"error") + duración + tokens (cuando
+   * el proveedor los expone) + tamaño del mensaje de entrada -- la base
+   * de datos real detrás de p95/timeouts/429/500/costo del tablero de
+   * salud diario. Nunca el contenido del mensaje.
+   */
+  "ai_call_completed",
 ]);
 
 export const events = pgTable(
