@@ -6,12 +6,21 @@ import type {
   ProposedContradiction,
 } from "./contradiction-detection-strategy";
 
+/**
+ * `max` generoso a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): OpenAI recorta la salida estructurada al tope exacto en vez
+ * de rechazarla. `detect` filtra cualquier descripción que llegue
+ * exacta a este tope, en vez de mostrarla cortada en el chat.
+ */
+const DESCRIPTION_MAX_CHARS = 380;
+
 const detectionSchema = z.object({
   contradictions: z
     .array(
       z.object({
         candidateIndex: z.number().int().min(0),
-        description: z.string().min(1).max(300),
+        description: z.string().min(1).max(DESCRIPTION_MAX_CHARS),
         confidence: z.number().min(0).max(100),
       }),
     )
@@ -52,7 +61,10 @@ export class AIContradictionDetectionStrategy implements ContradictionDetectionS
     );
 
     return result.contradictions.filter(
-      (item) => item.candidateIndex >= 0 && item.candidateIndex < against.length,
+      (item) =>
+        item.candidateIndex >= 0 &&
+        item.candidateIndex < against.length &&
+        item.description.length < DESCRIPTION_MAX_CHARS,
     );
   }
 }

@@ -7,9 +7,20 @@ import type {
   ProposedBeliefStatement,
 } from "./belief-consolidation-strategy";
 
+/**
+ * `max` generoso a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): la salida estructurada de OpenAI recorta la cadena al tope
+ * exacto del schema en vez de rechazarla. `statement` se guarda como
+ * creencia duradera sobre la persona (`/life/identity`) -- una frase
+ * cortada a mitad de camino ahí es peor que ninguna, así que
+ * `proposeStatement` descarta cualquiera que llegue exacto a este tope.
+ */
+const STATEMENT_MAX_CHARS = 320;
+
 const consolidationSchema = z.object({
   found: z.boolean(),
-  statement: z.string().max(240).nullable(),
+  statement: z.string().max(STATEMENT_MAX_CHARS).nullable(),
   domain: z.enum(LIFE_DOMAIN_TYPES).nullable(),
   isCommunicationStyle: z.boolean(),
   confidence: z.number().min(0).max(100).nullable(),
@@ -49,6 +60,10 @@ export class AIBeliefConsolidationStrategy implements BeliefConsolidationStrateg
     );
 
     if (!proposed.found || !proposed.statement || proposed.confidence === null) {
+      return null;
+    }
+
+    if (proposed.statement.length >= STATEMENT_MAX_CHARS) {
       return null;
     }
 

@@ -4,12 +4,22 @@ import type { EntityId } from "../../../life/value-objects/entity-id";
 import type { EvidenceCluster } from "../correlation/reasoning-correlate-stage";
 import type { ProposedReasoning, ReasoningStrategy } from "./reasoning-strategy";
 
+/**
+ * Topes generosos a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): la salida estructurada de OpenAI recorta la cadena al tope
+ * exacto del schema en vez de rechazarla. `propose` descarta cualquier
+ * texto que llegue exacto a su tope en vez de persistirlo cortado.
+ */
+const CONCLUSION_MAX_CHARS = 500;
+const UNCERTAINTY_NOTE_MAX_CHARS = 260;
+
 const reasoningSchema = z.object({
   found: z.boolean(),
-  conclusion: z.string().max(400).nullable(),
+  conclusion: z.string().max(CONCLUSION_MAX_CHARS).nullable(),
   confidence: z.number().min(0).max(100).nullable(),
   contradictingIndexes: z.array(z.number().int().min(0)).max(10),
-  uncertaintyNotes: z.array(z.string().max(200)).max(5),
+  uncertaintyNotes: z.array(z.string().max(UNCERTAINTY_NOTE_MAX_CHARS)).max(5),
 });
 
 const SYSTEM_PROMPT = `Vas a ver varios insights YA VALIDADOS sobre la vida de una persona -- cada uno ya es una interpretación real de evidencia concreta, no un hecho crudo. Estos insights están conectados entre sí (comparten evidencia o fueron relacionados estructuralmente). Tu trabajo es razonar: ¿qué se puede concluir combinando estos insights que ninguno dice por sí solo?
@@ -63,15 +73,31 @@ export class AIReasoningStrategy implements ReasoningStrategy {
       return null;
     }
 
+    // La conclusión es el contenido central de la propuesta -- si
+    // llegó exacta al tope del schema, probablemente OpenAI la cortó a
+    // mitad de generación (mismo hallazgo que
+    // `AICuriosityQuestionGenerationStrategy`); mejor ninguna
+    // conclusión que una incompleta.
+    if (proposed.conclusion.length >= CONCLUSION_MAX_CHARS) {
+      return null;
+    }
+
     const contradictingInsightIds = proposed.contradictingIndexes
       .map((index) => cluster.insights[index]?.id)
       .filter((id): id is EntityId => id !== undefined);
+
+    // Las notas de incertidumbre son independientes entre sí -- una
+    // nota cortada se descarta sola, sin invalidar la conclusión ni las
+    // demás notas.
+    const uncertaintyNotes = proposed.uncertaintyNotes.filter(
+      (note) => note.length < UNCERTAINTY_NOTE_MAX_CHARS,
+    );
 
     return {
       conclusion: proposed.conclusion,
       confidence: proposed.confidence,
       contradictingInsightIds,
-      uncertaintyNotes: proposed.uncertaintyNotes,
+      uncertaintyNotes,
     };
   }
 }

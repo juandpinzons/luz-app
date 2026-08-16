@@ -17,22 +17,33 @@ import { recordEvent } from "../../../core/observability/record-event";
 
 const lifeDomainSchema = z.enum(LIFE_DOMAIN_TYPES).nullable();
 
+/**
+ * Topes generosos a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): OpenAI recorta la salida estructurada al tope exacto en vez
+ * de rechazarla. Estos títulos/nombres quedan como el nombre visible y
+ * permanente de un Goal/Habit/Relationship en `/life` -- uno cortado a
+ * mitad de palabra nunca se crea, mejor no capturar nada.
+ */
+const TITLE_MAX_CHARS = 160;
+const PERSON_NAME_MAX_CHARS = 110;
+
 const goalOrProjectSchema = z.object({
   found: z.boolean(),
   kind: z.enum(["goal", "project"]).nullable(),
-  title: z.string().min(1).max(120).nullable(),
+  title: z.string().min(1).max(TITLE_MAX_CHARS).nullable(),
   domain: lifeDomainSchema,
 });
 
 const habitSchema = z.object({
   found: z.boolean(),
-  title: z.string().min(1).max(120).nullable(),
+  title: z.string().min(1).max(TITLE_MAX_CHARS).nullable(),
   domain: lifeDomainSchema,
 });
 
 const relationshipSchema = z.object({
   found: z.boolean(),
-  personName: z.string().min(1).max(80).nullable(),
+  personName: z.string().min(1).max(PERSON_NAME_MAX_CHARS).nullable(),
   type: z.enum(RELATIONSHIP_TYPES).nullable(),
 });
 
@@ -167,6 +178,10 @@ async function captureGoalOrProject(
     return;
   }
 
+  if (extracted.title.length >= TITLE_MAX_CHARS) {
+    return;
+  }
+
   if (extracted.kind === "project") {
     await findOrCreateProject(db, context, {
       title: extracted.title,
@@ -201,6 +216,10 @@ async function captureHabit(
     return;
   }
 
+  if (extracted.title.length >= TITLE_MAX_CHARS) {
+    return;
+  }
+
   await findOrCreateHabit(db, context, {
     title: extracted.title,
     domain: extracted.domain ?? undefined,
@@ -225,6 +244,10 @@ async function captureRelationship(
   );
 
   if (!extracted.found || !extracted.personName || !extracted.type) {
+    return;
+  }
+
+  if (extracted.personName.length >= PERSON_NAME_MAX_CHARS) {
     return;
   }
 

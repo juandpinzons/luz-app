@@ -6,13 +6,23 @@ import type {
   ConceptExtractionStrategy,
 } from "./concept-extraction-strategy";
 
+/**
+ * `max` generoso a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): OpenAI recorta la salida estructurada al tope exacto en vez
+ * de rechazarla. `label` casi nunca se acerca a su tope (el prompt pide
+ * "una o dos palabras"), pero `description` sí puede -- `extract` la
+ * descarta sola si llega exacta al tope, sin perder el concepto entero.
+ */
+const CONCEPT_DESCRIPTION_MAX_CHARS = 260;
+
 const extractionSchema = z.object({
   found: z.boolean(),
   concepts: z
     .array(
       z.object({
         label: z.string().min(1).max(60),
-        description: z.string().max(200).nullable(),
+        description: z.string().max(CONCEPT_DESCRIPTION_MAX_CHARS).nullable(),
       }),
     )
     .max(3),
@@ -67,7 +77,10 @@ export class AIConceptExtractionStrategy implements ConceptExtractionStrategy {
     return {
       concepts: extracted.concepts.map((concept) => ({
         label: concept.label,
-        description: concept.description ?? undefined,
+        description:
+          concept.description && concept.description.length < CONCEPT_DESCRIPTION_MAX_CHARS
+            ? concept.description
+            : undefined,
       })),
       relations: extracted.relations,
       confidence: extracted.confidence,

@@ -4,9 +4,20 @@ import type { PipelineContext } from "../pipeline-context";
 import type { RelatedItem } from "../relationships/insight-relationship-strategy";
 import type { GeneratedInsight, InsightGenerationStrategy } from "./insight-generation-strategy";
 
+/**
+ * `max` generoso a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): la salida estructurada de OpenAI recorta la cadena al tope
+ * exacto del schema en vez de rechazarla, así que un tope ajustado
+ * puede cortar una frase a mitad de camino. Este número ya no es el
+ * límite real que se espera alcanzar -- es el punto donde `proposeOne`
+ * sospecha que el texto llegó cortado y lo descarta.
+ */
+const DESCRIPTION_MAX_CHARS = 380;
+
 const generationSchema = z.object({
   found: z.boolean(),
-  description: z.string().min(1).max(300).nullable(),
+  description: z.string().min(1).max(DESCRIPTION_MAX_CHARS).nullable(),
   confidence: z.number().min(0).max(100).nullable(),
 });
 
@@ -81,6 +92,14 @@ export class AIInsightGenerationStrategy implements InsightGenerationStrategy {
     );
 
     if (!extracted.found || !extracted.description || extracted.confidence === null) {
+      return null;
+    }
+
+    // Igual que `AICuriosityQuestionGenerationStrategy`: si el texto
+    // llegó exacto al tope del schema, es señal de que OpenAI lo cortó
+    // a mitad de generación -- un insight roto nunca se persiste,
+    // mejor ninguno que uno incompleto.
+    if (extracted.description.length >= DESCRIPTION_MAX_CHARS) {
       return null;
     }
 

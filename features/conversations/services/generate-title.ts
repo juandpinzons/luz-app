@@ -17,8 +17,18 @@ import { recordEvent } from "../../../core/observability/record-event";
  */
 const CONVERSATION_CATEGORIES = [...LIFE_DOMAIN_TYPES, "general"] as const;
 
+/**
+ * `max` generoso a propósito -- mismo hallazgo que
+ * `AICuriosityQuestionGenerationStrategy` (confirmado contra la API
+ * real): OpenAI recorta la salida estructurada al tope exacto en vez
+ * de rechazarla. El prompt ya pide "máximo 6 palabras", así que este
+ * tope casi nunca debería alcanzarse -- si lo hace, es señal de corte,
+ * no un título real.
+ */
+const TITLE_MAX_CHARS = 80;
+
 const titleSchema = z.object({
-  title: z.string().min(1).max(60),
+  title: z.string().min(1).max(TITLE_MAX_CHARS),
   category: z.enum(CONVERSATION_CATEGORIES),
 });
 
@@ -60,9 +70,17 @@ export async function generateConversationTitle(
       { name: "conversation_title", schema: titleSchema },
     );
 
+    // Si el título llegó exacto al tope del schema, probablemente
+    // OpenAI lo cortó a mitad de generación -- se guarda igual la
+    // categoría (un valor de enum corto, sin riesgo real de corte) pero
+    // `title` se deja en `null`, mismo estado que si esta función nunca
+    // hubiera corrido; `previewText` sigue cubriendo la lista de
+    // conversaciones.
+    const truncated = title.length >= TITLE_MAX_CHARS;
+
     await db
       .update(conversations)
-      .set({ title: title.trim(), category })
+      .set(truncated ? { category } : { title: title.trim(), category })
       .where(eq(conversations.id, input.conversationId));
   } catch (error) {
     // Antes: console.error plano, invisible a cualquier consulta.
