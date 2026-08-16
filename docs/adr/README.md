@@ -25,3 +25,4 @@ ADR-0020 Fast User Understanding
 ADR-0021 Curiosity Engine Authorization
 ADR-0022 Knowledge Relevance Redesign (Accepted, design frozen — not implemented)
 ADR-0023 Reference Integrity Infrastructure
+ADR-0024 Content Encryption, Key Separation & Break-Glass Access (Accepted, design frozen — not implemented)
