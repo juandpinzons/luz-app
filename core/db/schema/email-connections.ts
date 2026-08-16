@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
-import type { EmailConnectionStatus, EmailProviderKind } from "../../../features/reality/domain";
+import type { EmailConnectionStatus, EmailProviderKind } from "../../email-connections/domain";
 import { lifeGraphs } from "./life-graph";
 
 /**

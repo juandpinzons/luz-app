@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
-import { getLiveEmailContext } from "@/core/email-connections/get-live-email-context";
+import { getLiveEmailContext } from "@/features/reality/get-live-email-context";
 import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";

@@ -3,8 +3,7 @@ import { createEntityId, type EntityId } from "../life/value-objects/entity-id";
 import type { Database } from "../db/client";
 import { emailConnections, type EmailConnectionRow } from "../db/schema/email-connections";
 import { decryptSecret, encryptSecret } from "../security/secret-cipher";
-import type { GmailCredentials } from "../../features/reality/providers/gmail";
-import type { EmailConnection, EmailProviderKind } from "../../features/reality/domain";
+import type { EmailConnection, EmailProviderKind, GmailCredentials } from "./domain";
 
 /**
  * Capa de persistencia real de `EmailConnection`

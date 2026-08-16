@@ -6,7 +6,7 @@ import {
   getStoredEmailConnection,
   saveEmailConnection,
 } from "../core/email-connections/repository";
-import { getLiveEmailContext } from "../core/email-connections/get-live-email-context";
+import { getLiveEmailContext } from "../features/reality/get-live-email-context";
 import type { GmailCredentials } from "../features/reality/providers/gmail";
 import type { SmokeFlow } from "./types";
 

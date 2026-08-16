@@ -1,21 +1,27 @@
-import type { EntityId } from "../life/value-objects/entity-id";
-import type { Database } from "../db/client";
-import { refreshGmail } from "../../features/reality/application";
-import { GmailAuthExpiredError, GmailClient, GmailProvider } from "../../features/reality/providers/gmail";
-import type { EmailSnapshot } from "../../features/reality/domain";
+import type { EntityId } from "../../core/life/value-objects/entity-id";
+import type { Database } from "../../core/db/client";
+import { refreshGmail } from "./application";
+import { GmailAuthExpiredError, GmailClient, GmailProvider } from "./providers/gmail";
+import type { EmailSnapshot } from "./domain";
 import {
   getStoredEmailConnection,
   markEmailConnectionError,
   markEmailConnectionNeedsReauth,
   markEmailConnectionSynced,
-} from "./repository";
+} from "../../core/email-connections/repository";
 
 /**
  * Único lugar que sabe hacer "conexión guardada -> sync en vivo ->
  * `EmailSnapshot`" -- mismo rol que
- * `core/calendar-connections/get-live-calendar-context.ts`, para que
+ * `features/home/services/get-live-calendar-context.ts`, para que
  * `/gmail` (y cualquier futura pantalla que quiera correo, p. ej.
  * `/dashboard`) nunca puedan divergir en ese criterio.
+ *
+ * Vive en `features/reality/`, no en `core/email-connections/`
+ * (auditoría de arquitectura, 2026-08-15): construye `GmailClient`/
+ * `GmailProvider` y llama `refreshGmail` directamente, así que no puede
+ * ser una capa de persistencia pura -- `core/email-connections/repository.ts`
+ * sigue siendo esa capa, esta función la consume, nunca al revés.
  *
  * Nunca lanza -- cada estado real (sin conectar / sincronizado /
  * necesita reautorizar / error) es un valor devuelto, mismo criterio
@@ -23,12 +29,13 @@ import {
  *
  * `cursor: null` en cada llamada, a propósito -- mismo punto de partida
  * que Calendar Foundation eligió en su fase 1 (ver
- * `get-live-calendar-context.ts`): sin una capa de persistencia de
- * `EmailSyncCursor` todavía, cada carga hace un `syncInitial` completo.
- * A diferencia de calendario, esto es seguro por diseño para Gmail --
- * `EMAIL_SYNC_HARD_CEILING = 10` (`features/reality/domain/email-sync-options.ts`)
- * hace que un `syncInitial` repetido sea barato y determinista, nunca
- * una sincronización creciente sin límite. Persistir el cursor entre
+ * `features/home/services/get-live-calendar-context.ts`): sin una capa
+ * de persistencia de `EmailSyncCursor` todavía, cada carga hace un
+ * `syncInitial` completo. A diferencia de calendario, esto es seguro
+ * por diseño para Gmail -- `EMAIL_SYNC_HARD_CEILING = 10`
+ * (`features/reality/domain/email-sync-options.ts`) hace que un
+ * `syncInitial` repetido sea barato y determinista, nunca una
+ * sincronización creciente sin límite. Persistir el cursor entre
  * cargas (sync incremental real) queda documentado como extensión, no
  * como pendiente urgente -- mismo criterio que ese README ya aplica en
  * otros puntos.
