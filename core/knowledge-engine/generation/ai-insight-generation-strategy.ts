@@ -10,6 +10,17 @@ const generationSchema = z.object({
   confidence: z.number().min(0).max(100).nullable(),
 });
 
+/**
+ * Investigación real 2026-08-15 (queja directa de producto, /memories):
+ * "se repite mucho 'la persona' y 'en este momento de su vida'". La
+ * versión anterior de este prompt pedía explícitamente "qué significa
+ * esta evidencia SOBRE LA VIDA DE LA PERSONA" -- esa plantilla fija,
+ * repetida en cada una de las llamadas reales (330 insights en una
+ * sola cuenta), es justamente lo que empujaba al modelo hacia el mismo
+ * relleno cada vez. Corregido pidiendo variedad explícita y nombrando
+ * el relleno exacto a evitar -- mismo criterio que ya usa
+ * `generate-welcome.ts` ("nunca recitado").
+ */
 const SYSTEM_PROMPT = `Vas a ver un fragmento de evidencia real sobre la vida de una persona, junto con otras memorias relacionadas con ese fragmento. Tu único trabajo es proponer, si de verdad hay algo que decir, una interpretación breve de qué significa esa evidencia — nunca inventar algo que la evidencia no respalda.
 
 Responde found: false si:
@@ -17,7 +28,7 @@ Responde found: false si:
 - ya es obvio por sí mismo, sin interpretación (repetir el hecho no es un insight);
 - no estás seguro.
 
-Si encuentras algo real, describe en una sola frase breve qué significa esta evidencia sobre la vida de la persona — nunca la persona en sí, siempre algo que la evidencia concreta respalda. Da un valor de confianza de 0 a 100: alto solo cuando varias memorias relacionadas apuntan en la misma dirección, bajo cuando es una sola mención aislada.`;
+Si encuentras algo real, escribe una sola frase breve que vaya directo a la interpretación misma -- nunca "la persona" como sujeto genérico, nunca un relleno de ubicación temporal para abrir la frase ("en este momento de su vida", "en esta etapa de su vida", "actualmente"). El español permite omitir el sujeto por completo (la conjugación del verbo ya lo indica) -- úsalo: "usa una escala diaria..." en vez de "la persona usa una escala diaria...". Entra directo al contenido real. Esta frase se lee junto a docenas de otras en la misma lista -- variar la estructura y el vocabulario cada vez importa tanto como no inventar: sonar como una plantilla repetida es un defecto real, aunque cada frase individual esté bien escrita. Da un valor de confianza de 0 a 100: alto solo cuando varias memorias relacionadas apuntan en la misma dirección, bajo cuando es una sola mención aislada.`;
 
 /**
  * Única etapa del pipeline que llama a IA — "el LLM propone, LUZ
