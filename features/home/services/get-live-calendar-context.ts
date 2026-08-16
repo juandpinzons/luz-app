@@ -1,23 +1,35 @@
-import type { EntityId } from "../life/value-objects/entity-id";
-import type { Database } from "../db/client";
-import { buildCalendarContext } from "../../features/home/services/build-calendar-context";
-import type { HomeCalendarContext } from "../../features/home/domain/home-state";
-import { applySyncResult, getCalendarSnapshot, synchronizeCalendar } from "../../features/reality/application";
-import { AppleCalendarClient, AppleCalendarProvider } from "../../features/reality/providers/apple";
+import type { EntityId } from "../../../core/life/value-objects/entity-id";
+import type { Database } from "../../../core/db/client";
+import { buildCalendarContext } from "./build-calendar-context";
+import type { HomeCalendarContext } from "../domain/home-state";
+import { applySyncResult, getCalendarSnapshot, synchronizeCalendar } from "../../reality/application";
+import { AppleCalendarClient, AppleCalendarProvider } from "../../reality/providers/apple";
 import {
   getStoredCalendarConnection,
   markCalendarConnectionError,
   markCalendarConnectionSynced,
-} from "./repository";
+} from "../../../core/calendar-connections/repository";
 
 /**
  * Único lugar que sabe hacer "conexión guardada -> sync en vivo ->
- * HomeCalendarContext" -- antes vivía inline dentro de
- * `app/calendar/page.tsx`; ahora también lo usa
- * `app/dashboard/page.tsx` (Misión "conéctalo al dashboard
- * principal"). Un solo lugar decide la ventana de sync y qué hacer
- * ante un fallo, para que las dos pantallas nunca puedan divergir en
- * ese criterio.
+ * HomeCalendarContext" -- lo usan `app/calendar/page.tsx`,
+ * `app/dashboard/page.tsx`, y `features/chat/services/get-calendar-signals-for-conversation.ts`.
+ * Un solo lugar decide la ventana de sync y qué hacer ante un fallo,
+ * para que ninguno de los tres pueda divergir en ese criterio.
+ *
+ * Vive en `features/home/services/`, no en `core/calendar-connections/`
+ * (auditoría de arquitectura, 2026-08-15): construye
+ * `AppleCalendarClient`/`AppleCalendarProvider` y llama
+ * `synchronizeCalendar` directamente, así que no puede ser una capa de
+ * persistencia pura -- `core/calendar-connections/repository.ts` sigue
+ * siendo esa capa, esta función la consume, nunca al revés. También
+ * llama `buildCalendarContext` (`features/home/`), lo que habría creado
+ * un nuevo borde `reality -> home` si esta función hubiera quedado
+ * dentro de `features/reality/` -- Reality declara explícitamente "sin
+ * dependencias cruzadas hacia otras features de LUZ" (`features/reality/README.md`),
+ * así que el destino correcto es `features/home/`, que ya depende de
+ * `features/reality/domain` y ya es dueño del traductor puro
+ * (`build-calendar-context.ts`).
  *
  * Nunca lanza -- cada estado real (sin conectar / sincronizado / error)
  * es un valor devuelto, mismo criterio de tolerancia a fallos que el

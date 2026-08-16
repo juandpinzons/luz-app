@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
-import { getLiveCalendarContext } from "@/core/calendar-connections/get-live-calendar-context";
+import { getLiveCalendarContext } from "@/features/home/services/get-live-calendar-context";
 import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";

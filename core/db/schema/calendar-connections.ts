@@ -1,5 +1,5 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
-import type { CalendarConnectionStatus, CalendarProviderKind } from "../../../features/reality/domain";
+import type { CalendarConnectionStatus, CalendarProviderKind } from "../../calendar-connections/domain";
 import { lifeGraphs } from "./life-graph";
 
 /**

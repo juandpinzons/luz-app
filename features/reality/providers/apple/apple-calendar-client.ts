@@ -23,23 +23,14 @@
  * `parseMultistatus()` para sus límites documentados.
  */
 
+import type { AppleCalendarCredentials } from "../../../../core/calendar-connections/domain";
+
+export type { AppleCalendarCredentials };
+
 const DEFAULT_BASE_URL = "https://caldav.icloud.com";
 
 const DAV_NS = "DAV:";
 const CALDAV_NS = "urn:ietf:params:xml:ns:caldav";
-
-export interface AppleCalendarCredentials {
-  /** El Apple ID (email) de la cuenta. */
-  readonly appleId: string;
-  /**
-   * Contraseña específica de app generada en appleid.apple.com --
-   * NUNCA la contraseña real de la cuenta (iCloud CalDAV la rechaza
-   * si 2FA está activo, que es obligatorio para todo Apple ID hoy).
-   * Apple no ofrece OAuth para CalDAV -- este es el único mecanismo de
-   * autenticación disponible, ver README de `../../`.
-   */
-  readonly appSpecificPassword: string;
-}
 
 export interface CalDavCalendarCollection {
   /** URL absoluta de la colección -- identificador estable, se resuelve contra `response.url` (post-redirect) en cada request. */

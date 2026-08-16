@@ -3,8 +3,7 @@ import { createEntityId, type EntityId } from "../life/value-objects/entity-id";
 import type { Database } from "../db/client";
 import { calendarConnections, type CalendarConnectionRow } from "../db/schema/calendar-connections";
 import { decryptSecret, encryptSecret } from "../security/secret-cipher";
-import type { AppleCalendarCredentials } from "../../features/reality/providers/apple";
-import type { CalendarConnection, CalendarProviderKind } from "../../features/reality/domain";
+import type { AppleCalendarCredentials, CalendarConnection, CalendarProviderKind } from "./domain";
 
 /**
  * Capa de persistencia real de `CalendarConnection`

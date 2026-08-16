@@ -1,4 +1,4 @@
-import { getLiveCalendarContext } from "../../../core/calendar-connections/get-live-calendar-context";
+import { getLiveCalendarContext } from "../../home/services/get-live-calendar-context";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life";
 import { describeError } from "../../../core/observability/describe-error";
