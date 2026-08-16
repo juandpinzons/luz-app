@@ -2,6 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
 import { memories } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life";
+import { decryptContent } from "../../../core/security/content-cipher";
 
 export interface RecentMemoryHighlight {
   content: string;
@@ -32,10 +33,11 @@ export async function getRecentMemoryHighlight(
         eq(memories.lifeGraphId, context.lifeGraphId),
         eq(memories.status, "active"),
         eq(memories.suppressed, false),
+        eq(memories.hiddenFromUser, false),
       ),
     )
     .orderBy(desc(memories.createdAt))
     .limit(1);
 
-  return row ?? null;
+  return row ? { ...row, content: decryptContent(row.content) } : null;
 }

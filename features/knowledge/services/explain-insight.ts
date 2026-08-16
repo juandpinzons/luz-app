@@ -65,7 +65,15 @@ export async function explainInsight(
   const resolved = await Promise.all(
     evidenceRows.map(async (row): Promise<InsightEvidenceItem | null> => {
       const memory = await memoryRepository.getById(context, row.memoryId);
-      if (!memory) return null;
+      // Fuga real preexistente, encontrada en la auditoría de arquitectura
+      // 2026-08-16: este resolve nunca filtraba `suppressed`, a diferencia
+      // de cada otra lectura de evidencia de cara a la persona -- el
+      // contenido de una memoria suprimida ya se citaba textual ("algo que
+      // dijiste") en `insight-card.tsx`, visible en /memories. `hiddenFromUser`
+      // se agrega por el mismo motivo, no solo por consistencia con esta
+      // corrección: sin este chequeo, ocultar una memoria no evitaría que
+      // su contenido exacto siguiera citándose en la misma pantalla.
+      if (!memory || memory.suppressed || memory.hiddenFromUser) return null;
       return {
         content: memory.content,
         occurredAt: memory.occurredAt ?? memory.createdAt,

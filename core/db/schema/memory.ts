@@ -131,6 +131,22 @@ export const memories = pgTable(
      * explícita sobre un registro puntual.
      */
     suppressed: boolean("suppressed").notNull().default(false),
+    /**
+     * Distinta de `suppressed` a propósito -- alcance genuinamente
+     * distinto, no un sinónimo (auditoría de arquitectura, 2026-08-16):
+     * `suppressed` excluye TAMBIÉN de la recuperación del chat
+     * (`StructuredMemoryRetrievalStrategy`/`AISemanticMemoryRetrievalStrategy`
+     * filtran `suppressed=false` sin excepción), pensada para un
+     * "apagar del todo" que corre el Founder a mano
+     * (`.scratch/flag-suppressed-memories.ts`). `hiddenFromUser` excluye
+     * SOLO de las lecturas de cara a la persona (`/memories`,
+     * `/dashboard`, `/life`) -- LUZ sigue viéndola con normalidad en el
+     * chat (`MemoryQuery.includeHiddenFromUser`), la persona la sigue
+     * "conociendo" a través de LUZ aunque no la vea en su propia
+     * pantalla. Reversible por la propia persona, a diferencia de
+     * `suppressed`. Por defecto `false`.
+     */
+    hiddenFromUser: boolean("hidden_from_user").notNull().default(false),
     rankScore: integer("rank_score"),
     rankedAt: timestamp("ranked_at", { withTimezone: true }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }),

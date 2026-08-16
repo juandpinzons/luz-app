@@ -43,7 +43,7 @@ export async function getLifeTimeline(
 ): Promise<LifeTimeline> {
   const memories = await new DrizzleMemoryRepository(db).list(context);
   const active = memories.filter(
-    (memory) => memory.status === "active" && !memory.suppressed,
+    (memory) => memory.status === "active" && !memory.suppressed && !memory.hiddenFromUser,
   );
 
   const sorted = [...active].sort(

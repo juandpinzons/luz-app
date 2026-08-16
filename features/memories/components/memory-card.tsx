@@ -1,4 +1,5 @@
 import type { Memory } from "../../../core/memory-engine";
+import { MemoryCardActions } from "./memory-card-actions";
 import { truncateText } from "./truncate-text";
 
 interface MemoryCardProps {
@@ -9,6 +10,15 @@ interface MemoryCardProps {
   mentionedLifeTitles: string[];
   /** Posición dentro de la lista completa (no solo su grupo de tiempo) — solo para escalonar la entrada; recortada por el llamador para que una lista larga no tarde en aparecer. */
   index?: number;
+  /**
+   * Segunda capa de memoria (auditoría de arquitectura, 2026-08-16) --
+   * `false` por defecto para no romper los otros llamadores de esta
+   * tarjeta (highlights, "ver todo"). Cuando es `true`, solo cambia el
+   * texto del toggle en `MemoryCardActions` -- el mismo componente
+   * sirve ambas vistas.
+   */
+  showActions?: boolean;
+  isHidden?: boolean;
 }
 
 /** Antes se mostraba texto completo sin límite -- una memoria larga, con varias conexiones, ocupaba varias pantallas. La cita principal sigue siendo el contenido real (nunca un resumen generado), solo recortada si es larga. */
@@ -29,6 +39,8 @@ export function MemoryCard({
   connectedContents,
   mentionedLifeTitles,
   index = 0,
+  showActions = false,
+  isHidden = false,
 }: MemoryCardProps) {
   const shownConnections = connectedContents.slice(0, MAX_CONNECTED_CONTENTS_SHOWN);
   const hiddenConnectionCount = connectedContents.length - shownConnections.length;
@@ -53,6 +65,8 @@ export function MemoryCard({
           ))}
         </div>
       )}
+
+      {showActions && <MemoryCardActions memoryId={memory.id} isHidden={isHidden} />}
     </li>
   );
 }

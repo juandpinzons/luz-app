@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { db } from "@/core/db/client";
 import { accountIdentities } from "@/auth/schema";
 import {
+  adminAccessLog,
   conversationMessages,
   conversations,
   feedbackResponses,
@@ -19,6 +20,7 @@ import { DrizzleBeliefRepository } from "@/core/belief-engine";
 import { DrizzleConceptRepository } from "@/core/concept-graph";
 import { DrizzleContradictionRepository } from "@/core/contradiction-engine";
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "@/core/knowledge-engine";
+import { decryptContentOrNull } from "@/core/security/content-cipher";
 import { isAdmin } from "../../is-admin";
 
 const userIdSchema = z.string().uuid();
@@ -37,16 +39,29 @@ const RECENT_CONVERSATION_LIMIT = 20;
  * recortada a los 5 ítems que el chat puede permitirse por turno.
  *
  * Solo lectura. Mismo gate `isAdmin` que el resto de `/admin/*`.
+ *
+ * Break-glass (ADR-0024, Decisión 3): sin `?justification=` en la URL,
+ * esta página NO corre ninguna de las consultas de contenido de abajo
+ * -- solo confirma que el usuario objetivo existe y muestra el
+ * formulario. Con justificación presente, registra el acceso en
+ * `admin_access_log` (bitácora inmutable, nunca tocada por el cascade
+ * de borrado de cuenta) ANTES de mostrar cualquier contenido
+ * descifrado, nunca después -- si el insert de la bitácora falla, la
+ * página falla con él, no hay lectura de contenido sin registro.
  */
 export default async function AdminUserDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ justification?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !isAdmin(session.user.email)) {
+  if (!session?.user?.id || !session.user.email || !isAdmin(session.user.email)) {
     redirect("/login");
   }
+  const adminUserId = session.user.id;
+  const adminEmail = session.user.email;
 
   const { id } = await params;
   const parsedId = userIdSchema.safeParse(id);
@@ -59,6 +74,50 @@ export default async function AdminUserDetailPage({
   if (!user) {
     notFound();
   }
+
+  const { justification } = await searchParams;
+  const trimmedJustification = justification?.trim();
+
+  if (!trimmedJustification) {
+    return (
+      <main className="min-h-screen bg-black px-8 py-10 text-white">
+        <div className="mx-auto max-w-lg">
+          <h1 className="text-xl font-light">
+            Acceso administrativo a {user.name ?? user.email}
+          </h1>
+          <p className="mt-2 text-sm text-zinc-500">
+            Vas a ver memorias, creencias, insights, conceptos, contradicciones y
+            feedback de esta persona en texto plano. Este acceso queda registrado
+            de forma permanente -- quién, cuándo, y por qué (ADR-0024).
+          </p>
+          <form method="GET" className="mt-6 space-y-3">
+            <textarea
+              name="justification"
+              required
+              minLength={10}
+              rows={3}
+              placeholder="Motivo del acceso (ej.: 'ticket de soporte #123', 'investigando el bug reportado por el usuario')"
+              className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-600"
+            />
+            <button
+              type="submit"
+              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm text-white hover:border-zinc-500"
+            >
+              Continuar y registrar el acceso
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  await db.insert(adminAccessLog).values({
+    adminUserId,
+    adminEmail,
+    viewedUserId: userId,
+    justification: trimmedJustification,
+    route: `/admin/users/${userId}`,
+  });
 
   const [identity] = await db
     .select()
@@ -91,11 +150,16 @@ export default async function AdminUserDetailPage({
     .from(conversationMessages)
     .where(eq(conversationMessages.userId, userId));
 
-  const userFeedback = await db
+  const userFeedbackRows = await db
     .select()
     .from(feedbackResponses)
     .where(eq(feedbackResponses.userId, userId))
     .orderBy(desc(feedbackResponses.createdAt));
+
+  const userFeedback = userFeedbackRows.map((row) => ({
+    ...row,
+    comment: decryptContentOrNull(row.comment),
+  }));
 
   // Sin LifeGraph todavía (cuenta creada pero nunca mandó un primer
   // mensaje -- ver DrizzleAccountIdentityResolver, el bootstrap solo

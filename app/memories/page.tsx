@@ -47,7 +47,8 @@ export default async function MemoriesPage({
 
   const { q, view } = await searchParams;
   const searchTerm = q?.trim() || undefined;
-  const showAllChronological = view === "all" || Boolean(searchTerm);
+  const showHidden = view === "hidden";
+  const showAllChronological = (view === "all" || Boolean(searchTerm)) && !showHidden;
 
   let lifeGraphContext = null;
   try {
@@ -56,6 +57,13 @@ export default async function MemoriesPage({
     console.error("[memories] no se pudo resolver LifeGraphContext:", error);
   }
 
+  /**
+   * Segunda capa de memoria (auditoría de arquitectura, 2026-08-16):
+   * consulta aparte, nunca combinada con `text`/highlights -- ver
+   * docblock de `listRecentActiveMemories`. Vacío si `!showHidden`,
+   * nunca se pide sin necesidad.
+   */
+  let hiddenGroups: MemoryTimeGroup[] = [];
   let groups: MemoryTimeGroup[] = [];
   let highlights: Awaited<ReturnType<typeof selectMemoryHighlights>> = [];
   /** Títulos de Goal/Project ya persistidos — misma búsqueda literal de §3.2.1, en la dirección inversa (¿qué Life aparece dentro de esta memoria?). */
@@ -69,7 +77,16 @@ export default async function MemoriesPage({
    */
   let insights: ValidatedInsights = { items: [], total: 0, byType: {} };
 
-  if (lifeGraphContext) {
+  if (lifeGraphContext && showHidden) {
+    try {
+      hiddenGroups = await searchMemories(db, lifeGraphContext, {
+        groupByTime: true,
+        visibility: "hidden",
+      });
+    } catch (error) {
+      console.error("[memories] no se pudieron cargar los recuerdos ocultos:", error);
+    }
+  } else if (lifeGraphContext) {
     try {
       const [flatMemories, goals, projects, validatedInsights] = await Promise.all([
         // Sin `groupByTime` -- una sola consulta, reutilizada abajo tanto
@@ -92,7 +109,9 @@ export default async function MemoriesPage({
     }
   }
 
-  const hasResults = groups.some((group) => group.memories.length > 0);
+  const hasResults = showHidden
+    ? hiddenGroups.some((group) => group.memories.length > 0)
+    : groups.some((group) => group.memories.length > 0);
 
   /**
    * Posición global de cada memoria (no solo dentro de su grupo de
@@ -112,6 +131,14 @@ export default async function MemoriesPage({
       <div className="mx-auto w-full max-w-2xl">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-xl font-light tracking-[0.25em]">RECUERDOS</h1>
+          {!showHidden && (
+            <Link
+              href="/memories?view=hidden"
+              className="whitespace-nowrap text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+            >
+              Ocultos
+            </Link>
+          )}
         </div>
 
         <form method="GET" action="/memories" className="mt-6 flex gap-2">
@@ -152,13 +179,47 @@ export default async function MemoriesPage({
 
         {!hasResults && (
           <p className="animate-fade-in mt-10 text-sm text-zinc-500">
-            {searchTerm
-              ? "No encontré recuerdos con eso."
-              : "Esto se va a ir llenando con lo que me vayas contando."}
+            {showHidden
+              ? "Todavía no has ocultado ningún recuerdo."
+              : searchTerm
+                ? "No encontré recuerdos con eso."
+                : "Esto se va a ir llenando con lo que me vayas contando."}
           </p>
         )}
 
-        {hasResults && !showAllChronological && (
+        {showHidden && (
+          <Link
+            href="/memories"
+            className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+          >
+            ← Volver
+          </Link>
+        )}
+
+        {hasResults && showHidden && (
+          <div className="mt-4 space-y-8">
+            {hiddenGroups.map((group) => (
+              <section key={group.label}>
+                <h2 className="text-sm font-medium text-zinc-400">{group.label}</h2>
+                <ul className="mt-3 space-y-2">
+                  {group.memories.map((memory, index) => (
+                    <MemoryCard
+                      key={memory.id}
+                      memory={memory}
+                      index={Math.min(index, 12)}
+                      connectedContents={memory.connectedContents}
+                      mentionedLifeTitles={[]}
+                      showActions
+                      isHidden
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {!showHidden && hasResults && !showAllChronological && (
           <section className="animate-fade-in mt-8">
             <h2 className="text-sm font-medium text-zinc-400">
               Momentos que más han quedado
@@ -174,6 +235,7 @@ export default async function MemoriesPage({
                     mentionedLifeTitles={lifeTitles.filter((title) =>
                       memory.content.toLowerCase().includes(title.toLowerCase()),
                     )}
+                    showActions
                   />
                 ))}
               </ul>
@@ -219,6 +281,7 @@ export default async function MemoriesPage({
                         mentionedLifeTitles={lifeTitles.filter((title) =>
                           memory.content.toLowerCase().includes(title.toLowerCase()),
                         )}
+                        showActions
                       />
                     ))}
                   </ul>

@@ -1,8 +1,9 @@
-import { and, count, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import { type MemoryRow, memories, memoryConnections } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent } from "../../security/content-cipher";
 import type { Memory } from "../entities/memory";
 import type { MemoryQuery } from "./memory-query";
 import type { MemoryRetrievalStrategy } from "./memory-retrieval-strategy";
@@ -44,7 +45,7 @@ function toMemory(row: MemoryRow): Memory {
     lifeGraphId: createEntityId(row.lifeGraphId),
     personId: row.personId ? createEntityId(row.personId) : undefined,
     type: row.type,
-    content: row.content,
+    content: decryptContent(row.content),
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
@@ -153,6 +154,10 @@ export class StructuredMemoryRetrievalStrategy
       eq(memories.suppressed, false),
     ];
 
+    if (!query.includeHiddenFromUser) {
+      conditions.push(eq(memories.hiddenFromUser, false));
+    }
+
     if (query.type) {
       conditions.push(eq(memories.type, query.type));
     }
@@ -165,21 +170,36 @@ export class StructuredMemoryRetrievalStrategy
     if (query.occurredBefore) {
       conditions.push(lte(memories.occurredAt, query.occurredBefore));
     }
-    if (query.text) {
-      conditions.push(ilike(memories.content, `%${query.text}%`));
-    }
 
     const limit = query.limit ?? DEFAULT_LIMIT;
     const poolSize = Math.min(limit * CANDIDATE_POOL_MULTIPLIER, CANDIDATE_POOL_CEILING);
 
-    const rows = await this.db
-      .select()
-      .from(memories)
-      .where(and(...conditions))
-      .orderBy(sql`${memories.rankScore} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
-      .limit(poolSize);
+    // `content` está cifrado (ADR-0024) -- ya no se puede filtrar por
+    // `ilike(memories.content, ...)` a nivel SQL. Con `query.text`,
+    // aplicar el `LIMIT poolSize` ANTES de filtrar por texto cortaría
+    // memorias que sí matchean pero no entraron al pool por rankScore
+    // -- así que en ese caso se traen todas las candidatas por los
+    // demás filtros (sin poolSize), se descifra, se filtra por texto,
+    // y RECIÉN ahí se acota. Sin `query.text`, comportamiento idéntico
+    // a antes (el `LIMIT` sigue en la base, nunca se trae de más).
+    const rows = query.text
+      ? await this.db
+          .select()
+          .from(memories)
+          .where(and(...conditions))
+          .orderBy(sql`${memories.rankScore} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
+      : await this.db
+          .select()
+          .from(memories)
+          .where(and(...conditions))
+          .orderBy(sql`${memories.rankScore} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
+          .limit(poolSize);
 
-    const candidates = rows.map(toMemory);
+    const allCandidates = rows.map(toMemory);
+    const needle = query.text?.toLowerCase();
+    const candidates = needle
+      ? allCandidates.filter((memory) => memory.content.toLowerCase().includes(needle)).slice(0, poolSize)
+      : allCandidates;
     const connectionCounts = await countConnectionsByMemoryId(
       this.db,
       candidates.map((memory) => memory.id),

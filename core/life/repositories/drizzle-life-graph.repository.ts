@@ -9,6 +9,7 @@ import {
 import type { LifeGraph } from "../entities/life-graph";
 import type { LifeGraphContext } from "../life-graph-context";
 import type { Person } from "../entities/person";
+import { decryptContent, decryptContentOrNull, encryptContent, encryptContentOrNull } from "../../security/content-cipher";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
 import type { LifeGraphRepository } from "./life-graph.repository";
 
@@ -36,8 +37,8 @@ function toPerson(row: PersonRow): Person {
   return {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
-    name: row.name,
-    notes: row.notes ?? undefined,
+    name: decryptContent(row.name),
+    notes: decryptContentOrNull(row.notes) ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -110,16 +111,16 @@ export class DrizzleLifeGraphRepository implements LifeGraphRepository {
       .values({
         id: person.id,
         lifeGraphId: person.lifeGraphId,
-        name: person.name,
-        notes: person.notes ?? null,
+        name: encryptContent(person.name),
+        notes: encryptContentOrNull(person.notes),
         createdAt: person.createdAt,
         updatedAt: person.updatedAt,
       })
       .onConflictDoUpdate({
         target: persons.id,
         set: {
-          name: person.name,
-          notes: person.notes ?? null,
+          name: encryptContent(person.name),
+          notes: encryptContentOrNull(person.notes),
           updatedAt: person.updatedAt,
         },
       });

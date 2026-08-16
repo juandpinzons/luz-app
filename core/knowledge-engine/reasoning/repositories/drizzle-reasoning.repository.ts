@@ -8,6 +8,7 @@ import {
 } from "../../../db/schema";
 import type { LifeGraphContext } from "../../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../../life/value-objects/entity-id";
+import { decryptContent, encryptContent } from "../../../security/content-cipher";
 import type { ReasoningConclusion } from "../entities/reasoning-conclusion";
 import type { ReasoningEvidence, ReasoningEvidenceRef } from "../entities/reasoning-evidence";
 import type { ReasoningRepository } from "./reasoning.repository";
@@ -16,13 +17,13 @@ function toConclusion(row: KnowledgeEngineReasoningConclusionRow): ReasoningConc
   return {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
-    statement: row.statement,
+    statement: decryptContent(row.statement),
     confidence: {
       score: row.confidenceScore,
       assignedAt: row.confidenceAssignedAt,
     },
     status: row.status,
-    uncertaintyNotes: row.uncertaintyNotes,
+    uncertaintyNotes: row.uncertaintyNotes.map(decryptContent),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -92,22 +93,22 @@ export class DrizzleReasoningRepository implements ReasoningRepository {
       .values({
         id: conclusion.id,
         lifeGraphId: conclusion.lifeGraphId,
-        statement: conclusion.statement,
+        statement: encryptContent(conclusion.statement),
         confidenceScore: conclusion.confidence.score,
         confidenceAssignedAt: conclusion.confidence.assignedAt,
         status: conclusion.status,
-        uncertaintyNotes: conclusion.uncertaintyNotes,
+        uncertaintyNotes: conclusion.uncertaintyNotes.map(encryptContent),
         createdAt: conclusion.createdAt,
         updatedAt: conclusion.updatedAt,
       })
       .onConflictDoUpdate({
         target: knowledgeEngineReasoningConclusions.id,
         set: {
-          statement: conclusion.statement,
+          statement: encryptContent(conclusion.statement),
           confidenceScore: conclusion.confidence.score,
           confidenceAssignedAt: conclusion.confidence.assignedAt,
           status: conclusion.status,
-          uncertaintyNotes: conclusion.uncertaintyNotes,
+          uncertaintyNotes: conclusion.uncertaintyNotes.map(encryptContent),
           updatedAt: conclusion.updatedAt,
         },
       })

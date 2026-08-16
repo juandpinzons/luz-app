@@ -10,6 +10,7 @@ import {
   feedbackResponses,
   users,
 } from "@/core/db/schema";
+import { decryptContentOrNull } from "@/core/security/content-cipher";
 import { isAdmin } from "./is-admin";
 
 /**
@@ -71,7 +72,7 @@ export default async function AdminPage() {
     .select({ avg: sql<number>`avg(${feedbackResponses.helpfulness})` })
     .from(feedbackResponses);
 
-  const recentFeedback = await db
+  const recentFeedbackRows = await db
     .select({
       id: feedbackResponses.id,
       helpfulness: feedbackResponses.helpfulness,
@@ -85,6 +86,11 @@ export default async function AdminPage() {
     .leftJoin(users, eq(feedbackResponses.userId, users.id))
     .orderBy(desc(feedbackResponses.createdAt))
     .limit(20);
+
+  const recentFeedback = recentFeedbackRows.map((row) => ({
+    ...row,
+    comment: decryptContentOrNull(row.comment),
+  }));
 
   const buildVersion =
     process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";

@@ -204,6 +204,12 @@ export async function assembleRealitySnapshot(
           )
         : createMemoryEngine(db).retrieve(context, {
             limit: RELEVANT_MEMORY_LIMIT,
+            // Segunda capa de memoria (auditoría de arquitectura,
+            // 2026-08-16): esta rama también alimenta el procesamiento de
+            // Knowledge Engine (`focusMemoryId`, sin `currentMessage`), no
+            // solo el chat en vivo -- LUZ debe seguir razonando sobre lo
+            // que la persona ocultó de su propio dashboard.
+            includeHiddenFromUser: true,
           }),
     ),
     span("Memory.focused", "repository", () =>

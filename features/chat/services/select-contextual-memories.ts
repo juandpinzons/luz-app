@@ -142,7 +142,13 @@ export async function selectContextualMemories(
   // completa -- degrada a `[]`, el turno sigue con solo la señal
   // estructural, igual que se comportaba antes de este cambio.
   const [candidates, semanticMatches] = await Promise.all([
-    createMemoryEngine(db).retrieve(context, { limit: CANDIDATE_POOL_SIZE }),
+    createMemoryEngine(db).retrieve(context, {
+      limit: CANDIDATE_POOL_SIZE,
+      // Segunda capa de memoria (auditoría de arquitectura, 2026-08-16):
+      // LUZ sigue viendo lo que la persona ocultó de su propio dashboard --
+      // ver docblock de `MemoryQuery.includeHiddenFromUser`.
+      includeHiddenFromUser: true,
+    }),
     new AISemanticMemoryRetrievalStrategy(db, getAIProvider())
       .retrieve(context, { text: currentMessage, limit: CANDIDATE_POOL_SIZE })
       .catch(() => [] as Memory[]),

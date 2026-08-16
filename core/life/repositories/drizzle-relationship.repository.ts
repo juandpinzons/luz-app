@@ -3,6 +3,7 @@ import type { Database, Transaction } from "../../db/client";
 import { type RelationshipRow, lifeRelationships } from "../../db/schema";
 import type { Relationship } from "../entities/relationship";
 import type { LifeGraphContext } from "../life-graph-context";
+import { decryptContentOrNull, encryptContentOrNull } from "../../security/content-cipher";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
 import type {
   RelationshipInput,
@@ -18,7 +19,7 @@ function toRelationship(row: RelationshipRow): Relationship {
     type: row.type,
     closeness: row.closeness ?? undefined,
     since: row.since ?? undefined,
-    notes: row.notes ?? undefined,
+    notes: decryptContentOrNull(row.notes) ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -68,7 +69,7 @@ export class DrizzleRelationshipRepository implements RelationshipRepository {
         type: input.type,
         closeness: input.closeness ?? null,
         since: input.since ?? null,
-        notes: input.notes ?? null,
+        notes: encryptContentOrNull(input.notes),
       })
       .returning();
 
@@ -100,7 +101,7 @@ export class DrizzleRelationshipRepository implements RelationshipRepository {
           ? { closeness: input.closeness ?? null }
           : {}),
         ...(input.since !== undefined ? { since: input.since ?? null } : {}),
-        ...(input.notes !== undefined ? { notes: input.notes ?? null } : {}),
+        ...(input.notes !== undefined ? { notes: encryptContentOrNull(input.notes) } : {}),
         updatedAt: new Date(),
       })
       .where(

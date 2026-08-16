@@ -10,6 +10,7 @@ import {
 } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent, encryptContent } from "../../security/content-cipher";
 import type { ConceptEvidence } from "../entities/concept-evidence";
 import type { ConceptRelation } from "../entities/concept-relation";
 import type { Concept } from "../entities/concept";
@@ -19,7 +20,7 @@ function toConcept(row: ConceptRow): Concept {
   return {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
-    label: row.label,
+    label: decryptContent(row.label),
     description: row.description ?? undefined,
     domain: row.domain ?? undefined,
     createdAt: row.createdAt,
@@ -63,20 +64,24 @@ export class DrizzleConceptRepository implements ConceptRepository {
     return rows[0] ? toConcept(rows[0]) : null;
   }
 
+  /**
+   * `label` está cifrado (ADR-0024) -- ya no se puede filtrar por
+   * `lower(label)` a nivel SQL, el valor en columna es ciphertext, no
+   * texto comparable. Trae los conceptos del LifeGraph (acotado, no
+   * miles por persona) y compara en memoria tras descifrar -- único
+   * llamador (`extract-concepts-from-insight.ts`) ya corre fuera del
+   * turno de chat en vivo, en el pase cron de enriquecimiento, así que
+   * este costo adicional no toca latencia percibida por el usuario.
+   */
   async getByLabel(context: LifeGraphContext, label: string): Promise<Concept | null> {
     const normalized = label.trim().toLowerCase();
     const rows = await this.db
       .select()
       .from(concepts)
-      .where(
-        and(
-          eq(concepts.lifeGraphId, context.lifeGraphId),
-          eq(sql`lower(${concepts.label})`, normalized),
-        ),
-      )
-      .limit(1);
+      .where(eq(concepts.lifeGraphId, context.lifeGraphId));
 
-    return rows[0] ? toConcept(rows[0]) : null;
+    const match = rows.find((row) => decryptContent(row.label).trim().toLowerCase() === normalized);
+    return match ? toConcept(match) : null;
   }
 
   async list(context: LifeGraphContext): Promise<Concept[]> {
@@ -100,7 +105,7 @@ export class DrizzleConceptRepository implements ConceptRepository {
       .values({
         id: concept.id,
         lifeGraphId: concept.lifeGraphId,
-        label: concept.label,
+        label: encryptContent(concept.label),
         description: concept.description ?? null,
         domain: concept.domain ?? null,
         createdAt: concept.createdAt,
@@ -109,7 +114,7 @@ export class DrizzleConceptRepository implements ConceptRepository {
       .onConflictDoUpdate({
         target: concepts.id,
         set: {
-          label: concept.label,
+          label: encryptContent(concept.label),
           description: concept.description ?? null,
           domain: concept.domain ?? null,
           updatedAt: concept.updatedAt,

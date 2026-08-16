@@ -23,3 +23,4 @@ export * from "./email-connections";
 export * from "./wearable";
 export * from "./seen-prompts";
 export * from "./continuity-engine";
+export * from "./admin-access-log";

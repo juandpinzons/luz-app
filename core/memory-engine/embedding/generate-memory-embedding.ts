@@ -3,6 +3,7 @@ import type { AIProvider } from "../../../ai/provider";
 import type { Database } from "../../db/client";
 import { memoryEmbeddings } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
+import { encryptContent } from "../../security/content-cipher";
 import type { Memory } from "../entities/memory";
 
 /**
@@ -55,7 +56,7 @@ export async function generateMemoryEmbedding(
     lifeGraphId: context.lifeGraphId,
     sourceType: "memory",
     sourceId: memory.id,
-    content: memory.content,
+    content: encryptContent(memory.content),
     embedding,
   });
 }

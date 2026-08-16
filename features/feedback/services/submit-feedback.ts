@@ -3,6 +3,7 @@ import { feedbackResponses } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
 import { describeError } from "../../../core/observability/describe-error";
 import { logger } from "../../../core/observability/logger";
+import { encryptContentOrNull } from "../../../core/security/content-cipher";
 import type { SubmitFeedbackRequest, SubmitFeedbackResponse } from "../types";
 
 /**
@@ -38,7 +39,9 @@ export async function submitFeedback(
         helpfulness: input.helpfulness,
         remembersMe: input.remembersMe,
         responseLength: input.responseLength ?? null,
-        comment: input.comment && input.comment.length > 0 ? input.comment : null,
+        comment: encryptContentOrNull(
+          input.comment && input.comment.length > 0 ? input.comment : null,
+        ),
       })
       .returning({ id: feedbackResponses.id });
   } catch (error) {

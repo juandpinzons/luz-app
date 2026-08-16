@@ -3,15 +3,25 @@ import type { Database, Transaction } from "../../db/client";
 import { type PersonRow, persons } from "../../db/schema";
 import type { Person } from "../entities/person";
 import type { LifeGraphContext } from "../life-graph-context";
+import { decryptContent, decryptContentOrNull, encryptContent, encryptContentOrNull } from "../../security/content-cipher";
 import { type EntityId, createEntityId } from "../value-objects/entity-id";
 import type { PersonInput, PersonRepository } from "./person.repository";
 
+/**
+ * `name` y `notes` cifrados (ADR-0024) -- son la información de
+ * identidad de una persona no-usuaria mencionada en conversación
+ * (`find-or-create-person.ts`), sin consentimiento ni canal de
+ * derechos propio; el mismo estándar que el resto del contenido, no
+ * uno menor por ser un dato "corto". Dedup (`titlesLikelyMatch`) sigue
+ * funcionando: opera sobre el resultado ya descifrado de `list()`,
+ * nunca filtra `name` a nivel SQL.
+ */
 function toPerson(row: PersonRow): Person {
   return {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
-    name: row.name,
-    notes: row.notes ?? undefined,
+    name: decryptContent(row.name),
+    notes: decryptContentOrNull(row.notes) ?? undefined,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -61,8 +71,8 @@ export class DrizzlePersonRepository implements PersonRepository {
       .insert(persons)
       .values({
         lifeGraphId: context.lifeGraphId,
-        name: input.name,
-        notes: input.notes ?? null,
+        name: encryptContent(input.name),
+        notes: encryptContentOrNull(input.notes),
       })
       .returning();
 
@@ -81,8 +91,8 @@ export class DrizzlePersonRepository implements PersonRepository {
     const [row] = await this.db
       .update(persons)
       .set({
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.notes !== undefined ? { notes: input.notes ?? null } : {}),
+        ...(input.name !== undefined ? { name: encryptContent(input.name) } : {}),
+        ...(input.notes !== undefined ? { notes: encryptContentOrNull(input.notes) } : {}),
         updatedAt: new Date(),
       })
       .where(

@@ -33,6 +33,14 @@ export interface Memory {
    * "suprimida".
    */
   suppressed?: boolean;
+  /**
+   * Distinta de `suppressed` -- excluida SOLO de lecturas de cara a la
+   * persona (`/memories`, `/dashboard`, `/life`), LUZ la sigue viendo en
+   * el chat (`MemoryQuery.includeHiddenFromUser`). Ver docblock de la
+   * columna en `core/db/schema/memory.ts` para el contraste completo.
+   * `undefined`/`false` se tratan igual, mismo criterio que `suppressed`.
+   */
+  hiddenFromUser?: boolean;
   rank?: MemoryRank;
   occurredAt?: Date;
   createdAt: Date;

@@ -3,6 +3,7 @@ import type { Database } from "../../db/client";
 import { lifeGraphs, persons } from "../../db/schema";
 import type { LifeGraph } from "../entities/life-graph";
 import type { Person } from "../entities/person";
+import { encryptContent, encryptContentOrNull } from "../../security/content-cipher";
 import { createEntityId } from "../value-objects/entity-id";
 import type {
   LifeGraphBootstrap,
@@ -64,8 +65,8 @@ export class DrizzleLifeGraphBootstrap implements LifeGraphBootstrap {
       await tx.insert(persons).values({
         id: personId,
         lifeGraphId,
-        name: owner.name,
-        notes: owner.notes ?? null,
+        name: encryptContent(owner.name),
+        notes: encryptContentOrNull(owner.notes),
         createdAt: now,
         updatedAt: now,
       });

@@ -17,6 +17,12 @@ export interface MemoryRepository {
   listActive(context: LifeGraphContext): Promise<Memory[]>;
   save(context: LifeGraphContext, memory: Memory): Promise<Memory>;
   delete(context: LifeGraphContext, id: EntityId): Promise<void>;
+  /** Update acotado (solo esta columna + `updatedAt`), mismo criterio de ownership que `delete()` -- nunca requiere el objeto `Memory` completo para un cambio de un solo campo. */
+  setHiddenFromUser(
+    context: LifeGraphContext,
+    id: EntityId,
+    hidden: boolean,
+  ): Promise<void>;
   getConnections(
     context: LifeGraphContext,
     memoryId: EntityId,

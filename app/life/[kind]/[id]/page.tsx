@@ -117,7 +117,8 @@ export default async function LifeDetailPage({
         ),
       );
       relatedMemories = fetched.filter(
-        (memory): memory is Memory => memory !== null && !memory.suppressed,
+        (memory): memory is Memory =>
+          memory !== null && !memory.suppressed && !memory.hiddenFromUser,
       );
     } else {
       relatedMemories = await findMemoriesMentioning(db, lifeGraphContext, {

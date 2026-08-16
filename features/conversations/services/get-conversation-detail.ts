@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
+import { decryptContent, decryptContentOrNull } from "../../../core/security/content-cipher";
 
 export interface ConversationDetailMessage {
   role: "user" | "assistant";
@@ -53,10 +54,16 @@ export async function getConversationDetail(
     .where(eq(conversationMessages.conversationId, conversation.id))
     .orderBy(asc(conversationMessages.createdAt));
 
-  const messages: ConversationDetailMessage[] = history.filter(
-    (entry): entry is typeof entry & { role: "user" | "assistant" } =>
-      entry.role === "user" || entry.role === "assistant",
-  );
+  const messages: ConversationDetailMessage[] = history
+    .filter(
+      (entry): entry is typeof entry & { role: "user" | "assistant" } =>
+        entry.role === "user" || entry.role === "assistant",
+    )
+    .map((entry) => ({
+      ...entry,
+      content: decryptContent(entry.content),
+      imageData: decryptContentOrNull(entry.imageData),
+    }));
 
   return { id: conversation.id, createdAt: conversation.createdAt, messages };
 }

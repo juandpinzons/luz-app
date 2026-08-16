@@ -13,6 +13,7 @@ import {
   type EntityId,
   createEntityId,
 } from "../../life/value-objects/entity-id";
+import { decryptContent, encryptContent } from "../../security/content-cipher";
 import type { Evidence } from "../entities/evidence";
 import type { Insight } from "../entities/insight";
 import type { InsightRelationship } from "../entities/insight-relationship";
@@ -23,7 +24,7 @@ function toInsight(row: KnowledgeEngineInsightRow): Insight {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
     type: row.type,
-    description: row.description,
+    description: decryptContent(row.description),
     confidence: {
       score: row.confidenceScore,
       assignedAt: row.confidenceAssignedAt,
@@ -169,7 +170,7 @@ export class DrizzleInsightRepository implements InsightRepository {
         id: insight.id,
         lifeGraphId: insight.lifeGraphId,
         type: insight.type,
-        description: insight.description,
+        description: encryptContent(insight.description),
         confidenceScore: insight.confidence.score,
         confidenceAssignedAt: insight.confidence.assignedAt,
         status: insight.status,
@@ -181,7 +182,7 @@ export class DrizzleInsightRepository implements InsightRepository {
         target: knowledgeEngineInsights.id,
         set: {
           type: insight.type,
-          description: insight.description,
+          description: encryptContent(insight.description),
           confidenceScore: insight.confidence.score,
           confidenceAssignedAt: insight.confidence.assignedAt,
           status: insight.status,

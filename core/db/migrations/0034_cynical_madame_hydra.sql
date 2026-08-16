@@ -1,0 +1,1 @@
+ALTER TABLE "memories" ADD COLUMN "hidden_from_user" boolean DEFAULT false NOT NULL;

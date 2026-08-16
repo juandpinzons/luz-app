@@ -4,6 +4,7 @@ import { memories, memoryConnections } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life";
 import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
 import { createEntityId, type EntityId } from "../../../core/life/value-objects/entity-id";
+import { decryptContent } from "../../../core/security/content-cipher";
 
 const RESULT_CAP = 100;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -76,6 +77,7 @@ function toActiveMemory(row: {
   sourceId: string | null;
   status: Memory["status"];
   suppressed: boolean;
+  hiddenFromUser: boolean;
   rankScore: number | null;
   rankedAt: Date | null;
   occurredAt: Date | null;
@@ -87,11 +89,12 @@ function toActiveMemory(row: {
     lifeGraphId: createEntityId(row.lifeGraphId),
     personId: row.personId ? createEntityId(row.personId) : undefined,
     type: row.type,
-    content: row.content,
+    content: decryptContent(row.content),
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
     suppressed: row.suppressed,
+    hiddenFromUser: row.hiddenFromUser,
     rank:
       row.rankScore !== null && row.rankedAt !== null
         ? { score: row.rankScore, rankedAt: row.rankedAt }
@@ -102,9 +105,21 @@ function toActiveMemory(row: {
   };
 }
 
+/**
+ * `visibility: "hidden"` (auditoría de arquitectura, 2026-08-16) --
+ * la contraparte de "ocultar de mi vista": la única forma de volver a
+ * ver, y por lo tanto poder deshacer (`?view=hidden` en
+ * `/memories`), lo que la persona ya ocultó. Deliberadamente SOLO esta
+ * consulta directa -- nunca combinado con `text` (la mitad de
+ * recuperación compartida con el chat, `StructuredMemoryRetrievalStrategy`,
+ * no distingue "esta lectura es para la persona" de "esta lectura es
+ * para LUZ" en este alcance; ver plan). Buscar dentro de lo oculto
+ * queda fuera de esta primera versión, no un olvido.
+ */
 async function listRecentActiveMemories(
   db: Database,
   context: LifeGraphContext,
+  visibility: "visible" | "hidden" = "visible",
 ): Promise<Memory[]> {
   const rows = await db
     .select()
@@ -114,6 +129,7 @@ async function listRecentActiveMemories(
         eq(memories.lifeGraphId, context.lifeGraphId),
         eq(memories.status, "active"),
         eq(memories.suppressed, false),
+        eq(memories.hiddenFromUser, visibility === "hidden"),
       ),
     )
     .orderBy(sql`${memories.occurredAt} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
@@ -185,24 +201,30 @@ async function loadConnectionsByMemoryId(
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options: { text?: string; groupByTime: true },
+  options: { text?: string; groupByTime: true; visibility?: "visible" | "hidden" },
 ): Promise<MemoryTimeGroup[]>;
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options?: { text?: string; groupByTime?: false },
+  options?: { text?: string; groupByTime?: false; visibility?: "visible" | "hidden" },
 ): Promise<MemoryWithConnections[]>;
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options: { text?: string; groupByTime?: boolean } = {},
+  options: { text?: string; groupByTime?: boolean; visibility?: "visible" | "hidden" } = {},
 ): Promise<MemoryWithConnections[] | MemoryTimeGroup[]> {
-  const raw = options.text
-    ? await createMemoryEngine(db).retrieve(context, {
-        text: options.text,
-        limit: RESULT_CAP,
-      })
-    : await listRecentActiveMemories(db, context);
+  const visibility = options.visibility ?? "visible";
+  // `visibility: "hidden"` nunca pasa por la mitad de texto (ver docblock
+  // de `listRecentActiveMemories`) -- `text` se ignora en ese modo en vez
+  // de fallar, así un `?q=` que quede en la URL al cambiar de pestaña no
+  // rompe la vista de ocultos.
+  const raw =
+    options.text && visibility === "visible"
+      ? await createMemoryEngine(db).retrieve(context, {
+          text: options.text,
+          limit: RESULT_CAP,
+        })
+      : await listRecentActiveMemories(db, context, visibility);
 
   const sorted = sortByRecency(raw).slice(0, RESULT_CAP);
   const contentById = new Map(sorted.map((memory) => [memory.id, memory.content]));

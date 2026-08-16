@@ -8,6 +8,7 @@ import {
 } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent, encryptContent } from "../../security/content-cipher";
 import type { MemoryConnection } from "../entities/memory-connection";
 import type { Memory } from "../entities/memory";
 import type { MemoryRepository } from "./memory.repository";
@@ -18,11 +19,12 @@ function toMemory(row: MemoryRow): Memory {
     lifeGraphId: createEntityId(row.lifeGraphId),
     personId: row.personId ? createEntityId(row.personId) : undefined,
     type: row.type,
-    content: row.content,
+    content: decryptContent(row.content),
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,
     suppressed: row.suppressed,
+    hiddenFromUser: row.hiddenFromUser,
     rank:
       row.rankScore !== null && row.rankedAt !== null
         ? { score: row.rankScore, rankedAt: row.rankedAt }
@@ -121,11 +123,12 @@ export class DrizzleMemoryRepository implements MemoryRepository {
         lifeGraphId: memory.lifeGraphId,
         personId: memory.personId ?? null,
         type: memory.type,
-        content: memory.content,
+        content: encryptContent(memory.content),
         source: memory.source,
         sourceId: memory.sourceId ?? null,
         status: memory.status,
         suppressed: memory.suppressed ?? false,
+        hiddenFromUser: memory.hiddenFromUser ?? false,
         rankScore: memory.rank?.score ?? null,
         rankedAt: memory.rank?.rankedAt ?? null,
         occurredAt: memory.occurredAt ?? null,
@@ -137,11 +140,12 @@ export class DrizzleMemoryRepository implements MemoryRepository {
         set: {
           personId: memory.personId ?? null,
           type: memory.type,
-          content: memory.content,
+          content: encryptContent(memory.content),
           source: memory.source,
           sourceId: memory.sourceId ?? null,
           status: memory.status,
           suppressed: memory.suppressed ?? false,
+          hiddenFromUser: memory.hiddenFromUser ?? false,
           rankScore: memory.rank?.score ?? null,
           rankedAt: memory.rank?.rankedAt ?? null,
           occurredAt: memory.occurredAt ?? null,
@@ -160,6 +164,23 @@ export class DrizzleMemoryRepository implements MemoryRepository {
   async delete(context: LifeGraphContext, id: EntityId): Promise<void> {
     await this.db
       .delete(memories)
+      .where(
+        and(
+          eq(memories.id, id),
+          eq(memories.lifeGraphId, context.lifeGraphId),
+        ),
+      );
+  }
+
+  /** Update acotado a una sola columna + `updatedAt` -- mismo criterio de ownership que `delete()`, nunca requiere el `Memory` completo para este cambio. */
+  async setHiddenFromUser(
+    context: LifeGraphContext,
+    id: EntityId,
+    hidden: boolean,
+  ): Promise<void> {
+    await this.db
+      .update(memories)
+      .set({ hiddenFromUser: hidden, updatedAt: new Date() })
       .where(
         and(
           eq(memories.id, id),

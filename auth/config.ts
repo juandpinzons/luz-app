@@ -3,6 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 import { db } from "../core/db/client";
 import { recordEvent } from "../core/observability/record-event";
 import { users } from "../core/db/schema/users";
+import { withEncryptedAccountTokens } from "./encrypted-adapter";
 import { providers } from "./providers";
 import { accounts, sessions, verificationTokens } from "./schema";
 
@@ -16,12 +17,14 @@ import { accounts, sessions, verificationTokens } from "./schema";
  * `sessions` (auth/schema.ts), revocable desde el servidor.
  */
 export const authConfig: NextAuthConfig = {
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  adapter: withEncryptedAccountTokens(
+    DrizzleAdapter(db, {
+      usersTable: users,
+      accountsTable: accounts,
+      sessionsTable: sessions,
+      verificationTokensTable: verificationTokens,
+    }),
+  ),
   session: {
     strategy: "database",
   },

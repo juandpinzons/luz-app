@@ -10,6 +10,7 @@ import {
 } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent, encryptContent } from "../../security/content-cipher";
 import type { BeliefEvidence } from "../entities/belief-evidence";
 import type { BeliefEvidenceWithStatus } from "../entities/belief-evidence-with-status";
 import type { BeliefHistoryEntry } from "../entities/belief-history-entry";
@@ -21,7 +22,7 @@ function toBelief(row: BeliefRow): Belief {
     id: createEntityId(row.id),
     lifeGraphId: createEntityId(row.lifeGraphId),
     subjectPersonId: createEntityId(row.subjectPersonId),
-    statement: row.statement,
+    statement: decryptContent(row.statement),
     domain: row.domain ?? undefined,
     category: row.category,
     status: row.status,
@@ -105,7 +106,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
         id: belief.id,
         lifeGraphId: belief.lifeGraphId,
         subjectPersonId: belief.subjectPersonId,
-        statement: belief.statement,
+        statement: encryptContent(belief.statement),
         domain: belief.domain ?? null,
         category: belief.category,
         status: belief.status,
@@ -119,7 +120,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
       .onConflictDoUpdate({
         target: beliefs.id,
         set: {
-          statement: belief.statement,
+          statement: encryptContent(belief.statement),
           domain: belief.domain ?? null,
           category: belief.category,
           status: belief.status,
@@ -304,7 +305,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
           id: belief.id,
           lifeGraphId: belief.lifeGraphId,
           subjectPersonId: belief.subjectPersonId,
-          statement: belief.statement,
+          statement: encryptContent(belief.statement),
           domain: belief.domain ?? null,
           category: belief.category,
           status: belief.status,
@@ -318,7 +319,7 @@ export class DrizzleBeliefRepository implements BeliefRepository {
         .onConflictDoUpdate({
           target: beliefs.id,
           set: {
-            statement: belief.statement,
+            statement: encryptContent(belief.statement),
             domain: belief.domain ?? null,
             category: belief.category,
             status: belief.status,

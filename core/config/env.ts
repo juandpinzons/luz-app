@@ -56,6 +56,26 @@ const envSchema = z.object({
       (value) => Buffer.from(value, "base64").length === 32,
       "CALENDAR_CREDENTIALS_ENCRYPTION_KEY debe decodificar a 32 bytes en base64 (genera uno con: openssl rand -base64 32).",
     ),
+
+  /**
+   * Clave de cifrado (AES-256-GCM, `core/security/content-cipher.ts`,
+   * ADR-0024) para la SUSTANCIA del contenido -- memorias, creencias,
+   * insights, conceptos, contradicciones, conclusiones de razonamiento,
+   * mensajes de conversación, feedback, embeddings.content, y los
+   * tokens OAuth de Auth.js. DISTINTA de
+   * `CALENDAR_CREDENTIALS_ENCRYPTION_KEY` a propósito -- comprometer
+   * una no debe comprometer la otra. 32 bytes en base64
+   * (`openssl rand -base64 32`). Obligatoria: sin esto, nada de lo que
+   * una persona dice puede guardarse ni leerse, nunca cae a texto
+   * plano por defecto.
+   */
+  CONTENT_ENCRYPTION_KEY: z
+    .string()
+    .min(1, "CONTENT_ENCRYPTION_KEY es obligatorio (genera uno con: openssl rand -base64 32).")
+    .refine(
+      (value) => Buffer.from(value, "base64").length === 32,
+      "CONTENT_ENCRYPTION_KEY debe decodificar a 32 bytes en base64 (genera uno con: openssl rand -base64 32).",
+    ),
 });
 
 export type Env = z.infer<typeof envSchema>;

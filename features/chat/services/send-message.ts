@@ -16,6 +16,7 @@ import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
 import { logTraceSummary, runTrace, span } from "../../../core/observability/trace";
 import { DrizzleSeenPromptRepository, SEEN_PROMPT_SUBJECT_TYPES } from "../../../core/seen-prompts";
+import { decryptContent, encryptContent, encryptContentOrNull } from "../../../core/security/content-cipher";
 import { generateConversationTitle } from "../../conversations/services/generate-title";
 import { detectCrisisSignal, CRISIS_RESOURCE_MESSAGE } from "./detect-crisis-signal";
 import { detectImageGenerationRequest } from "./detect-image-generation-request";
@@ -234,8 +235,8 @@ async function prepareMessageInner(
         conversationId,
         userId: context.userId,
         role: "user",
-        content: input.message,
-        imageData: input.image,
+        content: encryptContent(input.message),
+        imageData: encryptContentOrNull(input.image),
       })
       .returning();
 
@@ -257,7 +258,15 @@ async function prepareMessageInner(
       .orderBy(desc(conversationMessages.createdAt))
       .limit(MAX_HISTORY_MESSAGES);
 
-    return { userMessage: inserted, history: recentHistory.reverse() };
+    // Descifrado inmediatamente al salir de la base -- de aquí en
+    // adelante `history` (y todo lo que se construya desde ella, como
+    // `conversation` más abajo) siempre está en texto plano (ADR-0024).
+    const decryptedHistory = recentHistory.map((row) => ({
+      ...row,
+      content: decryptContent(row.content),
+    }));
+
+    return { userMessage: inserted, history: decryptedHistory.reverse() };
   });
   logger.log({
     event: "db.query",
@@ -590,8 +599,8 @@ async function finalizeReplyInner(
         conversationId,
         userId: context.userId,
         role: "assistant",
-        content: reply,
-        imageData,
+        content: encryptContent(reply),
+        imageData: encryptContentOrNull(imageData),
       }),
     ),
     // Diversidad conversacional (redesign del pipeline conversacional,

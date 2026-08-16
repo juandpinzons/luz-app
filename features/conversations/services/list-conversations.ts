@@ -1,8 +1,9 @@
-import { and, asc, count, desc, eq, ilike, inArray, max } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, max } from "drizzle-orm";
 import type { Database } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { ConversationCategory } from "../../../core/db/schema/conversations";
 import type { UserContext } from "../../../core/identity/user-context";
+import { decryptContent } from "../../../core/security/content-cipher";
 
 const PREVIEW_MAX_LENGTH = 80;
 /**
@@ -46,36 +47,40 @@ function truncate(text: string, maxLength: number): string {
     : `${trimmed.slice(0, maxLength).trimEnd()}…`;
 }
 
-/** Escapa los comodines de ILIKE (`%`, `_`, `\`) para que la búsqueda trate el término como texto literal. */
-function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
-}
-
 /**
- * Subconsulta (nunca un `await` propio — se embebe con `inArray` en las
- * dos consultas de abajo, así que buscar no agrega una tercera consulta):
- * ids de conversación con al menos un mensaje que matchea el término,
- * acotado al usuario. Se construye dos veces (una por cada uso) porque
- * un query builder de Drizzle no es seguro de reutilizar entre dos
- * consultas distintas.
+ * `content` está cifrado (ADR-0024) -- un `ILIKE` a nivel SQL sobre la
+ * columna ya no puede encontrar nada (compara contra ciphertext, no
+ * contra el texto real). Esta es la tercera consulta que el docblock
+ * de `listConversations` decía evitar; ya no es evitable manteniendo
+ * la búsqueda funcionando de verdad: trae los mensajes del usuario
+ * (acotado por `conversation_messages_user_id_idx`, nunca global),
+ * descifra, y filtra en memoria. Costo aceptado a propósito -- mismo
+ * criterio que la nota de `CONVERSATION_LIST_LIMIT` sobre no
+ * optimizar para un volumen que ningún usuario real tiene todavía;
+ * revisar si esto deja de ser cierto.
  */
-function matchingConversationIdsSubquery(
+async function findMatchingConversationIds(
   db: Database,
   userId: string,
   searchTerm: string,
-) {
-  return db
-    .select({ id: conversationMessages.conversationId })
+): Promise<string[]> {
+  const rows = await db
+    .select({
+      conversationId: conversationMessages.conversationId,
+      content: conversationMessages.content,
+    })
     .from(conversationMessages)
-    .where(
-      and(
-        eq(conversationMessages.userId, userId),
-        ilike(
-          conversationMessages.content,
-          `%${escapeLikePattern(searchTerm)}%`,
-        ),
-      ),
-    );
+    .where(eq(conversationMessages.userId, userId));
+
+  const needle = searchTerm.toLowerCase();
+  const matching = new Set<string>();
+  for (const row of rows) {
+    if (decryptContent(row.content).toLowerCase().includes(needle)) {
+      matching.add(row.conversationId);
+    }
+  }
+
+  return [...matching];
 }
 
 /**
@@ -113,23 +118,21 @@ export async function listConversations(
 ): Promise<ConversationListItem[]> {
   const searchTerm = options.searchTerm?.trim();
 
+  const matchingConversationIds = searchTerm
+    ? await findMatchingConversationIds(db, context.userId, searchTerm)
+    : null;
+
   const conversationsFilter = searchTerm
     ? and(
         eq(conversations.userId, context.userId),
-        inArray(
-          conversations.id,
-          matchingConversationIdsSubquery(db, context.userId, searchTerm),
-        ),
+        inArray(conversations.id, matchingConversationIds ?? []),
       )
     : eq(conversations.userId, context.userId);
 
   const messagesFilter = searchTerm
     ? and(
         eq(conversationMessages.userId, context.userId),
-        inArray(
-          conversationMessages.conversationId,
-          matchingConversationIdsSubquery(db, context.userId, searchTerm),
-        ),
+        inArray(conversationMessages.conversationId, matchingConversationIds ?? []),
       )
     : eq(conversationMessages.userId, context.userId);
 
@@ -171,7 +174,7 @@ export async function listConversations(
         );
 
   const previewByConversationId = new Map(
-    firstMessages.map((message) => [message.conversationId, message.content]),
+    firstMessages.map((message) => [message.conversationId, decryptContent(message.content)]),
   );
 
   return stats.map((row) => ({

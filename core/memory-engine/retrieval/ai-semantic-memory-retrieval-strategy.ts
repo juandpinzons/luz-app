@@ -4,6 +4,7 @@ import type { Database } from "../../db/client";
 import { type MemoryRow, memories, memoryEmbeddings } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent } from "../../security/content-cipher";
 import type { Memory } from "../entities/memory";
 import type { MemoryQuery } from "./memory-query";
 import type { MemoryRetrievalStrategy } from "./memory-retrieval-strategy";
@@ -24,7 +25,7 @@ function toMemory(row: MemoryRow): Memory {
     lifeGraphId: createEntityId(row.lifeGraphId),
     personId: row.personId ? createEntityId(row.personId) : undefined,
     type: row.type,
-    content: row.content,
+    content: decryptContent(row.content),
     source: row.source,
     sourceId: row.sourceId ?? undefined,
     status: row.status,

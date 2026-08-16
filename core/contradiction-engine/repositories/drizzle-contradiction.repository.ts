@@ -3,6 +3,7 @@ import type { Database } from "../../db/client";
 import { type ContradictionRow, contradictions } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
+import { decryptContent, decryptContentOrNull, encryptContent, encryptContentOrNull } from "../../security/content-cipher";
 import type { Contradiction, ContradictionRef } from "../entities/contradiction";
 import type { ContradictionRepository } from "./contradiction.repository";
 
@@ -13,10 +14,10 @@ function toContradiction(row: ContradictionRow): Contradiction {
     kind: row.kind,
     left: { refType: row.leftRefType, refId: createEntityId(row.leftRefId) },
     right: { refType: row.rightRefType, refId: createEntityId(row.rightRefId) },
-    description: row.description,
+    description: decryptContent(row.description),
     domain: row.domain ?? undefined,
     status: row.status,
-    resolutionNote: row.resolutionNote ?? undefined,
+    resolutionNote: decryptContentOrNull(row.resolutionNote) ?? undefined,
     detectedAt: row.detectedAt,
     resolvedAt: row.resolvedAt ?? undefined,
     createdAt: row.createdAt,
@@ -94,10 +95,10 @@ export class DrizzleContradictionRepository implements ContradictionRepository {
         leftRefId: contradiction.left.refId,
         rightRefType: contradiction.right.refType,
         rightRefId: contradiction.right.refId,
-        description: contradiction.description,
+        description: encryptContent(contradiction.description),
         domain: contradiction.domain ?? null,
         status: contradiction.status,
-        resolutionNote: contradiction.resolutionNote ?? null,
+        resolutionNote: encryptContentOrNull(contradiction.resolutionNote),
         detectedAt: contradiction.detectedAt,
         resolvedAt: contradiction.resolvedAt ?? null,
         createdAt: contradiction.createdAt,
@@ -106,9 +107,9 @@ export class DrizzleContradictionRepository implements ContradictionRepository {
       .onConflictDoUpdate({
         target: contradictions.id,
         set: {
-          description: contradiction.description,
+          description: encryptContent(contradiction.description),
           status: contradiction.status,
-          resolutionNote: contradiction.resolutionNote ?? null,
+          resolutionNote: encryptContentOrNull(contradiction.resolutionNote),
           resolvedAt: contradiction.resolvedAt ?? null,
           updatedAt: contradiction.updatedAt,
         },
