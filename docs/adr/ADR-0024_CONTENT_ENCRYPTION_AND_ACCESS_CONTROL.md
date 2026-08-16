@@ -75,16 +75,28 @@ Decision 2). Applied to:
   even though confirmed currently unpopulated (`notes: undefined` at
   both call sites per the prior audit) — the column allows it, so it
   is encrypted the moment anything is ever written there.
+- `memory_embeddings.content` — **correction, same day this ADR was
+  written**: an earlier version of this Decision excluded
+  `memory_embeddings` as "confirmed unused." That was accurate when
+  checked, and became false within hours: commit `e61dc51`
+  ("real semantic retrieval, closing MEMORY_ENGINE_MIGRATION_PLAN Phase
+  B") shipped `generate-memory-embedding.ts`, which calls
+  `AIProvider.embed()` (OpenAI `text-embedding-3-small` — a fourth
+  distinct OpenAI API surface alongside chat completions, image
+  generation, and image vision) and persists a **plaintext duplicate**
+  of `memory.content` into `memory_embeddings.content` alongside the
+  vector, and is genuinely wired into live retrieval
+  (`features/chat/services/select-contextual-memories.ts`). This
+  column is in scope from the start of implementation, not deferred.
+  The `embedding` vector column itself is not encrypted by this
+  decision (a vector is not the plaintext and is not human-readable on
+  a casual `SELECT`) but should be reviewed if embedding-inversion risk
+  is ever assessed as material — not decided here.
 
 Decryption happens only inside the repository layer, immediately
 before use — the same discipline `secret-cipher.ts` already follows:
 `core/life`, `features/`, and every engine above the repository
 continue to see plain domain objects, never ciphertext, never a key.
-
-Explicitly out of scope for this pass: `memory_embeddings`/pgvector.
-Confirmed unused (zero generation anywhere in the codebase, multiple
-audits this session) — nothing to encrypt yet. Revisit under Future
-if embeddings are ever activated.
 
 ### 2. Key separation from database access
 
@@ -177,10 +189,13 @@ daily-use credential for anyone, including engineering.
   a managed KMS once operational maturity justifies the added
   complexity — env var is this ADR's pragmatic Phase 1, not the end
   state.
-- Decide explicitly, if `memory_embeddings` is ever activated, whether
-  embedding generation reads decrypted content (likely required) and
-  whether the embedding vectors themselves need protection — not
-  decided here.
+- `memory_embeddings` is no longer a future consideration — it is
+  live (see Decision 1's correction). Embedding generation
+  (`generate-memory-embedding.ts`) will need to read decrypted
+  `memory.content` to call `AIProvider.embed()`, the same repository-
+  layer decrypt-before-use pattern as every other consumer; whether the
+  embedding vectors themselves warrant separate protection against
+  inversion risk remains open, not decided here.
 - AI-provider data-retention terms (LUZ-POL-003 CRITICAL #1) remain a
   related, distinct, unclosed gap — encrypting storage does not change
   what OpenAI receives per message.
