@@ -1,5 +1,5 @@
 import { index, integer, pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
-import type { WearableProviderKind } from "../../../features/reality/domain";
+import type { WearableProviderKind } from "../../wearable-metrics/domain";
 import { lifeGraphs } from "./life-graph";
 
 /**

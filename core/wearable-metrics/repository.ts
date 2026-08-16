@@ -2,8 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { wearableDailyMetrics, type WearableDailyMetricsRow } from "../db/schema/wearable";
 import type { EntityId } from "../life/value-objects/entity-id";
-import type { DailyWearableMetrics } from "../../features/reality/domain/wearable-daily-metrics";
-import type { WearableProviderKind } from "../../features/reality/domain/wearable-provider-kind";
+import type { DailyWearableMetrics, WearableProviderKind } from "./domain";
 
 /**
  * Capa de persistencia real de `DailyWearableMetrics`
