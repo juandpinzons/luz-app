@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
+import { CalendarIcon, EnvelopeIcon, WatchIcon } from "@/components/ui/icons";
 import { db } from "@/core/db/client";
 import { getStoredEmailConnection } from "@/core/email-connections/repository";
 import { getStoredCalendarConnection } from "@/core/calendar-connections/repository";
@@ -63,12 +64,7 @@ export default async function ConnectionsPage() {
       href: "/calendar",
       connected: calendarConnected,
       needsReauth: storedCalendar?.connection.status === "needs_reauth",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-          <rect x="3.5" y="5" width="17" height="16" rx="2" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        </svg>
-      ),
+      icon: <CalendarIcon className="h-5 w-5" />,
     },
     {
       key: "gmail",
@@ -77,12 +73,7 @@ export default async function ConnectionsPage() {
       href: "/gmail",
       connected: emailConnected,
       needsReauth: storedEmail?.connection.status === "needs_reauth",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-          <path d="m4 6.5 8 6.5 8-6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
+      icon: <EnvelopeIcon className="h-5 w-5" />,
     },
     {
       key: "garmin",
@@ -91,12 +82,7 @@ export default async function ConnectionsPage() {
       href: "/garmin",
       connected: wearable.hasData,
       needsReauth: false,
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-          <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.6" />
-          <path d="M12 7.5V12l3 2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
+      icon: <WatchIcon className="h-5 w-5" />,
     },
   ];
 

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { CheckIcon, CopyIcon, ImageIcon, MicIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
@@ -189,17 +190,12 @@ function CopyMessageButton({ content, align }: { content: string; align: "left" 
     >
       {copied ? (
         <>
-          <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-            <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <CheckIcon className="h-3.5 w-3.5" />
           Copiado
         </>
       ) : (
         <>
-          <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-            <rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
+          <CopyIcon className="h-3.5 w-3.5" />
           Copiar
         </>
       )}
@@ -1068,17 +1064,7 @@ function ChatPageContent() {
               {isProcessingImage ? (
                 <span className="block h-5 w-5 animate-spin rounded-full border-2 border-zinc-500 border-t-white" />
               ) : (
-                <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.7" />
-                  <circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" />
-                  <path
-                    d="m4.5 17 5-5 4 4 3-3 4 4"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
+                <ImageIcon className="h-5 w-5" />
               )}
             </button>
 
@@ -1098,15 +1084,7 @@ function ChatPageContent() {
                 {isTranscribing ? (
                   <span className="block h-5 w-5 animate-spin rounded-full border-2 border-zinc-500 border-t-white" />
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
-                    <rect x="9" y="2" width="6" height="12" rx="3" fill="currentColor" />
-                    <path
-                      d="M5 11a7 7 0 0 0 14 0M12 18v3"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                    />
-                  </svg>
+                  <MicIcon className="h-5 w-5" />
                 )}
               </button>
             )}
