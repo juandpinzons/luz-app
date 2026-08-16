@@ -1,3 +1,18 @@
+/**
+ * `features/chat` -> `features/home` (`getLiveCalendarContext`,
+ * `HomeCalendarContext`) es una dependencia cruzada entre features
+ * deliberada, no accidental (auditoría de arquitectura, 2026-08-15/16)
+ * -- no la introduce este archivo: `assemble-reconnection-context.ts`
+ * y `calendar-signals.ts` (mismo directorio) ya dependían de
+ * `features/home` antes de esta auditoría. `features/home/` es dueño
+ * tanto del traductor puro (`build-calendar-context.ts`) como de su
+ * contraparte impura (`get-live-calendar-context.ts`, ver docblock de
+ * ese archivo) precisamente para que ningún llamador -- Home, Chat, o
+ * `app/calendar/page.tsx` -- tenga su propia copia de "cómo sincronizar
+ * calendario en vivo". La alternativa (duplicar esa lógica dentro de
+ * `features/chat`) sería la "lógica duplicada" que el resto de este
+ * repo ya evita por regla.
+ */
 import { getLiveCalendarContext } from "../../home/services/get-live-calendar-context";
 import type { Database } from "../../../core/db/client";
 import type { LifeGraphContext } from "../../../core/life";
