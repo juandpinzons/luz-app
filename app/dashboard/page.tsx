@@ -764,18 +764,6 @@ export default async function DashboardPage() {
           </section>
         )}
 
-      {calendarOutcome?.status === "not_connected" && (
-        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "180ms" }}>
-          <Link
-            href="/calendar/connect"
-            className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300"
-          >
-            Conecta tu calendario
-          </Link>{" "}
-          para ver qué tienes ocupado y libre.
-        </p>
-      )}
-
       {/*
         "Esperando tu respuesta" -- la señal `waiting_reply` es la única
         de las cinco de `EmailSnapshot` que pide una acción real (a
@@ -804,21 +792,24 @@ export default async function DashboardPage() {
         </section>
       )}
 
-      {emailOutcome?.status === "not_connected" && (
+      {/*
+        Auditoría de interfaz (2026-08-15): antes, cada fuente sin
+        conectar tenía su propio párrafo suelto ("Conecta tu
+        calendario", "Conecta tu Gmail", "Tu acceso a Gmail expiró")
+        -- densidad creciendo en Hoy con cada fuente nueva que se
+        agregara. Un solo enlace a `/connections` (que ya lista las
+        tres con su estado real) cubre cualquier combinación sin sumar
+        un párrafo por fuente. Solo se muestra si de verdad falta algo
+        -- ambas ya conectadas y sanas, nada que ofrecer acá.
+      */}
+      {(calendarOutcome?.status !== "connected" ||
+        emailOutcome?.status === "not_connected" ||
+        emailOutcome?.status === "needs_reauth") && (
         <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
-          <Link href="/gmail" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
-            Conecta tu Gmail
+          <Link href="/connections" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
+            Conecta tus fuentes externas
           </Link>{" "}
-          para ver qué correos son nuevos, importantes o siguen esperando respuesta.
-        </p>
-      )}
-
-      {emailOutcome?.status === "needs_reauth" && (
-        <p className="animate-fade-in mt-8 text-sm text-amber-500/80" style={{ animationDelay: "190ms" }}>
-          Tu acceso a Gmail expiró.{" "}
-          <Link href="/gmail" className="underline decoration-amber-700 underline-offset-4 transition hover:text-amber-300">
-            Reconectar
-          </Link>
+          para que LUZ vea más de tu vida real, no solo lo que le cuentas.
         </p>
       )}
 

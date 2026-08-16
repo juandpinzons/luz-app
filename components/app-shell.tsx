@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
-import { DeleteAccountButton } from "@/components/delete-account-button";
 import { PresenceDot } from "@/components/ui/presence-dot";
 import { SubmitButton } from "@/components/ui/submit-button";
 
@@ -106,8 +105,6 @@ export async function AppShell({
                 Cerrar sesión
               </SubmitButton>
             </form>
-
-            <DeleteAccountButton />
           </div>
         )}
       </header>
