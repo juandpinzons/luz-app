@@ -799,19 +799,23 @@ export default async function DashboardPage() {
         -- densidad creciendo en Hoy con cada fuente nueva que se
         agregara. Un solo enlace a `/connections` (que ya lista las
         tres con su estado real) cubre cualquier combinación sin sumar
-        un párrafo por fuente. Solo se muestra si de verdad falta algo
-        -- ambas ya conectadas y sanas, nada que ofrecer acá.
+        un párrafo por fuente.
+
+        Ampliación 2026-08-17 (pedido directo del Founder): antes este
+        enlace solo aparecía si algo estaba sin conectar -- con todo
+        conectado, desaparecía por completo y "/connections" se volvía
+        invisible desde Hoy. Ahora siempre está, mismo texto discreto
+        de siempre (nunca compite con el saludo ni con la experiencia
+        primaria) -- `/connections` ahora también muestra la visión de
+        producto ("Próximamente"), no solo el estado de lo ya
+        conectado, así que vale la pena que siempre se pueda llegar.
       */}
-      {(calendarOutcome?.status !== "connected" ||
-        emailOutcome?.status === "not_connected" ||
-        emailOutcome?.status === "needs_reauth") && (
-        <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
-          <Link href="/connections" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
-            Conecta tus fuentes externas
-          </Link>{" "}
-          para que LUZ vea más de tu vida real, no solo lo que le cuentas.
-        </p>
-      )}
+      <p className="animate-fade-in mt-8 text-sm text-zinc-500" style={{ animationDelay: "190ms" }}>
+        <Link href="/connections" className="underline decoration-zinc-700 underline-offset-4 transition hover:text-zinc-300">
+          Conexiones
+        </Link>{" "}
+        — qué apps y fuentes puede ver LUZ, además de lo que le cuentas.
+      </p>
 
       <Link
         href="/chat"

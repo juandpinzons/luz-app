@@ -2,7 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
-import { CalendarIcon, EnvelopeIcon, WatchIcon } from "@/components/ui/icons";
+import {
+  CalendarIcon,
+  ChatBubbleIcon,
+  EnvelopeIcon,
+  HeartPulseIcon,
+  MusicNoteIcon,
+  RunIcon,
+  WatchIcon,
+} from "@/components/ui/icons";
 import { db } from "@/core/db/client";
 import { getStoredEmailConnection } from "@/core/email-connections/repository";
 import { getStoredCalendarConnection } from "@/core/calendar-connections/repository";
@@ -22,7 +30,42 @@ import { getWearableSnapshot } from "@/features/reality/application/get-wearable
  * en qué estado, no traer el snapshot completo. Nunca un cuarto camino que
  * pueda desincronizarse de esos dos -- mismo `getStoredXConnection` que
  * ellos mismos usan como primer paso.
+ *
+ * Ampliación 2026-08-17 (pedido directo del Founder): "Próximamente"
+ * es visión de producto, no una funcionalidad real -- estas cuatro
+ * tarjetas nunca son un `<Link>`, nunca cambian de estado, nunca
+ * escriben nada. Ninguna promesa de fecha, solo el nombre y qué
+ * aportaría. Lista cerrada, decidida por el Founder (WhatsApp, Apple
+ * Health, Strava, Spotify) -- no una lista que este código deba
+ * inventar ni ampliar por su cuenta.
  */
+const COMING_SOON: { key: string; name: string; description: string; icon: React.ReactNode }[] = [
+  {
+    key: "whatsapp",
+    name: "WhatsApp",
+    description: "Mensajes y contactos que ya son parte de tu día a día.",
+    icon: <ChatBubbleIcon className="h-5 w-5" />,
+  },
+  {
+    key: "apple-health",
+    name: "Apple Health",
+    description: "Salud y actividad física, para quien no usa reloj Garmin.",
+    icon: <HeartPulseIcon className="h-5 w-5" />,
+  },
+  {
+    key: "strava",
+    name: "Strava",
+    description: "Tus entrenamientos y progreso físico.",
+    icon: <RunIcon className="h-5 w-5" />,
+  },
+  {
+    key: "spotify",
+    name: "Spotify",
+    description: "Qué escuchas y cuándo, otra ventana a tu estado de ánimo.",
+    icon: <MusicNoteIcon className="h-5 w-5" />,
+  },
+];
+
 export default async function ConnectionsPage() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -122,6 +165,25 @@ export default async function ConnectionsPage() {
                   {row.needsReauth ? "Reconectar" : row.connected ? "Conectado" : "Conectar"}
                 </span>
               </Link>
+            </li>
+          ))}
+        </ul>
+
+        <h2 className="mt-10 text-xs font-medium tracking-wide text-zinc-600 uppercase">
+          Próximamente
+        </h2>
+        <ul className="mt-3 space-y-3">
+          {COMING_SOON.map((item) => (
+            <li
+              key={item.key}
+              className="flex items-center gap-4 rounded-2xl border border-zinc-900 px-5 py-4 opacity-60"
+            >
+              <span className="flex-shrink-0 text-zinc-500">{item.icon}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-zinc-300">{item.name}</span>
+                <span className="block truncate text-xs text-zinc-600">{item.description}</span>
+              </span>
+              <span className="flex-shrink-0 text-xs text-zinc-600">Pronto</span>
             </li>
           ))}
         </ul>

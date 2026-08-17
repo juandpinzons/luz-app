@@ -82,3 +82,79 @@ export function WatchIcon(props: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Cuatro íconos "Próximamente" (auditoría de conectividad, 2026-08-17)
+ * -- representacionales, nunca el logo real de la marca (mismo
+ * criterio que Calendar/Gmail/Garmin arriba: LUZ dibuja su propio
+ * glifo para el concepto, no reproduce marcas de terceros).
+ */
+export function ChatBubbleIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M4 12a8 8 0 1 1 3.5 6.6L4 20l1.2-3.6A7.96 7.96 0 0 1 4 12Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function NotebookIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <rect x="4.5" y="3.5" width="15" height="17" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8.5 8h7M8.5 12h7M8.5 16h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function RunIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <circle cx="14.5" cy="5" r="1.8" fill="currentColor" />
+      <path
+        d="M10 21l2.5-5 3-1.5-1-4-3 1L9 8l4-2 3 3 3-1M6 15l3-2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function HeartPulseIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12 20.5s-7.5-4.6-9.5-9.4C1.3 7.8 3.2 5 6.3 5c1.9 0 3.3 1 3.7 2.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M12 20.5s7.5-4.6 9.5-9.4C22.7 7.8 20.8 5 17.7 5c-1.9 0-3.3 1-3.7 2.3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M3.5 12h3l1.5-3 2 5 1.5-2.5h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function MusicNoteIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <circle cx="7" cy="18" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <circle cx="17" cy="16" r="2.5" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M9.5 18V5.5L19.5 4v12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
