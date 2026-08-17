@@ -22,6 +22,7 @@ import { DrizzleContradictionRepository } from "@/core/contradiction-engine";
 import { DrizzleInsightRepository, DrizzleReasoningRepository } from "@/core/knowledge-engine";
 import { decryptContentOrNull } from "@/core/security/content-cipher";
 import { isAdmin } from "../../is-admin";
+import { requireAdminMfa } from "../../require-mfa";
 
 const userIdSchema = z.string().uuid();
 
@@ -62,6 +63,7 @@ export default async function AdminUserDetailPage({
   }
   const adminUserId = session.user.id;
   const adminEmail = session.user.email;
+  await requireAdminMfa(adminUserId);
 
   const { id } = await params;
   const parsedId = userIdSchema.safeParse(id);
@@ -266,6 +268,14 @@ export default async function AdminUserDetailPage({
 
       {/* Memoria */}
       <Section title="Memoria — qué recuerda LUZ, textualmente">
+        {memories.some((m) => m.hiddenFromUser) && (
+          <p className="mb-3 rounded-lg border border-amber-900 bg-amber-950/30 px-4 py-2 text-xs text-amber-500">
+            Esta lista incluye memorias que la persona ocultó de su propia
+            vista (marcadas abajo). Ocultar es un control de vista personal,
+            no de acceso — este panel muestra el entendimiento completo de
+            LUZ a propósito (auditoría de privacidad, 2026-08-17).
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="Memorias activas" value={memories.length} />
           <Stat label="Rank score promedio" value={avgScore} />
@@ -298,6 +308,11 @@ export default async function AdminUserDetailPage({
               </div>
               <div className="mt-1 text-xs text-zinc-500">
                 {m.type} · {m.source} · {fmtDate((m.occurredAt ?? m.createdAt).toISOString())}
+                {m.hiddenFromUser && (
+                  <span className="ml-2 rounded border border-amber-900 px-1.5 py-0.5 text-amber-500">
+                    oculta de su vista
+                  </span>
+                )}
               </div>
             </div>
           ))}

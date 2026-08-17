@@ -61,3 +61,36 @@ export const wearableDailyMetrics = pgTable(
 
 export type WearableDailyMetricsRow = typeof wearableDailyMetrics.$inferSelect;
 export type NewWearableDailyMetricsRow = typeof wearableDailyMetrics.$inferInsert;
+
+/**
+ * Consentimiento real antes de compartir datos de wearable (auditoría
+ * de privacidad, 2026-08-17) -- hasta ahora, `/garmin` solo mostraba un
+ * `mailto:` con instrucciones, sin ninguna captura de consentimiento,
+ * y `.scratch/import-garmin-export.ts` importaba sin verificar nada.
+ * Esta tabla es el registro real: una fila por LifeGraph+provider,
+ * consultada tanto por la UI (para no repetir el checkbox) como por el
+ * script de importación (que ahora rechaza importar sin una fila aquí
+ * -- ver ese archivo). No hay `onDelete` hacia texto libre que
+ * proteger, así que no pasa por `content-cipher.ts`: solo son
+ * metadatos de que el consentimiento ocurrió, no su contenido.
+ */
+export const wearableConsents = pgTable(
+  "wearable_consents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    lifeGraphId: uuid("life_graph_id")
+      .notNull()
+      .references((): AnyPgColumn => lifeGraphs.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().$type<WearableProviderKind>(),
+    consentedAt: timestamp("consented_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("wearable_consents_life_graph_provider_idx").on(
+      table.lifeGraphId,
+      table.provider,
+    ),
+  ],
+);
+
+export type WearableConsentRow = typeof wearableConsents.$inferSelect;
+export type NewWearableConsentRow = typeof wearableConsents.$inferInsert;

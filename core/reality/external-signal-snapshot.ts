@@ -10,6 +10,7 @@ export const EXTERNAL_SIGNAL_SOURCES = [
   "document",
   "email",
   "sensor",
+  "youtube",
 ] as const;
 
 export type ExternalSignalSource = (typeof EXTERNAL_SIGNAL_SOURCES)[number];

@@ -5,6 +5,7 @@ import {
   type MemoryRow,
   memories,
   memoryConnections,
+  memoryEmbeddings,
 } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
 import { type EntityId, createEntityId } from "../../life/value-objects/entity-id";
@@ -161,15 +162,35 @@ export class DrizzleMemoryRepository implements MemoryRepository {
     return toMemory(row);
   }
 
+  /**
+   * Borrado real de la Memory Y de su `memory_embeddings` correspondiente
+   * (auditoría de privacidad, 2026-08-17) -- `memory_embeddings.sourceId`
+   * no tiene `references()` (es polimórfica, ver `core/db/schema/memory.ts`),
+   * así que un `DELETE` sobre `memories` nunca la tocaba por cascada: sin
+   * este fix, borrar una memoria dejaba una copia cifrada del mismo
+   * contenido -- más el vector semántico -- huérfana para siempre.
+   * Transacción para que ninguna de las dos operaciones quede a medias.
+   */
   async delete(context: LifeGraphContext, id: EntityId): Promise<void> {
-    await this.db
-      .delete(memories)
-      .where(
-        and(
-          eq(memories.id, id),
-          eq(memories.lifeGraphId, context.lifeGraphId),
-        ),
-      );
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(memories)
+        .where(
+          and(
+            eq(memories.id, id),
+            eq(memories.lifeGraphId, context.lifeGraphId),
+          ),
+        );
+      await tx
+        .delete(memoryEmbeddings)
+        .where(
+          and(
+            eq(memoryEmbeddings.lifeGraphId, context.lifeGraphId),
+            eq(memoryEmbeddings.sourceType, "memory"),
+            eq(memoryEmbeddings.sourceId, id),
+          ),
+        );
+    });
   }
 
   /** Update acotado a una sola columna + `updatedAt` -- mismo criterio de ownership que `delete()`, nunca requiere el `Memory` completo para este cambio. */

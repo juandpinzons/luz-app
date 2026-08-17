@@ -166,3 +166,13 @@ export function MusicNoteIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** Genérico ("reproducir dentro de un marco"), nunca el logo real de YouTube -- mismo criterio que el resto de este archivo. */
+export function PlayIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <rect x="2.5" y="5" width="19" height="14" rx="3" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M10.5 9.3v5.4l4.5-2.7-4.5-2.7Z" fill="currentColor" />
+    </svg>
+  );
+}

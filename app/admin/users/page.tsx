@@ -6,6 +6,7 @@ import { db } from "@/core/db/client";
 import { accountIdentities } from "@/auth/schema";
 import { conversationMessages, conversations, memories, users } from "@/core/db/schema";
 import { isAdmin } from "../is-admin";
+import { requireAdminMfa } from "../require-mfa";
 
 /**
  * Punto de entrada del reporte "qué sabe/recuerda LUZ de cada usuario"
@@ -16,9 +17,10 @@ import { isAdmin } from "../is-admin";
 export default async function AdminUsersPage() {
   const session = await auth();
 
-  if (!session?.user || !isAdmin(session.user.email)) {
+  if (!session?.user?.id || !isAdmin(session.user.email)) {
     redirect("/login");
   }
+  await requireAdminMfa(session.user.id);
 
   const rows = await db
     .select({

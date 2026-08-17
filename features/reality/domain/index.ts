@@ -18,3 +18,8 @@ export * from "./wearable-provider-kind";
 export * from "./wearable-daily-metrics";
 export * from "./wearable-import-result";
 export * from "./wearable-snapshot";
+export * from "./youtube-provider-kind";
+export * from "./youtube-connection";
+export * from "./youtube-video";
+export * from "./youtube-sync-options";
+export * from "./youtube-snapshot";

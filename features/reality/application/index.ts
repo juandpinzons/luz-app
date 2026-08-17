@@ -14,3 +14,4 @@ export * from "./apply-email-sync-result";
 export * from "./refresh-gmail";
 export * from "./get-email-snapshot";
 export * from "./get-recent-emails";
+export * from "./connect-youtube";

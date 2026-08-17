@@ -1,6 +1,7 @@
 import type { ExternalSignal } from "../../../core/reality";
 import type { HomeCalendarContext } from "../../home/domain/home-state";
 import type { CalendarEvent } from "../../reality/domain";
+import { sanitizeExternalText } from "./sanitize-external-text";
 
 /**
  * Pura a propósito -- sin esta separación, cualquier import de
@@ -45,44 +46,6 @@ const DATE_FORMAT = new Intl.DateTimeFormat("es-CO", {
   month: "long",
   timeZone: TIME_ZONE,
 });
-
-const MAX_EXTERNAL_TEXT_LENGTH = 200;
-
-/**
- * `event.title`/`event.location` los escribe quien envía la invitación
- * -- nunca la persona dueña de LUZ ni LUZ misma (auditoría de
- * seguridad, 2026-08-14: cualquiera que le mande una invitación de
- * calendario controla este texto). Sin este paso llegarían tal cual al
- * mensaje `system` del prompt (ver `render-context.ts`), el mismo
- * bloque donde vive Conversation Strategy/Voice -- un título escrito
- * para parecer una instrucción tendría, ahí, la misma autoridad que
- * una instrucción real. Colapsa saltos de línea/control (la forma más
- * simple de simular una línea nueva "de sistema") y acota el largo --
- * mitigación razonable, no una garantía: ningún filtro de texto plano
- * es 100% robusto contra inyección de prompt, por eso
- * `SOURCE_GUIDANCE.signal` (`favor-prioritized-context-rule.ts`)
- * también instruye al modelo explícitamente a tratar esto como dato,
- * nunca como instrucción -- las dos capas juntas, no una sola.
- */
-/**
- * `wasModified` es la señal real de "esto tenía algo que colapsar/
- * acotar" -- la base del conteo `calendar_signal_sanitized` (tablero de
- * salud diario, 2026-08-14) que un operador humano puede vigilar sin
- * que esta función deje de ser pura (sigue sin tocar `db`/logging --
- * quien la llama, `get-calendar-signals-for-conversation.ts`, decide
- * si registra el evento).
- */
-function sanitizeExternalText(value: string): { text: string; wasModified: boolean } {
-  // `wasModified` marca solo las dos señales que de verdad importan
-  // (saltos de línea/control, o largo excesivo) -- un simple espacio
-  // sobrante al final de un título real (`.trim()`) no cuenta como
-  // sospechoso, sería puro ruido en el conteo del tablero de salud.
-  const hadControlChars = /[\r\n\t]/.test(value);
-  const collapsed = value.replace(/[\r\n\t]+/g, " ").trim();
-  const wasTruncated = collapsed.length > MAX_EXTERNAL_TEXT_LENGTH;
-  const text = wasTruncated ? `${collapsed.slice(0, MAX_EXTERNAL_TEXT_LENGTH)}…` : collapsed;
-  return { text, wasModified: hadControlChars || wasTruncated };
-}
 
 /**
  * Una frase natural por evento, nunca datos crudos -- el modelo lee

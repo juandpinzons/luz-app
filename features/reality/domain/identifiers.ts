@@ -2,6 +2,7 @@ declare const externalEventIdBrand: unique symbol;
 declare const externalCalendarIdBrand: unique symbol;
 declare const externalMessageIdBrand: unique symbol;
 declare const externalThreadIdBrand: unique symbol;
+declare const externalVideoIdBrand: unique symbol;
 
 /**
  * El id que el proveedor externo le da a un evento (Google `event.id`,
@@ -66,4 +67,18 @@ export function createExternalThreadId(value: string): ExternalThreadId {
     throw new Error("ExternalThreadId: el valor no puede estar vacío.");
   }
   return value as ExternalThreadId;
+}
+
+/**
+ * El id que YouTube le da a UN VIDEO (`video.id`). Mismo criterio que
+ * `ExternalMessageId`: opaco, nunca un `EntityId`, marcado con un
+ * símbolo único.
+ */
+export type ExternalVideoId = string & { readonly [externalVideoIdBrand]: true };
+
+export function createExternalVideoId(value: string): ExternalVideoId {
+  if (!value) {
+    throw new Error("ExternalVideoId: el valor no puede estar vacío.");
+  }
+  return value as ExternalVideoId;
 }

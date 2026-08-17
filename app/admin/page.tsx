@@ -12,6 +12,7 @@ import {
 } from "@/core/db/schema";
 import { decryptContentOrNull } from "@/core/security/content-cipher";
 import { isAdmin } from "./is-admin";
+import { requireAdminMfa } from "./require-mfa";
 
 /**
  * Dashboard interno de operación (Sprint de Observabilidad, Alpha).
@@ -31,9 +32,10 @@ function startOfTodayUTC(): Date {
 export default async function AdminPage() {
   const session = await auth();
 
-  if (!session?.user || !isAdmin(session.user.email)) {
+  if (!session?.user?.id || !isAdmin(session.user.email)) {
     redirect("/login");
   }
+  await requireAdminMfa(session.user.id);
 
   const today = startOfTodayUTC();
 

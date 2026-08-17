@@ -72,6 +72,26 @@ export const eventTypeEnum = pgEnum("event_type", [
    * salud diario. Nunca el contenido del mensaje.
    */
   "ai_call_completed",
+  /**
+   * Auditoría de privacidad, 2026-08-17 -- una fila cada vez que una
+   * persona confirma el consentimiento explícito antes del flujo
+   * manual de wearable (`/garmin`, `POST /api/wearable/consent`). El
+   * registro real y consultable vive en `wearable_consents`
+   * (`core/db/schema/wearable.ts`); este evento es solo la traza
+   * operacional de que ocurrió, mismo criterio que el resto de esta
+   * tabla.
+   */
+  "wearable_consent_given",
+  /**
+   * Misión "integrar YouTube", 2026-08-17 -- mismo criterio exacto que
+   * `calendar_signal_sanitized`: una fila cada vez que
+   * `sanitizeExternalText` (`features/chat/services/youtube-signals.ts`)
+   * de verdad modifica el título de un video (encontró un salto de
+   * línea o tuvo que acotar el largo) -- la señal más simple de un
+   * intento real de inyección de prompt vía el título de un video de
+   * un tercero. Nunca lleva el texto original en `metadata`.
+   */
+  "youtube_signal_sanitized",
 ]);
 
 export const events = pgTable(

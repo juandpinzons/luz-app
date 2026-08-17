@@ -8,12 +8,14 @@ import {
   EnvelopeIcon,
   HeartPulseIcon,
   MusicNoteIcon,
+  PlayIcon,
   RunIcon,
   WatchIcon,
 } from "@/components/ui/icons";
 import { db } from "@/core/db/client";
 import { getStoredEmailConnection } from "@/core/email-connections/repository";
 import { getStoredCalendarConnection } from "@/core/calendar-connections/repository";
+import { getStoredYoutubeConnection } from "@/core/youtube-connections/repository";
 import { listDailyMetrics } from "@/core/wearable-metrics/repository";
 import { getWearableSnapshot } from "@/features/reality/application/get-wearable-snapshot";
 
@@ -81,15 +83,17 @@ export default async function ConnectionsPage() {
     );
   }
 
-  const [storedEmail, storedCalendar, dailyMetrics] = await Promise.all([
+  const [storedEmail, storedCalendar, storedYoutube, dailyMetrics] = await Promise.all([
     getStoredEmailConnection(db, lifeGraphContext.lifeGraphId, "gmail"),
     getStoredCalendarConnection(db, lifeGraphContext.lifeGraphId, "apple"),
+    getStoredYoutubeConnection(db, lifeGraphContext.lifeGraphId, "youtube"),
     listDailyMetrics(db, lifeGraphContext.lifeGraphId, "garmin"),
   ]);
   const wearable = getWearableSnapshot(dailyMetrics);
 
   const emailConnected = storedEmail !== null && storedEmail.connection.status !== "disconnected";
   const calendarConnected = storedCalendar !== null && storedCalendar.connection.status !== "disconnected";
+  const youtubeConnected = storedYoutube !== null && storedYoutube.connection.status !== "disconnected";
 
   const rows: {
     key: string;
@@ -126,6 +130,15 @@ export default async function ConnectionsPage() {
       connected: wearable.hasData,
       needsReauth: false,
       icon: <WatchIcon className="h-5 w-5" />,
+    },
+    {
+      key: "youtube",
+      name: "YouTube",
+      description: "Los videos que te gustaron -- otra ventana a lo que te interesa ahora.",
+      href: "/youtube",
+      connected: youtubeConnected,
+      needsReauth: storedYoutube?.connection.status === "needs_reauth",
+      icon: <PlayIcon className="h-5 w-5" />,
     },
   ];
 

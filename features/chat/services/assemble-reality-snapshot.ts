@@ -25,6 +25,7 @@ import { assembleIdentityEvolution } from "../../identity-evolution";
 import { explainInsight, type InsightExplanation } from "../../knowledge/services/explain-insight";
 import { getCalendarSignalsForConversation } from "./get-calendar-signals-for-conversation";
 import { getWearableSignalsForConversation } from "./get-wearable-signals-for-conversation";
+import { getYoutubeSignalsForConversation } from "./get-youtube-signals-for-conversation";
 import { selectContextualMemories } from "./select-contextual-memories";
 
 /**
@@ -188,6 +189,7 @@ export async function assembleRealitySnapshot(
     contradictions,
     calendarSignals,
     wearableSignals,
+    youtubeSignals,
     recentlyCompletedGoals,
     recentlyCompletedProjects,
     seenIntentionIds,
@@ -246,6 +248,10 @@ export async function assembleRealitySnapshot(
     // de tasa: es una lectura local, no una sincronización contra un
     // servidor externo en cada mensaje.
     span("Wearable", "repository", () => getWearableSignalsForConversation(db, context)),
+    // Misión "integrar YouTube" -- mismo criterio de tolerancia a
+    // fallos que Calendar (`getYoutubeSignalsForConversation` nunca
+    // lanza, degrada a `[]`).
+    span("YouTube", "external_api", () => getYoutubeSignalsForConversation(db, context)),
     span("Life.recentlyCompletedGoals", "repository", () =>
       listRecentlyCompletedGoals(db, context, recentlyCompletedSince),
     ),
@@ -533,15 +539,18 @@ export async function assembleRealitySnapshot(
         };
       }),
     },
-    // Calendar Foundation + Wearable Foundation (`features/reality/`)
-    // llenan los puntos de extensión que este campo ya reservaba
-    // (`external-signal-snapshot.ts`: "calendar"/"sensor" como fuentes
-    // esperadas) -- document/email siguen vacíos indefinidamente
-    // (ADR-0015, sin Connectors implementados todavía). Sin calendario
-    // conectado o sin datos de reloj importados, cada
+    // Calendar Foundation + Wearable Foundation + YouTube Foundation
+    // (`features/reality/`) llenan los puntos de extensión que este
+    // campo ya reservaba (`external-signal-snapshot.ts`: "calendar"/
+    // "sensor"/"youtube" como fuentes esperadas) -- document/email
+    // siguen vacíos indefinidamente (ADR-0015, sin Connectors
+    // implementados todavía -- Gmail sí existe como pantalla propia,
+    // pero deliberadamente no está wireado al chat, ver
+    // `features/reality/README.md`). Sin calendario conectado, sin
+    // datos de reloj importados, o sin YouTube conectado, cada
     // `get*SignalsForConversation` ya devuelve `[]` -- mismo criterio
     // de ausencia real que el resto de este ensamblador.
-    signals: { signals: [...calendarSignals, ...wearableSignals] },
+    signals: { signals: [...calendarSignals, ...wearableSignals, ...youtubeSignals] },
     knowledgeGaps: { domains: rankKnowledgeGaps(signalsByDomain) },
     // Comprensión de segundo orden (Knowledge Engine V2, Reasoning
     // Engine) -- síntesis ya validada sobre varios insights a la vez,

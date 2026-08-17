@@ -6,11 +6,13 @@ import { auth } from "@/auth";
 import { getLifeGraphContext, getUserContext } from "@/auth/user-context";
 import { getLiveCalendarContext } from "@/features/home/services/get-live-calendar-context";
 import { getLiveEmailContext } from "@/features/reality/get-live-email-context";
+import { getLiveYoutubeContext } from "@/features/reality/get-live-youtube-context";
 import { DrizzleContinuityLoopRepository } from "@/core/continuity-engine";
 import { db } from "@/core/db/client";
 import { conversations } from "@/core/db/schema";
 import { EventRow } from "@/features/home/components/event-row";
 import { EmailRow } from "@/features/home/components/email-row";
+import { YoutubeVideoRow } from "@/features/home/components/youtube-video-row";
 import {
   buildMorningBrief,
   timeOfDayGreeting,
@@ -198,6 +200,7 @@ export default async function DashboardPage() {
     brief: Awaited<ReturnType<typeof buildMorningBrief>> | null;
     calendarOutcome: Awaited<ReturnType<typeof getLiveCalendarContext>> | null;
     emailOutcome: Awaited<ReturnType<typeof getLiveEmailContext>> | null;
+    youtubeOutcome: Awaited<ReturnType<typeof getLiveYoutubeContext>> | null;
     editorialPhrase: string | null;
     isFirstVisit: boolean;
   }> {
@@ -427,7 +430,38 @@ export default async function DashboardPage() {
     }
   }
 
-  // Las siete solo necesitan `lifeGraphContext`/`userId`, ya resueltos
+  /** YouTube en vivo -- mismo criterio exacto que `loadEmailOutcome`. */
+  async function loadYoutubeOutcome(): Promise<Awaited<ReturnType<typeof getLiveYoutubeContext>> | null> {
+    if (!lifeGraphContext) return null;
+    try {
+      const outcome = await getLiveYoutubeContext(db, lifeGraphContext.lifeGraphId);
+      if (outcome.status === "error") {
+        logger.log({
+          event: "dashboard.youtube_sync_failed",
+          severity: "error",
+          requestId,
+          route: ROUTE,
+          userId,
+          lifeGraphId: lifeGraphContext.lifeGraphId,
+          ...describeError(outcome.error),
+        });
+      }
+      return outcome;
+    } catch (error) {
+      logger.log({
+        event: "dashboard.youtube_failed",
+        severity: "error",
+        requestId,
+        route: ROUTE,
+        userId,
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        ...describeError(error),
+      });
+      return null;
+    }
+  }
+
+  // Las ocho solo necesitan `lifeGraphContext`/`userId`, ya resueltos
   // arriba -- ninguna depende del resultado de otra, así que corren
   // todas a la vez. `recentPrimaryKeys`/`previousFingerprint` son los
   // dos `select` simples que antes solo se pedían DESPUÉS de tener
@@ -438,6 +472,7 @@ export default async function DashboardPage() {
     brief,
     calendarOutcome,
     emailOutcome,
+    youtubeOutcome,
     recentPrimaryKeys,
     previousFingerprint,
     editorialPhrase,
@@ -447,6 +482,7 @@ export default async function DashboardPage() {
     span("Morning Brief", "orchestration", loadMorningBrief),
     span("Calendar", "external_api", loadCalendarOutcome),
     span("Gmail", "external_api", loadEmailOutcome),
+    span("YouTube", "external_api", loadYoutubeOutcome),
     span("Experience.recentPrimaryKeys", "repository", () => getRecentPrimaryKeys(db, userId)),
     span("Experience.previousFingerprint", "repository", () => getPreviousFingerprint(db, userId)),
     span("Editorial Phrase", "repository", loadEditorialPhrase),
@@ -575,6 +611,7 @@ export default async function DashboardPage() {
       brief,
       calendarOutcome,
       emailOutcome,
+      youtubeOutcome,
       editorialPhrase,
       isFirstVisit,
     };
@@ -594,6 +631,7 @@ export default async function DashboardPage() {
     brief,
     calendarOutcome,
     emailOutcome,
+    youtubeOutcome,
     editorialPhrase,
     isFirstVisit,
   } = dashboardData;
@@ -787,6 +825,32 @@ export default async function DashboardPage() {
           {emailOutcome.snapshot.waitingReply.length > 1 && (
             <Link href="/gmail" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
               +{emailOutcome.snapshot.waitingReply.length - 1} más
+            </Link>
+          )}
+        </section>
+      )}
+
+      {/*
+        YouTube (misión "integrar YouTube", 2026-08-17) -- mismo
+        criterio de "cero fabricación" que "Esperando tu respuesta":
+        sin ningún video con like todavía, esta sección simplemente no
+        se muestra. Un solo video (el más reciente), mismo patrón que
+        el resto de los teasers de Hoy -- el resto vive en `/youtube`.
+      */}
+      {youtubeOutcome?.status === "connected" && youtubeOutcome.snapshot.likedVideos.length > 0 && (
+        <section className="animate-fade-in mt-8" style={{ animationDelay: "195ms" }}>
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-zinc-400">Te gustó</h2>
+            <Link href="/youtube" className="text-xs text-zinc-500 hover:text-zinc-300">
+              Ver todo →
+            </Link>
+          </div>
+          <ul className="mt-3 space-y-2">
+            <YoutubeVideoRow video={youtubeOutcome.snapshot.likedVideos[0]} />
+          </ul>
+          {youtubeOutcome.snapshot.likedVideos.length > 1 && (
+            <Link href="/youtube" className="mt-2 inline-block text-xs text-zinc-500 hover:text-zinc-300">
+              +{youtubeOutcome.snapshot.likedVideos.length - 1} más
             </Link>
           )}
         </section>

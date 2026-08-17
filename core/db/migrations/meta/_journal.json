@@ -253,6 +253,34 @@
       "when": 1786898250628,
       "tag": "0035_admin_access_log",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787001019627,
+      "tag": "0036_wearable_consents",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787001091610,
+      "tag": "0037_wearable_consent_event_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1787001638078,
+      "tag": "0038_admin_totp_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1787004993356,
+      "tag": "0039_youtube_connections",
+      "breakpoints": true
     }
   ]
 }

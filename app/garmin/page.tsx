@@ -4,6 +4,7 @@ import { getLifeGraphContext } from "@/auth/user-context";
 import { db } from "@/core/db/client";
 import { listDailyMetrics } from "@/core/wearable-metrics/repository";
 import { getWearableSnapshot } from "@/features/reality/application/get-wearable-snapshot";
+import { GarminConsentGate } from "@/features/reality/components/garmin-consent-gate";
 
 /**
  * Mismo criterio visual que `/calendar`/`/gmail` (mismo cimiento,
@@ -40,12 +41,7 @@ export default async function GarminPage() {
           Conecta tu Garmin para que LUZ entienda cómo duermes, tu nivel de estrés y qué tan activo estás -- nunca solo
           lo que le cuentas, también lo que tu cuerpo dice.
         </p>
-        <a
-          href="mailto:hola@joinluz.com?subject=Conectar%20mi%20Garmin"
-          className="mt-8 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
-        >
-          Conectar Garmin
-        </a>
+        <GarminConsentGate />
       </main>
     );
   }
