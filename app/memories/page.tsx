@@ -16,6 +16,8 @@ import {
   type ValidatedInsights,
 } from "@/features/knowledge/services/list-validated-insights";
 import { MemoryCard } from "@/features/memories/components/memory-card";
+import { MemorySelectionBar } from "@/features/memories/components/memory-selection-bar";
+import { MemorySelectionProvider } from "@/features/memories/components/memory-selection-context";
 import { InsightCard } from "@/features/memories/components/insight-card";
 
 /**
@@ -127,170 +129,174 @@ export default async function MemoriesPage({
   }
 
   return (
-    <main className="min-h-full px-6 py-10 text-white">
-      <div className="mx-auto w-full max-w-2xl">
-        <div className="flex items-center justify-between gap-4">
-          <h1 className="text-xl font-light tracking-[0.25em]">RECUERDOS</h1>
-          {!showHidden && (
-            <Link
-              href="/memories?view=hidden"
-              className="whitespace-nowrap text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
-            >
-              Ocultos
-            </Link>
-          )}
-        </div>
-
-        <form method="GET" action="/memories" className="mt-6 flex gap-2">
-          <input
-            type="text"
-            name="q"
-            defaultValue={searchTerm ?? ""}
-            placeholder="Buscar en tus recuerdos..."
-            aria-label="Buscar en tus recuerdos"
-            className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white focus-visible:ring-luz"
-          />
-          <button
-            type="submit"
-            className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
-          >
-            Buscar
-          </button>
-        </form>
-
-        {insights.items.length > 0 && (
-          <section className="animate-fade-in mt-8">
-            <h2 className="text-sm font-medium text-zinc-400">
-              Lo que he entendido{" "}
-              <span className="text-xs text-zinc-600">{insights.total}</span>
-            </h2>
-            <ul className="mt-3 space-y-2">
-              {insights.items.map((insight, index) => (
-                <InsightCard key={insight.id} explanation={insight} index={index} />
-              ))}
-            </ul>
-            {insights.total > insights.items.length && (
-              <p className="mt-2 text-xs text-zinc-600">
-                Mostrando {insights.items.length} de {insights.total}.
-              </p>
-            )}
-          </section>
-        )}
-
-        {!hasResults && (
-          <p className="animate-fade-in mt-10 text-sm text-zinc-500">
-            {showHidden
-              ? "Todavía no has ocultado ningún recuerdo."
-              : searchTerm
-                ? "No encontré recuerdos con eso."
-                : "Esto se va a ir llenando con lo que me vayas contando."}
-          </p>
-        )}
-
-        {showHidden && (
-          <Link
-            href="/memories"
-            className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
-          >
-            ← Volver
-          </Link>
-        )}
-
-        {hasResults && showHidden && (
-          <div className="mt-4 space-y-8">
-            {hiddenGroups.map((group) => (
-              <section key={group.label}>
-                <h2 className="text-sm font-medium text-zinc-400">{group.label}</h2>
-                <ul className="mt-3 space-y-2">
-                  {group.memories.map((memory, index) => (
-                    <MemoryCard
-                      key={memory.id}
-                      memory={memory}
-                      index={Math.min(index, 12)}
-                      connectedContents={memory.connectedContents}
-                      mentionedLifeTitles={[]}
-                      showActions
-                      isHidden
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-
-        {!showHidden && hasResults && !showAllChronological && (
-          <section className="animate-fade-in mt-8">
-            <h2 className="text-sm font-medium text-zinc-400">
-              Momentos que más han quedado
-            </h2>
-            {highlights.length > 0 ? (
-              <ul className="mt-3 space-y-2">
-                {highlights.map((memory, index) => (
-                  <MemoryCard
-                    key={memory.id}
-                    memory={memory}
-                    index={Math.min(index, 12)}
-                    connectedContents={memory.connectedContents}
-                    mentionedLifeTitles={lifeTitles.filter((title) =>
-                      memory.content.toLowerCase().includes(title.toLowerCase()),
-                    )}
-                    showActions
-                  />
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-zinc-500">
-                Todavía no tengo un puñado de momentos que se destaquen
-                especialmente sobre el resto — cuanto más me cuentes, más
-                se va a ir llenando esto.
-              </p>
-            )}
-            <Link
-              href="/memories?view=all"
-              className="mt-4 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
-            >
-              Ver todo, en orden →
-            </Link>
-          </section>
-        )}
-
-        {hasResults && showAllChronological && (
-          <>
-            {!searchTerm && (
+    <MemorySelectionProvider>
+      <main className="min-h-full px-6 py-10 text-white">
+        <div className="mx-auto w-full max-w-2xl">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-xl font-light tracking-[0.25em]">RECUERDOS</h1>
+            {!showHidden && (
               <Link
-                href="/memories"
-                className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+                href="/memories?view=hidden"
+                className="whitespace-nowrap text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
               >
-                ← Momentos destacados
+                Ocultos
               </Link>
             )}
-            <div className={searchTerm ? "mt-8 space-y-8" : "mt-4 space-y-8"}>
-              {groups.map((group) => (
+          </div>
+
+          <form method="GET" action="/memories" className="mt-6 flex gap-2">
+            <input
+              type="text"
+              name="q"
+              defaultValue={searchTerm ?? ""}
+              placeholder="Buscar en tus recuerdos..."
+              aria-label="Buscar en tus recuerdos"
+              className="flex-1 rounded-lg bg-zinc-900 px-4 py-3 text-sm text-white outline-none ring-1 ring-zinc-800 placeholder:text-zinc-600 focus:ring-white focus-visible:ring-luz"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-white px-5 text-sm font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz"
+            >
+              Buscar
+            </button>
+          </form>
+
+          {insights.items.length > 0 && (
+            <section className="animate-fade-in mt-8">
+              <h2 className="text-sm font-medium text-zinc-400">
+                Lo que he entendido{" "}
+                <span className="text-xs text-zinc-600">{insights.total}</span>
+              </h2>
+              <ul className="mt-3 space-y-2">
+                {insights.items.map((insight, index) => (
+                  <InsightCard key={insight.id} explanation={insight} index={index} />
+                ))}
+              </ul>
+              {insights.total > insights.items.length && (
+                <p className="mt-2 text-xs text-zinc-600">
+                  Mostrando {insights.items.length} de {insights.total}.
+                </p>
+              )}
+            </section>
+          )}
+
+          {!hasResults && (
+            <p className="animate-fade-in mt-10 text-sm text-zinc-500">
+              {showHidden
+                ? "Todavía no has ocultado ningún recuerdo."
+                : searchTerm
+                  ? "No encontré recuerdos con eso."
+                  : "Esto se va a ir llenando con lo que me vayas contando."}
+            </p>
+          )}
+
+          {showHidden && (
+            <Link
+              href="/memories"
+              className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+            >
+              ← Volver
+            </Link>
+          )}
+
+          {hasResults && showHidden && (
+            <div className="mt-4 space-y-8">
+              {hiddenGroups.map((group) => (
                 <section key={group.label}>
-                  <h2 className="text-sm font-medium text-zinc-400">
-                    {group.label}
-                  </h2>
+                  <h2 className="text-sm font-medium text-zinc-400">{group.label}</h2>
                   <ul className="mt-3 space-y-2">
-                    {group.memories.map((memory) => (
+                    {group.memories.map((memory, index) => (
                       <MemoryCard
                         key={memory.id}
                         memory={memory}
-                        index={Math.min(memoryIndexById.get(memory.id) ?? 0, 12)}
+                        index={Math.min(index, 12)}
                         connectedContents={memory.connectedContents}
-                        mentionedLifeTitles={lifeTitles.filter((title) =>
-                          memory.content.toLowerCase().includes(title.toLowerCase()),
-                        )}
+                        mentionedLifeTitles={[]}
                         showActions
+                        isHidden
                       />
                     ))}
                   </ul>
                 </section>
               ))}
             </div>
-          </>
-        )}
-      </div>
-    </main>
+          )}
+
+          {!showHidden && hasResults && !showAllChronological && (
+            <section className="animate-fade-in mt-8">
+              <h2 className="text-sm font-medium text-zinc-400">
+                Momentos que más han quedado
+              </h2>
+              {highlights.length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {highlights.map((memory, index) => (
+                    <MemoryCard
+                      key={memory.id}
+                      memory={memory}
+                      index={Math.min(index, 12)}
+                      connectedContents={memory.connectedContents}
+                      mentionedLifeTitles={lifeTitles.filter((title) =>
+                        memory.content.toLowerCase().includes(title.toLowerCase()),
+                      )}
+                      showActions
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-zinc-500">
+                  Todavía no tengo un puñado de momentos que se destaquen
+                  especialmente sobre el resto — cuanto más me cuentes, más
+                  se va a ir llenando esto.
+                </p>
+              )}
+              <Link
+                href="/memories?view=all"
+                className="mt-4 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+              >
+                Ver todo, en orden →
+              </Link>
+            </section>
+          )}
+
+          {hasResults && showAllChronological && (
+            <>
+              {!searchTerm && (
+                <Link
+                  href="/memories"
+                  className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+                >
+                  ← Momentos destacados
+                </Link>
+              )}
+              <div className={searchTerm ? "mt-8 space-y-8" : "mt-4 space-y-8"}>
+                {groups.map((group) => (
+                  <section key={group.label}>
+                    <h2 className="text-sm font-medium text-zinc-400">
+                      {group.label}
+                    </h2>
+                    <ul className="mt-3 space-y-2">
+                      {group.memories.map((memory) => (
+                        <MemoryCard
+                          key={memory.id}
+                          memory={memory}
+                          index={Math.min(memoryIndexById.get(memory.id) ?? 0, 12)}
+                          connectedContents={memory.connectedContents}
+                          mentionedLifeTitles={lifeTitles.filter((title) =>
+                            memory.content.toLowerCase().includes(title.toLowerCase()),
+                          )}
+                          showActions
+                        />
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+
+      <MemorySelectionBar />
+    </MemorySelectionProvider>
   );
 }

@@ -1,5 +1,6 @@
 import type { Memory } from "../../../core/memory-engine";
 import { MemoryCardActions } from "./memory-card-actions";
+import { MemorySelectToggle } from "./memory-select-toggle";
 import { truncateText } from "./truncate-text";
 
 interface MemoryCardProps {
@@ -11,13 +12,14 @@ interface MemoryCardProps {
   /** Posición dentro de la lista completa (no solo su grupo de tiempo) — solo para escalonar la entrada; recortada por el llamador para que una lista larga no tarde en aparecer. */
   index?: number;
   /**
-   * Segunda capa de memoria (auditoría de arquitectura, 2026-08-16) --
-   * `false` por defecto para no romper los otros llamadores de esta
-   * tarjeta (highlights, "ver todo"). Cuando es `true`, solo cambia el
-   * texto del toggle en `MemoryCardActions` -- el mismo componente
-   * sirve ambas vistas.
+   * `false` por defecto para no romper otros llamadores de esta
+   * tarjeta. Cuando es `true`, muestra la "x" (`MemorySelectToggle`,
+   * selección múltiple para ocultar/eliminar -- auditoría de
+   * interfaz, 2026-08-17) y, si además `isHidden`, el toggle de
+   * restaurar (`MemoryCardActions`).
    */
   showActions?: boolean;
+  /** Vista `?view=hidden` de `/memories` -- solo cambia si además de la "x" se muestra "Mostrar de nuevo". */
   isHidden?: boolean;
 }
 
@@ -47,9 +49,11 @@ export function MemoryCard({
 
   return (
     <li
-      className="animate-fade-in rounded-lg border border-zinc-800 px-4 py-3 text-sm"
+      className="animate-fade-in relative rounded-lg border border-zinc-800 px-4 py-3 pr-10 text-sm"
       style={{ animationDelay: `${index * 30}ms` }}
     >
+      {showActions && <MemorySelectToggle memoryId={memory.id} />}
+
       <p className="text-zinc-300">&ldquo;{truncateText(memory.content, CONTENT_MAX_LENGTH)}&rdquo;</p>
 
       {(shownConnections.length > 0 || mentionedLifeTitles.length > 0) && (
@@ -66,7 +70,7 @@ export function MemoryCard({
         </div>
       )}
 
-      {showActions && <MemoryCardActions memoryId={memory.id} isHidden={isHidden} />}
+      {showActions && isHidden && <MemoryCardActions memoryId={memory.id} />}
     </li>
   );
 }
