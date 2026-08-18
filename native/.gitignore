@@ -1,0 +1,8 @@
+node_modules/
+
+# Xcode / Swift Package Manager
+ios/App/Pods/
+ios/**/xcuserdata/
+ios/**/*.xcuserstate
+ios/DerivedData/
+ios/.build/
