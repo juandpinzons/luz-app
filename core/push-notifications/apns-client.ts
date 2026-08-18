@@ -80,7 +80,14 @@ function buildAuthToken(): string {
   const payload = base64url(JSON.stringify({ iss: env.APNS_TEAM_ID, iat: Math.floor(Date.now() / 1000) }));
   const signingInput = `${header}.${payload}`;
   const signature = sign("sha256", Buffer.from(signingInput), {
-    key: env.APNS_PRIVATE_KEY,
+    // Muchos paneles de variables de entorno (incl. Vercel, según cómo
+    // se pegue el .p8) colapsan los saltos de línea reales del PEM en
+    // la secuencia literal de dos caracteres "\n" -- `node:crypto`
+    // exige saltos de línea reales o falla con un error críptico de
+    // OpenSSL, no uno que apunte a esto. Restaurarlos acá es un no-op
+    // seguro si la variable ya tenía saltos reales (el PEM/base64 nunca
+    // contiene la secuencia "\n" como dato legítimo).
+    key: env.APNS_PRIVATE_KEY.replace(/\\n/g, "\n"),
     dsaEncoding: "ieee-p1363",
   });
   const jwt = `${signingInput}.${base64url(signature)}`;
@@ -122,6 +129,15 @@ export async function sendApnsNotification(
   const session = connect(host);
   try {
     const { status, reason } = await new Promise<{ status: number; reason?: string }>((resolve, reject) => {
+      // Node no relanza un `'error'` de la SESIÓN http2 hacia el
+      // `req`/stream -- son eventos independientes. Sin este listener,
+      // una sesión que nunca llega a conectar (DNS, TLS, host caído)
+      // dispara un `'error'` sin oyentes, que Node relanza como
+      // excepción no capturada (tumba la invocación entera del cron,
+      // no solo este envío) en vez de rechazar esta promesa como
+      // cualquier otro fallo ya manejado acá.
+      session.on("error", reject);
+
       const req = session.request({
         ":method": "POST",
         ":path": `/3/device/${deviceToken}`,

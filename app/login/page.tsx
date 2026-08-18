@@ -18,7 +18,14 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  const redirectTo = callbackUrl && callbackUrl.startsWith("/") ? callbackUrl : "/dashboard";
+  // `startsWith("/")` solo no basta -- "//evil.com" también empieza con
+  // "/" pero el navegador lo interpreta como absoluto (mismo origen que
+  // sea, otro host). Auth.js ya sanea esto en su propio callback
+  // `redirect` (nunca sobreescrito en `auth/config.ts`), pero no vale
+  // la pena depender solo de esa segunda capa cuando excluirlo acá es
+  // una condición más.
+  const redirectTo =
+    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/dashboard";
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">

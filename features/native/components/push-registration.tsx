@@ -5,12 +5,25 @@ import { PushNotifications } from "@capacitor/push-notifications";
 import { useEffect } from "react";
 
 /**
- * Sin UI propia -- solo un efecto de montaje, montado una vez en
- * `components/app-shell.tsx` (corre en cada carga de una pantalla ya
- * autenticada: Hoy, Vida, Recuerdos, Conversación). Se llama tras el
- * login y en cada arranque en frío a propósito -- Apple puede rotar el
- * token en silencio, así que "ya lo registré una vez" nunca es
- * suficiente garantía (ver `app/api/push/register/route.ts`).
+ * Persistido a nivel de módulo (no de componente): cada sección tiene
+ * su propio `layout.tsx` (`app/{dashboard,chat,life,memories}/layout.tsx`),
+ * así que `AppShell` -- y este componente con él -- se desmonta y
+ * vuelve a montar en CADA navegación entre Hoy/Vida/Recuerdos/
+ * Conversación (a diferencia de `NativeShellSetup`, que vive en el
+ * layout raíz y monta una sola vez). Sin este flag, pedir permiso +
+ * registrar + hacer POST a `/api/push/register` se repetiría en cada
+ * una de esas navegaciones -- inofensivo (todo es idempotente del lado
+ * del servidor) pero puro desperdicio de red/DB en el camino más
+ * transitado de la app. El módulo sobrevive mientras la WebView no
+ * recargue del todo, que es exactamente el alcance que hace falta.
+ */
+let hasRegisteredThisSession = false;
+
+/**
+ * Sin UI propia -- solo un efecto de montaje. Se llama tras el login y
+ * en cada arranque en frío a propósito -- Apple puede rotar el token
+ * en silencio, así que "ya lo registré una vez" nunca es suficiente
+ * garantía (ver `app/api/push/register/route.ts`).
  *
  * **Límite real, documentado a propósito**: no hay forma confiable de
  * saber desde JS si este binario es un build de desarrollo/TestFlight
@@ -24,11 +37,13 @@ import { useEffect } from "react";
  * bandera fijada a mano al crear el proyecto Xcode). No inventado como
  * si funcionara -- documentado como lo que realmente es.
  */
+
 export function PushRegistration() {
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) {
+    if (!Capacitor.isNativePlatform() || hasRegisteredThisSession) {
       return;
     }
+    hasRegisteredThisSession = true;
 
     let cancelled = false;
 
@@ -55,7 +70,9 @@ export function PushRegistration() {
       });
     });
 
-    register();
+    register().catch(() => {
+      // Fallo de permiso/registro nativo -- nunca debe romper la pantalla; sin token registrado, esta persona simplemente no recibe push hasta el próximo arranque en frío.
+    });
 
     return () => {
       cancelled = true;

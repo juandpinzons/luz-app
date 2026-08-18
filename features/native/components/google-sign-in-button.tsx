@@ -59,14 +59,32 @@ export function GoogleSignInButton({ webSignInAction }: GoogleSignInButtonProps)
       window.location.href = `/api/mobile-auth/consume?exchange_code=${encodeURIComponent(exchangeCode)}`;
     });
 
+    // Si la persona abandona el navegador de sistema sin completar el
+    // login (cierra Safari, vuelve a la app a mano) nunca llega
+    // `appUrlOpen` -- sin esto, el botón se queda en "Conectando…"
+    // deshabilitado para siempre, sin ninguna forma de reintentar salvo
+    // matar la app. Recupera el foco al volver como la señal de "ya no
+    // hay nada en curso"; en el camino feliz esto también dispara,
+    // pero para entonces `window.location.href` de arriba ya está
+    // navegando fuera de este componente.
+    const resumeListenerPromise = App.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) setIsConnecting(false);
+    });
+
     return () => {
       listenerPromise.then((handle) => handle.remove());
+      resumeListenerPromise.then((handle) => handle.remove());
     };
   }, []);
 
   async function handleNativeSignIn() {
     setIsConnecting(true);
-    await Browser.open({ url: new URL("/api/mobile-auth/start", window.location.origin).toString() });
+    try {
+      await Browser.open({ url: new URL("/api/mobile-auth/start", window.location.origin).toString() });
+    } catch {
+      // El navegador de sistema no llegó a abrir -- nunca dejar el botón atascado por esto.
+      setIsConnecting(false);
+    }
   }
 
   if (isNative) {

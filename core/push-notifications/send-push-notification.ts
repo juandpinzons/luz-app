@@ -79,7 +79,7 @@ export async function sendPushNotification(db: Database, input: PushNotification
           return; // Ningún token va a funcionar todavía -- no vale la pena seguir intentando los demás.
         }
         if (isApnsTokenPermanentlyInvalid(error)) {
-          await deleteDevicePushToken(db, token.deviceToken);
+          await deleteDevicePushToken(db, input.userId, token.deviceToken);
           continue;
         }
         logger.log({

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, lt } from "drizzle-orm";
 import type { Database } from "../core/db/client";
 import { mobileSessionHandoffs } from "./schema";
 
@@ -11,9 +11,21 @@ const HANDOFF_TTL_MS = 60_000;
  * ya creado (por `app/api/mobile-auth/callback/route.ts`, vía el mismo
  * adapter que usa el login web) -- ver docblock de `mobileSessionHandoffs`
  * en `./schema.ts` para el porqué de este puente.
+ *
+ * A diferencia de `sessions`/`events` (que sí acumulan filas sin poda
+ * -- ver docblock de `events` en `core/db/schema/events.ts`, tradeoff
+ * aceptado porque siguen teniendo valor mientras existen), una fila
+ * de este puente queda inútil 60 segundos después de crearse, para
+ * siempre -- nunca vale la pena guardarla. Se poda oportunistamente en
+ * cada login nuevo en vez de un cron aparte: el volumen es exactamente
+ * "logins nativos por minuto", nunca justifica infraestructura nueva.
  */
 export async function createMobileSessionHandoff(db: Database, sessionToken: string): Promise<string> {
   const exchangeCode = randomBytes(32).toString("base64url");
+
+  await db.delete(mobileSessionHandoffs).where(lt(mobileSessionHandoffs.expiresAt, new Date())).catch(() => {
+    // Poda oportunista, nunca debe bloquear un login real por fallar.
+  });
 
   await db.insert(mobileSessionHandoffs).values({
     exchangeCode,

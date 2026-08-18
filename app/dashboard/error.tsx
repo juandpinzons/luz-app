@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ErrorState } from "@/components/ui/error-state";
-import { useCachedDashboardSnapshot } from "@/features/dashboard/use-cached-dashboard-snapshot";
+import { readCachedDashboardSnapshot } from "@/features/dashboard/dashboard-cache";
 
 const CACHE_TIME_FORMAT = new Intl.DateTimeFormat("es-CO", {
   timeZone: "America/Bogota",
@@ -18,7 +18,19 @@ export default function DashboardError({
   error: Error & { digest?: string };
   unstable_retry: () => void;
 }) {
-  const cached = useCachedDashboardSnapshot();
+  // Inicializador perezoso de `useState`, no `useSyncExternalStore` --
+  // a diferencia de `useIsNative()`/`useIsOnline()` (valores realmente
+  // inmutables o con un mecanismo de suscripción real), esta lectura
+  // necesita ser "lo último que `DashboardCacheWriter` haya guardado
+  // AL MOMENTO EN QUE ESTE BOUNDARY SE MONTA" -- un boundary de error
+  // de Next.js se desmonta y monta de cero en cada ocurrencia nueva, así
+  // que el inicializador perezoso (corre una vez por montaje, durante
+  // el render, nunca en un efecto) ya lee un valor fresco cada vez sin
+  // el riesgo de "cascading render" que dispara la regla
+  // `react-hooks/set-state-in-effect`. Tampoco hay mismatch de
+  // hidratación que evitar aquí: `error.tsx` de Next.js SOLO se monta
+  // del lado del cliente, nunca como parte de un SSR exitoso.
+  const [cached] = useState(() => readCachedDashboardSnapshot());
 
   useEffect(() => {
     console.error(

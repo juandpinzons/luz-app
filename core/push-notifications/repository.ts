@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { devicePushTokens, type DevicePushTokenRow } from "../db/schema/push-notifications";
 import type { DevicePushPlatform, PushEnvironment } from "./domain";
@@ -33,9 +33,17 @@ export async function registerDevicePushToken(
  * porqué. Se llama tanto en logout (`app/api/push/unregister/route.ts`)
  * como cuando APNs señala que un token ya no sirve
  * (`core/push-notifications/send-push-notification.ts`).
+ *
+ * Escopado por `userId` a propósito -- sin esto, cualquier sesión
+ * autenticada podría borrar el token de OTRA persona con solo conocer
+ * su valor (un token de dispositivo es difícil de adivinar, pero
+ * "difícil de adivinar" no es lo mismo que "el modelo de autorización
+ * correcto"). Ambos llamadores ya tienen el `userId` correcto a mano.
  */
-export async function deleteDevicePushToken(db: Database, deviceToken: string): Promise<void> {
-  await db.delete(devicePushTokens).where(eq(devicePushTokens.deviceToken, deviceToken));
+export async function deleteDevicePushToken(db: Database, userId: string, deviceToken: string): Promise<void> {
+  await db
+    .delete(devicePushTokens)
+    .where(and(eq(devicePushTokens.userId, userId), eq(devicePushTokens.deviceToken, deviceToken)));
 }
 
 export async function listDevicePushTokensForUser(db: Database, userId: string): Promise<DevicePushTokenRow[]> {

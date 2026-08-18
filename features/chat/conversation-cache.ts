@@ -1,6 +1,7 @@
 import type { GetLatestConversationResponse } from "@/features/chat/types";
 
-const PREFIX = "luz:chat-cache:";
+/** `v1` -- mismo criterio que `dashboard-cache.ts`: si el shape cacheado cambia alguna vez, una llave nueva evita leer datos con una forma vieja en vez de convivir con ellos. */
+const PREFIX = "luz:chat-cache:v1:";
 
 export type CachedConversationMessage = Omit<
   GetLatestConversationResponse["messages"][number],

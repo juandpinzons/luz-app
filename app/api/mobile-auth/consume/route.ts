@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { consumeMobileSessionHandoff } from "@/auth/mobile-session-handoff-repository";
 import { db } from "@/core/db/client";
+import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
+import { recordEvent } from "@/core/observability/record-event";
 
 /** Mismo default que Auth.js (`@auth/core/lib/init.js`) -- ver `callback/route.ts` para el porqué de replicarlo en vez de importarlo. */
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
@@ -34,7 +36,20 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.redirect(new URL("/login?error=mobile_auth_failed", request.url));
   }
 
-  const sessionToken = await consumeMobileSessionHandoff(db, exchangeCode);
+  let sessionToken: string | null;
+  try {
+    sessionToken = await consumeMobileSessionHandoff(db, exchangeCode);
+  } catch (error) {
+    const detail = describeError(error);
+    logger.log({ event: "mobile_auth.consume.failed", severity: "error", requestId, route, ...detail });
+    await recordEvent(db, {
+      type: "error",
+      route,
+      message: error instanceof Error ? error.message : String(error),
+      metadata: { errorName: detail.errorName, errorCode: detail.errorCode },
+    });
+    return NextResponse.redirect(new URL("/login?error=mobile_auth_failed", request.url));
+  }
 
   if (!sessionToken) {
     logger.log({ event: "mobile_auth.consume.invalid_code", severity: "warn", requestId, route });

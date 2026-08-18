@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<Response> {
     return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
   }
 
-  await deleteDevicePushToken(db, parsed.data.deviceToken);
+  await deleteDevicePushToken(db, userContext.userId, parsed.data.deviceToken);
 
   logger.log({ event: "push.unregister.succeeded", requestId, route, userId: userContext.userId });
 
