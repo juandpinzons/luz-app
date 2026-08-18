@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMemorySelection } from "./memory-selection-context";
 
-type View = "bar" | "choosing";
+type View = "bar" | "choosing" | "confirming-delete";
 
 async function hideMemory(id: string): Promise<Response> {
   return fetch(`/api/memories/${id}/hide`, {
@@ -79,7 +79,7 @@ export function MemorySelectionBar() {
             </button>
             <button
               type="button"
-              onClick={() => runBatch("delete")}
+              onClick={() => setView("confirming-delete")}
               disabled={isWorking}
               className="w-full rounded-xl border border-red-900 px-4 py-3 text-left transition hover:border-red-700 disabled:opacity-50"
             >
@@ -96,6 +96,40 @@ export function MemorySelectionBar() {
             >
               {isWorking ? "Un momento…" : "Cancelar"}
             </button>
+            {error && <p className="text-xs text-red-400">{error}</p>}
+          </div>
+        ) : view === "confirming-delete" ? (
+          // Segundo paso obligatorio antes de un borrado irreversible y
+          // ahora en lote (auditoría de arquitectura, 2026-08-17) --
+          // mismo criterio de dos pasos, nunca `window.confirm()`, que
+          // ya usa `components/delete-account-button.tsx` y que el flujo
+          // por tarjeta ya tenía antes de esta pantalla de selección
+          // múltiple. Un solo tap para borrar varios recuerdos a la vez
+          // era más riesgo del que el flujo original (uno a la vez)
+          // aceptaba.
+          <div className="space-y-2">
+            <p className="text-sm text-red-400">
+              ¿Eliminar {count === 1 ? "este recuerdo" : `estos ${count} recuerdos`} para siempre? No hay
+              forma de deshacerlo.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => runBatch("delete")}
+                disabled={isWorking}
+                className="rounded-full border border-red-800 px-4 py-2 text-xs text-red-400 transition hover:bg-red-950 disabled:opacity-50"
+              >
+                {isWorking ? "Eliminando…" : "Sí, eliminar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("choosing")}
+                disabled={isWorking}
+                className="rounded-full border border-zinc-700 px-4 py-2 text-xs text-zinc-400 transition hover:text-white disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+            </div>
             {error && <p className="text-xs text-red-400">{error}</p>}
           </div>
         ) : (
