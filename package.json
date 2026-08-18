@@ -20,6 +20,13 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@sentry/nextjs": "^10.69.0",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.10",

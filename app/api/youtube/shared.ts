@@ -19,23 +19,12 @@
  * acceso al proyecto en Google Cloud Console.
  */
 
+export { getGoogleOAuthCredentials, type GoogleOAuthCredentials } from "@/core/config/google-oauth-credentials";
+
 /** El scope de lectura más angosto que ofrece YouTube Data API v3 -- permite leer videos/canales de la cuenta, nunca escribir (dar like, suscribirse, subir) ni leer comentarios/mensajes privados. */
 export const YOUTUBE_OAUTH_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
 
 export const YOUTUBE_STATE_COOKIE = "youtube_oauth_state";
-
-export interface GoogleOAuthCredentials {
-  readonly clientId: string;
-  readonly clientSecret: string;
-}
-
-/** `null` si el proyecto no tiene el proveedor Google configurado -- mismo criterio que `getGoogleOAuthCredentials` en `app/api/gmail/shared.ts`. */
-export function getGoogleOAuthCredentials(): GoogleOAuthCredentials | null {
-  const clientId = process.env.AUTH_GOOGLE_ID;
-  const clientSecret = process.env.AUTH_GOOGLE_SECRET;
-  if (!clientId || !clientSecret) return null;
-  return { clientId, clientSecret };
-}
 
 /** Mismo criterio exacto que `buildGmailRedirectUri` -- debe ser IDÉNTICO byte a byte entre `connect` y `callback`, y estar registrado como URI de redirección autorizada en el cliente OAuth de Google Cloud Console. */
 export function buildYoutubeRedirectUri(request: Request): string {

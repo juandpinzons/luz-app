@@ -99,6 +99,35 @@ export const accountIdentities = pgTable("account_identities", {
     .defaultNow(),
 });
 
+/**
+ * Puente de login nativo (misión "shell nativo iOS", 2026-08-18) --
+ * único punto donde una sesión real de Auth.js (`sessions`, arriba)
+ * cruza de un navegador de sistema (donde Google exige que corra el
+ * consentimiento OAuth, ver `app/api/mobile-auth/callback/route.ts`) a
+ * la WebView propia de la app nativa (que necesita el `Set-Cookie` real
+ * de sesión, nunca disponible ahí por el cruce de cookie jars). El
+ * `sessionToken` real NUNCA viaja en una URL/Universal Link -- solo
+ * este código opaco, de un solo uso, vida corta.
+ *
+ * Vive en `auth/` (Identity Layer), no en `core/db/schema/` -- misma
+ * razón que el resto de este archivo: la forma la dicta el mecanismo
+ * de autenticación, el dominio nunca necesita saberlo.
+ */
+export const mobileSessionHandoffs = pgTable("mobile_session_handoffs", {
+  exchangeCode: text("exchange_code").primaryKey(),
+  sessionToken: text("session_token")
+    .notNull()
+    .references(() => sessions.sessionToken, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type MobileSessionHandoff = typeof mobileSessionHandoffs.$inferSelect;
+export type NewMobileSessionHandoff = typeof mobileSessionHandoffs.$inferInsert;
+
 export type AccountIdentity = typeof accountIdentities.$inferSelect;
 export type NewAccountIdentity = typeof accountIdentities.$inferInsert;
 

@@ -1,0 +1,1 @@
+Directorio requerido por la herramienta de Capacitor -- nunca se sirve contenido real desde acá, ver `server.url` en `../capacitor.config.ts`.

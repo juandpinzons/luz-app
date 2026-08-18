@@ -76,6 +76,25 @@ const envSchema = z.object({
       (value) => Buffer.from(value, "base64").length === 32,
       "CONTENT_ENCRYPTION_KEY debe decodificar a 32 bytes en base64 (genera uno con: openssl rand -base64 32).",
     ),
+
+  /**
+   * Push notifications vía APNs (misión "shell nativo iOS",
+   * 2026-08-18) -- las cuatro, opcionales A PROPÓSITO, mismo criterio
+   * que `KIMI_API_KEY`: la APNs Auth Key solo existe una vez que el
+   * Founder complete la inscripción en Apple Developer Program (fuera
+   * del alcance de este código). Hacerlas obligatorias rompería el
+   * arranque de TODO el sistema en producción hasta que eso pase --
+   * lección real de esta misma sesión con `CONTENT_ENCRYPTION_KEY`,
+   * nunca repetir ese incidente por una función que ni siquiera
+   * depende del resto del sistema. `sendPushNotification`
+   * (`core/push-notifications/send-push-notification.ts`) se degrada a
+   * un no-op logueado si faltan -- nunca falla en silencio total, nunca
+   * tumba al llamador.
+   */
+  APNS_KEY_ID: z.string().min(1).optional(),
+  APNS_TEAM_ID: z.string().min(1).optional(),
+  APNS_PRIVATE_KEY: z.string().min(1).optional(),
+  APNS_BUNDLE_ID: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

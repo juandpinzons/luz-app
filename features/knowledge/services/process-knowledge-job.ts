@@ -3,11 +3,12 @@ import type { AccountIdentityResolver } from "../../../auth/identity-resolver";
 import { getAIProvider } from "../../../ai";
 import type { Database } from "../../../core/db/client";
 import { type KnowledgeJob, knowledgeJobs } from "../../../core/db/schema";
-import type { KnowledgeEngine } from "../../../core/knowledge-engine";
+import { DrizzleInsightRepository, type KnowledgeEngine } from "../../../core/knowledge-engine";
 import { createEntityId } from "../../../core/life";
 import { DrizzleMemoryRepository, generateMemoryEmbedding } from "../../../core/memory-engine";
 import { logger } from "../../../core/observability/logger";
 import { recordEvent } from "../../../core/observability/record-event";
+import { sendPushNotification } from "../../../core/push-notifications/send-push-notification";
 import { assembleRealitySnapshot } from "../../chat/services/assemble-reality-snapshot";
 import { enrichKnowledgeGraph } from "./enrich-knowledge-graph";
 
@@ -144,6 +145,41 @@ export async function processKnowledgeJob(
         processedAt: new Date(),
       })
       .where(eq(knowledgeJobs.id, job.id));
+
+    // Push notification (misión "shell nativo iOS", 2026-08-18):
+    // "cero fabricación", mismo principio que rige todo el Knowledge
+    // Engine -- nunca "tu insight está listo" a ciegas por cada job que
+    // termina, ese pipeline correctamente no produce nada casi siempre
+    // (ver docblock de `DeterministicInsightValidationStrategy`). Se
+    // consulta de vuelta si ESTE job en concreto de verdad produjo un
+    // insight validado con evidencia trazable a la Memory que lo
+    // disparó -- solo entonces se avisa, y con el texto real del
+    // insight, nunca un mensaje genérico inventado.
+    try {
+      const newInsights = await new DrizzleInsightRepository(db).listByEvidenceMemoryId(
+        lifeGraphContext,
+        triggeringMemoryId,
+      );
+      if (newInsights.length > 0) {
+        await sendPushNotification(db, {
+          userId: job.userId,
+          title: "Tu insight diario está listo",
+          body: newInsights[0].description,
+          triggerType: "knowledge_insight",
+          sourceId: newInsights[0].id,
+        });
+      }
+    } catch (error) {
+      // Mismo criterio de aislamiento que el bloque de embedding arriba
+      // -- un fallo al avisar nunca debe revertir un job ya completado.
+      logger.log({
+        event: "knowledge_worker.push_notification_failed",
+        severity: "warn",
+        lifeGraphId: lifeGraphContext.lifeGraphId,
+        memoryId: triggeringMemoryId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true };
   } catch (error) {

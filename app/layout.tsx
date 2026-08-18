@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Sacramento } from "next/font/google";
 import { LUZ_IDENTITY } from "../core/persona";
+import { NativeShellSetup } from "@/features/native/components/native-shell-setup";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -78,7 +79,10 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} ${sacramento.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <NativeShellSetup />
+        {children}
+      </body>
     </html>
   );
 }

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckIcon, CopyIcon, ImageIcon, MicIcon } from "@/components/ui/icons";
+import { triggerLightHaptic } from "@/features/native/haptics";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TypingIndicator } from "@/components/ui/typing-indicator";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
@@ -730,6 +731,9 @@ function ChatPageContent() {
     // Un mensaje solo-imagen (sin texto) es un caso real -- mismo criterio
     // que `sendMessageRequestSchema` en el servidor.
     if ((message.trim() === "" && !pendingImage) || isSending) return;
+
+    // Toque nativo (misión "shell nativo iOS") -- no-op fuera de la app, nunca bloquea el envío.
+    void triggerLightHaptic();
 
     setLastActivityAt(new Date());
     const userMessage = message;

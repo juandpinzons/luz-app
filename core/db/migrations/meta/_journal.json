@@ -281,6 +281,13 @@
       "when": 1787004993356,
       "tag": "0039_youtube_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787014228773,
+      "tag": "0040_mobile_auth_and_push_notifications",
+      "breakpoints": true
     }
   ]
 }

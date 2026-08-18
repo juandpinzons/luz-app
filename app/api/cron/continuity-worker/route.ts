@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveUserIdForLifeGraph } from "@/auth/resolve-user-id-for-life-graph";
 import { db } from "@/core/db/client";
 import {
   DrizzleContinuityLoopRepository,
@@ -14,6 +15,7 @@ import { DrizzleMemoryRepository } from "@/core/memory-engine";
 import { isCronAuthorized } from "@/core/observability/is-cron-authorized";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
+import { sendPushNotification } from "@/core/push-notifications/send-push-notification";
 import { detectAllContinuityLoops } from "@/features/continuity/detection";
 
 const ROUTE = "GET /api/cron/continuity-worker";
@@ -97,9 +99,29 @@ export async function GET(request: Request): Promise<Response> {
         existingLoops,
       });
 
-      for (const loop of newLoops) {
-        await loopRepo.save(context, loop);
-        created += 1;
+      if (newLoops.length > 0) {
+        // Se resuelve una sola vez por persona, no por loop -- misión
+        // "shell nativo iOS", 2026-08-18. Si esta persona no tiene un
+        // dispositivo con push registrado (o Apple Developer Program
+        // sigue sin completarse del lado del Founder), `sendPushNotification`
+        // se degrada a un no-op logueado -- nunca bloquea que el loop
+        // en sí se guarde.
+        const userId = await resolveUserIdForLifeGraph(db, context.lifeGraphId);
+
+        for (const loop of newLoops) {
+          await loopRepo.save(context, loop);
+          created += 1;
+
+          if (userId) {
+            await sendPushNotification(db, {
+              userId,
+              title: "LUZ tiene algo para ti",
+              body: loop.title,
+              triggerType: "continuity_loop",
+              sourceId: loop.id,
+            });
+          }
+        }
       }
 
       processed += 1;

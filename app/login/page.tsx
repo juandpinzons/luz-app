@@ -1,6 +1,6 @@
 import { signIn } from "@/auth";
 import { PresenceDot } from "@/components/ui/presence-dot";
-import { SubmitButton } from "@/components/ui/submit-button";
+import { GoogleSignInButton } from "@/features/native/components/google-sign-in-button";
 
 /**
  * `callbackUrl` llega cuando `proxy.ts` redirigió aquí desde una
@@ -36,21 +36,14 @@ export default async function LoginPage({
           : "Un paso más, y estoy aquí."}
       </p>
 
-      <form
-        className="animate-fade-in mt-10"
-        style={{ animationDelay: "160ms" }}
-        action={async () => {
-          "use server";
-          await signIn("google", { redirectTo });
-        }}
-      >
-        <SubmitButton
-          pendingLabel="Conectando…"
-          className="rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-luz disabled:opacity-60"
-        >
-          Continuar con Google
-        </SubmitButton>
-      </form>
+      <div className="animate-fade-in mt-10" style={{ animationDelay: "160ms" }}>
+        <GoogleSignInButton
+          webSignInAction={async () => {
+            "use server";
+            await signIn("google", { redirectTo });
+          }}
+        />
+      </div>
     </main>
   );
 }

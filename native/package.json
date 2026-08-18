@@ -1,0 +1,25 @@
+{
+  "name": "luz-native",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Shell nativo iOS de LUZ (Capacitor) -- WKWebView apuntando a la URL de producción en vivo, ver capacitor.config.ts. Deliberadamente aislado del package.json raíz: las dependencias de Capacitor nunca deben mezclarse con las del servidor Next.js.",
+  "scripts": {
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "add:ios": "cap add ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/push-notifications": "^8.1.2",
+    "@capacitor/status-bar": "^8.0.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0"
+  }
+}

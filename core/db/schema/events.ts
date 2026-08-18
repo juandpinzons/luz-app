@@ -92,6 +92,16 @@ export const eventTypeEnum = pgEnum("event_type", [
    * un tercero. Nunca lleva el texto original en `metadata`.
    */
   "youtube_signal_sanitized",
+  /**
+   * Misión "shell nativo iOS", 2026-08-18 -- una fila por cada intento
+   * real de envío de push (`core/push-notifications/send-push-notification.ts`),
+   * éxito o falla. `metadata.triggerType`/`metadata.sourceId` es la
+   * base del dedupe de "¿ya se le avisó a esta persona de esto?"
+   * (reutiliza `events_user_type_created_at_idx`, sin tabla nueva),
+   * mismo patrón que `experience_card_shown`. Nunca el título/cuerpo
+   * real de la notificación.
+   */
+  "push_notification_sent",
 ]);
 
 export const events = pgTable(
