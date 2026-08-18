@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { PresenceDot } from "@/components/ui/presence-dot";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { OfflineBanner } from "@/features/native/components/offline-banner";
 import { PushRegistration } from "@/features/native/components/push-registration";
 
 type ActiveSection = "dashboard" | "life" | "memories" | "chat";
@@ -46,6 +47,7 @@ export async function AppShell({
   return (
     <div className="flex h-dvh flex-col bg-black text-white">
       {accountLabel && <PushRegistration />}
+      <OfflineBanner />
 
       <a
         href="#main-content"

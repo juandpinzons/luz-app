@@ -10,6 +10,7 @@ import { TypingIndicator } from "@/components/ui/typing-indicator";
 import { ConversationOpeningRitual } from "@/features/chat/components/conversation-opening-ritual";
 import type { OrbVisualState } from "@/features/orb/domain/orb-visual-state";
 import { readDraft, writeDraft } from "@/features/chat/draft-storage";
+import { readCachedConversation, writeCachedConversation } from "@/features/chat/conversation-cache";
 import type { AvatarMoodSignal } from "@/features/avatar";
 import { FloatingAvatar } from "@/features/avatar/components/floating-avatar";
 import type { GetWelcomeResponse } from "@/app/api/chat/welcome/route";
@@ -471,6 +472,7 @@ function ChatPageContent() {
             );
             setIsHistoricalConversation(historical);
             resolvedConversationId = detailData.conversationId;
+            writeCachedConversation(detailData.conversationId, detailData.messages);
 
             const startedAt = parseStartedAtParam(startedAtParam);
             setHistoricalLabel(
@@ -516,6 +518,24 @@ function ChatPageContent() {
         }
       } catch (error) {
         console.error(error);
+
+        // Sin red (o el fetch falló por cualquier otra razón), pero se
+        // pidió reanudar un hilo puntual: la copia local de la última
+        // vez que ese hilo cargó bien es mejor que dejar la pantalla
+        // vacía -- se marca como histórica sin más análisis porque no
+        // hay forma de confirmar si sigue siendo la más reciente sin red.
+        if (!cancelled && conversationIdParam) {
+          const cached = readCachedConversation(conversationIdParam);
+          if (cached) {
+            setConversationId((prev) => prev ?? cached.conversationId);
+            setMessages((prev) => (prev.length === 0 ? cached.messages : prev));
+            setIsHistoricalConversation(true);
+            resolvedConversationId = cached.conversationId;
+
+            const startedAt = parseStartedAtParam(startedAtParam);
+            setHistoricalLabel(formatHistoricalLabel(startedAt ?? new Date()));
+          }
+        }
       } finally {
         if (!cancelled) {
           setIsLoadingHistory(false);

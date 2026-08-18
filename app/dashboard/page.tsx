@@ -39,6 +39,7 @@ import {
 import { PrimaryExperienceCard } from "@/features/experience/components/primary-experience-card";
 import { SecondaryExperienceList } from "@/features/experience/components/secondary-experience-list";
 import { DashboardActivitySummary } from "@/features/dashboard/components/dashboard-activity-summary";
+import { DashboardCacheWriter } from "@/features/dashboard/components/dashboard-cache-writer";
 import { DeleteAccountButton } from "@/components/delete-account-button";
 import { selectEditorialPhrase } from "@/features/dashboard/services/select-editorial-phrase";
 import { describeError } from "@/core/observability/describe-error";
@@ -647,8 +648,18 @@ export default async function DashboardPage() {
       ? daysSinceLastMessage
       : null;
 
+  const cachedGreeting = homeState
+    ? personalizeGreeting(homeState.greeting, session.user.name)
+    : `${timeOfDayGreeting(new Date())}.`;
+
   const pageContent = (
     <>
+      <DashboardCacheWriter
+        greeting={cachedGreeting}
+        dateLine={brief?.dateLine ?? null}
+        continuityLine={brief?.continuityLine ?? null}
+      />
+
       {/*
         El saludo es lo primero que LUZ "dice" en cada visita — antes
         tenía el mismo peso tipográfico que cualquier otra línea de
