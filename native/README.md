@@ -129,20 +129,30 @@ sin importar el origen. Verificado con fixtures reales de
 `detectAllContinuityLoops` produce los loops esperados) y corriendo el
 handler real del cron contra Postgres local.
 
+**Actualización, mismo día**: el Founder confirmó que Vercel ya está en
+Pro -- eso destraba justo el disparador que había quedado fuera arriba.
+`app/api/cron/calendar-reminder-worker/route.ts` (nuevo, cron aparte de
+`continuity-worker` a propósito: forzar CADA sync de Gmail/Calendar a
+correr cada 5 minutos habría sido puro desperdicio para trabajo que solo
+necesita frecuencia diaria) corre cada 5 minutos
+(`*/5 * * * *` en `vercel.json` -- justo la clase de expresión que Hobby
+rechaza en el deploy, así que el propio deploy es la verificación real
+de que el plan Pro es cierto), revisa el `CalendarSnapshot` en vivo de
+cada persona conectada, y manda push para cualquier evento con hora real
+(nunca de todo el día) que arranque en los próximos 15 minutos. Cero
+infraestructura nueva de dedupe -- reutiliza el mismo mecanismo de
+`sendPushNotification` (`triggerType`+`sourceId`) que ya evita reenviar
+el mismo aviso en corridas sucesivas. Verificado con 6 casos límite
+reales (dentro/fuera de ventana, ya empezado, todo el día, cancelado, el
+borde exacto de 15 min) y corriendo el handler real contra Postgres
+local.
+
 **Deliberadamente NO construido, y por qué**:
-- *"Tu reunión empieza en 15 minutos" (calendar `starting_soon`)*:
-  necesita precisión de minutos -- Vercel Hobby limita cron a una
-  corrida al día (confirmado contra la documentación actual de Vercel,
-  no supuesto). Sin upgrade de plan, cualquier versión de esto sería
-  inútil (una alerta de "empieza en 15 min" revisada una vez al día no
-  significa nada).
 - *Notificación de crisis*: el plan original ya la dejó fuera a
   propósito ("diseño aparte... conversación aparte sobre visibilidad en
   pantalla de bloqueo y tono del mensaje") -- sigue siendo una decisión
   de producto/seguridad que le corresponde al Founder, no algo para
   decidir en código sin esa conversación.
-- *Plan de Vercel (Hobby -> Pro)*: decisión de costo recurrente, no
-  mía.
 - *Dominio propio*: necesita acción del Founder en Porkbun/DNS.
 - *Envío a revisión de Apple Store*: depende de Apple Developer
   Program, explícitamente diferido esta sesión ("antes de meternos al
