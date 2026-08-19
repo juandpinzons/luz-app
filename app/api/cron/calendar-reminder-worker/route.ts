@@ -5,6 +5,7 @@ import { DrizzleLifeGraphRepository } from "@/core/life";
 import { isCronAuthorized } from "@/core/observability/is-cron-authorized";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
+import { withTimeout } from "@/core/observability/with-timeout";
 import { sendPushNotification } from "@/core/push-notifications/send-push-notification";
 import { getLiveCalendarContext } from "@/features/home/services/get-live-calendar-context";
 import type { CalendarEvent } from "@/features/reality/domain";
@@ -43,11 +44,33 @@ const ROUTE = "GET /api/cron/calendar-reminder-worker";
  * cachear el resultado de `getLiveCalendarContext` unos minutos sería
  * la optimización natural, no construida todavía porque no hace falta
  * aún.
+ *
+ * Límite conocido, aceptado a propósito (auditoría 2026-08-19):
+ * `getLiveCalendarContext` reintenta la sincronización real incluso
+ * para una conexión ya marcada `status: "error"` (correcto para
+ * `/calendar`/`/dashboard` -- alguien mirando la página activamente sí
+ * quiere que se reintente por si el error ya se resolvió), así que una
+ * cuenta con credenciales rotas se reintenta 288 veces al día en vez de
+ * una sola. Arreglarlo bien necesitaría backoff real (cuándo fue el
+ * último intento) o que este cron duplicara el chequeo de estado antes
+ * de llamar a la función compartida -- no vale la pena al volumen de
+ * Alpha todavía; el `EXTERNAL_SYNC_TIMEOUT_MS` de arriba ya acota el
+ * costo por intento aunque no evite el intento en sí.
  */
 export const maxDuration = 30;
 
 const TIME_BUDGET_MS = 25_000; // margen de seguridad sobre maxDuration=30s
 const REMINDER_WINDOW_MS = 15 * 60 * 1000;
+/**
+ * `AppleCalendarClient.request()` no le pasa `signal`/timeout a su
+ * propio `fetch` -- ver `core/observability/with-timeout.ts`. Más
+ * corto que el de `continuity-worker` (12s) a propósito: este cron
+ * corre cada 5 minutos con un presupuesto total de apenas 25s
+ * compartido entre TODAS las personas conectadas, así que una sola
+ * cuenta lenta no puede darse el lujo de acaparar casi todo el
+ * presupuesto de la corrida.
+ */
+const EXTERNAL_SYNC_TIMEOUT_MS = 8_000;
 
 function eventStart(event: CalendarEvent): Date {
   return event.timing.isAllDay ? new Date(`${event.timing.date}T00:00:00Z`) : event.timing.dateTime;
@@ -71,6 +94,14 @@ export async function GET(request: Request): Promise<Response> {
   const lifeGraphRepo = new DrizzleLifeGraphRepository(db);
   const contexts = await lifeGraphRepo.listAllContexts();
 
+  // `checked` cuenta cada LifeGraph que de verdad se examinó (llegó a
+  // pedir su `CalendarSnapshot`), sin importar si tenía algo próximo --
+  // auditoría 2026-08-19: la versión original solo lo incrementaba
+  // cuando SÍ había un evento por avisar, así que en la mayoría de
+  // corridas (nadie con una reunión en los próximos 15 minutos, el caso
+  // común) el log habría mostrado `checked: 0` para una corrida
+  // perfectamente sana -- indistinguible de un cron roto sin revisar
+  // logs mucho más a fondo.
   let checked = 0;
   let sent = 0;
   let failed = 0;
@@ -81,7 +112,20 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     try {
-      const calendarOutcome = await getLiveCalendarContext(db, context.lifeGraphId);
+      const calendarOutcome = await withTimeout(
+        getLiveCalendarContext(db, context.lifeGraphId),
+        EXTERNAL_SYNC_TIMEOUT_MS,
+      );
+      checked += 1;
+
+      if (calendarOutcome === null) {
+        logger.log({
+          event: "cron.calendar_reminder_worker.sync_timeout",
+          severity: "info",
+          lifeGraphId: context.lifeGraphId,
+        });
+        continue;
+      }
       if (calendarOutcome.status !== "connected") {
         continue;
       }
@@ -106,8 +150,6 @@ export async function GET(request: Request): Promise<Response> {
         });
         sent += 1;
       }
-
-      checked += 1;
     } catch (error) {
       failed += 1;
       await recordEvent(db, {

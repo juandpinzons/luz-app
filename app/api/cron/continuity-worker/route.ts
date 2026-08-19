@@ -16,6 +16,7 @@ import { isCronAuthorized } from "@/core/observability/is-cron-authorized";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
 import { sendPushNotification } from "@/core/push-notifications/send-push-notification";
+import { withTimeout } from "@/core/observability/with-timeout";
 import { detectAllContinuityLoops } from "@/features/continuity/detection";
 import { getLiveCalendarContext } from "@/features/home/services/get-live-calendar-context";
 import { getLiveEmailContext } from "@/features/reality/get-live-email-context";
@@ -58,11 +59,19 @@ const ROUTE = "GET /api/cron/continuity-worker";
  * `getLiveEmailContext` nunca lanzan (cada estado real, incluido "sin
  * conectar", es un valor devuelto), así que una persona sin Gmail/
  * Calendar conectado simplemente no aporta esas dos fuentes, nunca
- * rompe su propia iteración del loop de abajo.
+ * rompe su propia iteración del loop de abajo. Auditoría 2026-08-19:
+ * "nunca lanzan" no es lo mismo que "nunca tardan" -- ni el cliente de
+ * Gmail ni el de Apple Calendar le pasan `signal`/timeout a su propio
+ * `fetch`, así que sin `withTimeout` (`core/observability/with-timeout.ts`)
+ * una sola cuenta con el proveedor lento/colgado podría consumir el
+ * `maxDuration` completo de la función y hacer que Vercel mate la
+ * corrida a mitad de lote, sin procesar al resto de personas.
  */
 export const maxDuration = 60;
 
 const TIME_BUDGET_MS = 50_000; // margen de seguridad sobre maxDuration=60s
+/** Ninguno de los dos clientes (Gmail/Apple Calendar) tiene timeout propio en su `fetch` -- ver `core/observability/with-timeout.ts`. */
+const EXTERNAL_SYNC_TIMEOUT_MS = 12_000;
 
 export async function GET(request: Request): Promise<Response> {
   if (!isCronAuthorized(request)) {
@@ -101,9 +110,35 @@ export async function GET(request: Request): Promise<Response> {
           memoryRepo.listActive(context),
           curiosityRepo.list(context),
           loopRepo.list(context),
-          getLiveEmailContext(db, context.lifeGraphId),
-          getLiveCalendarContext(db, context.lifeGraphId),
+          withTimeout(getLiveEmailContext(db, context.lifeGraphId), EXTERNAL_SYNC_TIMEOUT_MS),
+          withTimeout(getLiveCalendarContext(db, context.lifeGraphId), EXTERNAL_SYNC_TIMEOUT_MS),
         ]);
+
+      // `null` = se agotó el tiempo de esta persona sin que el
+      // proveedor respondiera -- se trata igual que "no conectado" para
+      // ESTA corrida (la próxima lo vuelve a intentar), nunca bloquea a
+      // las demás personas del lote. `error`/`needs_reauth` se loguean
+      // (antes desaparecían en silencio: `?.status` no distinguía "sin
+      // conectar" de "conectado pero la sincronización real falló") --
+      // información operativa real, nunca se trata como fallo de esta
+      // corrida (`detectAllContinuityLoops` sigue sin esas dos fuentes,
+      // exactamente igual que "no conectado").
+      if (emailOutcome === null || emailOutcome.status === "error" || emailOutcome.status === "needs_reauth") {
+        logger.log({
+          event: "cron.continuity_worker.email_source_unavailable",
+          severity: "info",
+          lifeGraphId: context.lifeGraphId,
+          reason: emailOutcome === null ? "timeout" : emailOutcome.status,
+        });
+      }
+      if (calendarOutcome === null || calendarOutcome.status === "error") {
+        logger.log({
+          event: "cron.continuity_worker.calendar_source_unavailable",
+          severity: "info",
+          lifeGraphId: context.lifeGraphId,
+          reason: calendarOutcome === null ? "timeout" : calendarOutcome.status,
+        });
+      }
 
       const nameByPersonId = new Map(members.map((person) => [person.id, person.name]));
       const relationshipInputs = relationships.map((relationship) => ({
@@ -118,8 +153,8 @@ export async function GET(request: Request): Promise<Response> {
         projects,
         relationships: relationshipInputs,
         curiosityQuestions,
-        emailSnapshot: emailOutcome.status === "connected" ? emailOutcome.snapshot : undefined,
-        calendarSnapshot: calendarOutcome.status === "connected" ? calendarOutcome.snapshot : undefined,
+        emailSnapshot: emailOutcome?.status === "connected" ? emailOutcome.snapshot : undefined,
+        calendarSnapshot: calendarOutcome?.status === "connected" ? calendarOutcome.snapshot : undefined,
         existingLoops,
       });
 

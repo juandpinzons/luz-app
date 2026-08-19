@@ -70,6 +70,16 @@ export async function linkNativeAccountAndCreateSession(
   // existe con OTRO proveedor pero todavía no vinculó este -- ej.
   // entró antes con Google y ahora entra con Apple), y solo si ninguna
   // existe, una persona nueva.
+  //
+  // Límite real, conocido, sin resolver (auditoría 2026-08-19): esta
+  // resolución por email NUNCA encuentra la cuenta si Apple entrega un
+  // email de reenvío privado ("Hide My Email", ej.
+  // `xyz@privaterelay.appleid.com`) para alguien que ya tenía cuenta
+  // por Google con su email real -- termina con DOS cuentas LUZ
+  // separadas para la misma persona, cada una con su propio LifeGraph.
+  // No hay ningún flujo de fusión de cuentas en todo el producto
+  // todavía (no es algo específico de Apple); resolverlo bien
+  // necesitaría ese flujo, no un parche acá.
   let user = await adapter.getUserByAccount({
     provider: profile.provider,
     providerAccountId: profile.providerAccountId,

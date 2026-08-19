@@ -12,9 +12,14 @@ const bodySchema = z.object({
   // Solo llega en la PRIMERA autorización que la persona le da a esta
   // app -- Apple nunca los repite en autenticaciones posteriores, ni
   // siquiera en el JWT. `null`/ausente es el caso normal para quien
-  // vuelve a entrar, nunca un error.
-  givenName: z.string().min(1).optional(),
-  familyName: z.string().min(1).optional(),
+  // vuelve a entrar, nunca un error. A diferencia de `identityToken`,
+  // estos dos NO están firmados -- cualquiera con SU PROPIO
+  // identityToken válido podría mandar cualquier texto acá (solo afecta
+  // el `name` de SU PROPIA cuenta, nunca la de alguien más, ver
+  // auditoría 2026-08-19), pero un tope de longitud es higiene barata
+  // igual.
+  givenName: z.string().min(1).max(200).optional(),
+  familyName: z.string().min(1).max(200).optional(),
 });
 
 /**

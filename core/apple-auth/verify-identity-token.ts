@@ -4,6 +4,8 @@ const APPLE_JWKS_URL = "https://appleid.apple.com/auth/keys";
 const APPLE_ISSUER = "https://appleid.apple.com";
 /** Apple rota sus llaves con poca frecuencia -- 24h de caché es generoso; un `kid` que no aparece en el caché fuerza un refetch inmediato de todas formas (ver `getSigningKey`), así que esto nunca deja una rotación real sin cubrir. */
 const JWKS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Auditoría 2026-08-19: sin esto, un `/auth/keys` de Apple que no responde dejaría colgada la petición entera de `POST /api/apple-auth/callback` (login de una persona real, esperando en el botón) sin límite -- `AbortSignal.timeout` cancela la conexión de verdad, a diferencia del `withTimeout` de los crons (que solo deja de esperar, ver `core/observability/with-timeout.ts`): acá sí vale la pena la cancelación real porque es un solo fetch propio, no una llamada de tercero sin `signal` que plomear. */
+const JWKS_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Debe ser IDÉNTICO a `appId` en `native/capacitor.config.ts`. El flujo
@@ -34,7 +36,7 @@ interface AppleJwksResponse {
 let cachedJwks: { keys: AppleJwk[]; fetchedAt: number } | null = null;
 
 async function fetchJwks(): Promise<AppleJwk[]> {
-  const response = await fetch(APPLE_JWKS_URL);
+  const response = await fetch(APPLE_JWKS_URL, { signal: AbortSignal.timeout(JWKS_FETCH_TIMEOUT_MS) });
   if (!response.ok) {
     throw new Error(`AppleAuth: /auth/keys devolvió ${response.status}.`);
   }

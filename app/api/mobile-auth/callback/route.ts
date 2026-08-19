@@ -9,6 +9,8 @@ import { buildMobileAuthRedirectUri, getGoogleOAuthCredentials, MOBILE_AUTH_STAT
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 /** Perfil verificado por Google mismo -- evita tener que verificar la firma del id_token contra el JWKS rotativo de Google a mano; mismo dato que el proveedor Google de Auth.js termina resolviendo internamente. */
 const GOOGLE_USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
+/** Auditoría 2026-08-19: ninguna de las dos llamadas a Google de abajo tenía límite de tiempo -- mismo hallazgo que `core/apple-auth/verify-identity-token.ts`, mismo arreglo (`AbortSignal.timeout` cancela de verdad, a diferencia del `withTimeout` de los crons). Sin esto, un Google lento dejaba a alguien real esperando en el botón de login sin límite. */
+const GOOGLE_FETCH_TIMEOUT_MS = 10_000;
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -97,6 +99,7 @@ export async function GET(request: Request): Promise<Response> {
         client_secret: oauthCredentials.clientSecret,
         redirect_uri: buildMobileAuthRedirectUri(request),
       }).toString(),
+      signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
     });
 
     if (!tokenResponse.ok) {
@@ -108,6 +111,7 @@ export async function GET(request: Request): Promise<Response> {
 
     const userinfoResponse = await fetch(GOOGLE_USERINFO_ENDPOINT, {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
+      signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
     });
     if (!userinfoResponse.ok) {
       throw new Error(`Google userinfo endpoint devolvió ${userinfoResponse.status}.`);
