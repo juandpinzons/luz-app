@@ -17,6 +17,8 @@ import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
 import { sendPushNotification } from "@/core/push-notifications/send-push-notification";
 import { detectAllContinuityLoops } from "@/features/continuity/detection";
+import { getLiveCalendarContext } from "@/features/home/services/get-live-calendar-context";
+import { getLiveEmailContext } from "@/features/reality/get-live-email-context";
 
 const ROUTE = "GET /api/cron/continuity-worker";
 
@@ -30,15 +32,33 @@ const ROUTE = "GET /api/cron/continuity-worker";
  * ya leen loops correctamente; esta ruta es lo único que faltaba para
  * que hubiera algo real que leer.
  *
- * Alcance de esta primera versión -- fuentes `core/` únicamente
- * (Memory/Goal/Project/Relationship/Curiosity), deliberadamente sin
- * Calendar/Email/Recommendation todavía: esas requieren sincronizar
- * Apple Calendar/Gmail en vivo por cuenta, el mismo costo/riesgo de
- * fallo que `assemble-reconnection-context.ts` ya evita a propósito
- * fuera del turno de chat. `detectAllContinuityLoops` fue diseñada
- * exactamente para aceptar fuentes parciales (todas sus entradas son
- * opcionales) -- añadir Calendar/Email es una extensión aditiva futura,
- * no un rediseño.
+ * Misión "shell nativo iOS" (Fase 4), 2026-08-19: suma Calendar/Email en
+ * vivo (`getLiveCalendarContext`/`getLiveEmailContext`, mismas funciones
+ * que ya usan `/dashboard`/`/calendar`/`/gmail` -- nunca un sync
+ * aparte) a lo que ya corría (Memory/Goal/Project/Relationship/
+ * Curiosity) -- exactamente la "extensión aditiva futura" que el
+ * docblock original de esta ruta ya anticipaba. Esto es lo que
+ * destraba de verdad `awaiting_my_reply` (Gmail, `detectFromEmailSnapshot`)
+ * y `important_meeting`/`future_commitment` (Calendar,
+ * `detectFromCalendarSnapshot`) como loops reales -- esas dos reglas
+ * existían completas y probadas desde antes, pero nunca corrían en
+ * producción porque nada les pasaba un snapshot. Cero código nuevo de
+ * push: el envío ya está gateado a "cualquier loop nuevo", sin importar
+ * el origen.
+ *
+ * Deliberadamente SIN el disparador "tu reunión empieza en 15 minutos"
+ * (necesitaría un cron de minutos, Plan Pro de Vercel -- Hobby solo
+ * permite una corrida al día, ver docs de Vercel) -- lo que sí corre
+ * acá es de naturaleza diaria: "tienes una reunión importante próxima"
+ * o "llevas más de unas horas sin responder este correo", ninguna
+ * pierde valor por revisarse una vez al día.
+ *
+ * Recuerdo/Meta/Proyecto/Relación/Curiosidad no dependen de ninguna
+ * cuenta externa; Calendar/Email sí -- `getLiveCalendarContext`/
+ * `getLiveEmailContext` nunca lanzan (cada estado real, incluido "sin
+ * conectar", es un valor devuelto), así que una persona sin Gmail/
+ * Calendar conectado simplemente no aporta esas dos fuentes, nunca
+ * rompe su propia iteración del loop de abajo.
  */
 export const maxDuration = 60;
 
@@ -72,7 +92,7 @@ export async function GET(request: Request): Promise<Response> {
     }
 
     try {
-      const [members, goals, projects, relationships, memories, curiosityQuestions, existingLoops] =
+      const [members, goals, projects, relationships, memories, curiosityQuestions, existingLoops, emailOutcome, calendarOutcome] =
         await Promise.all([
           lifeGraphRepo.getMembers(context.lifeGraphId),
           goalRepo.list(context),
@@ -81,6 +101,8 @@ export async function GET(request: Request): Promise<Response> {
           memoryRepo.listActive(context),
           curiosityRepo.list(context),
           loopRepo.list(context),
+          getLiveEmailContext(db, context.lifeGraphId),
+          getLiveCalendarContext(db, context.lifeGraphId),
         ]);
 
       const nameByPersonId = new Map(members.map((person) => [person.id, person.name]));
@@ -96,6 +118,8 @@ export async function GET(request: Request): Promise<Response> {
         projects,
         relationships: relationshipInputs,
         curiosityQuestions,
+        emailSnapshot: emailOutcome.status === "connected" ? emailOutcome.snapshot : undefined,
+        calendarSnapshot: calendarOutcome.status === "connected" ? calendarOutcome.snapshot : undefined,
         existingLoops,
       });
 

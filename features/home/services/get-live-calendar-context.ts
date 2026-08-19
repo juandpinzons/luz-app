@@ -2,6 +2,7 @@ import type { EntityId } from "../../../core/life/value-objects/entity-id";
 import type { Database } from "../../../core/db/client";
 import { buildCalendarContext } from "./build-calendar-context";
 import type { HomeCalendarContext } from "../domain/home-state";
+import type { CalendarSnapshot } from "../../reality/domain";
 import { applySyncResult, getCalendarSnapshot, synchronizeCalendar } from "../../reality/application";
 import { AppleCalendarClient, AppleCalendarProvider } from "../../reality/providers/apple";
 import {
@@ -58,7 +59,13 @@ const PERSON_TIME_ZONE = "America/Bogota";
 
 export type LiveCalendarOutcome =
   | { status: "not_connected" }
-  | { status: "connected"; externalAccountId: string; calendarContext: HomeCalendarContext }
+  | {
+      status: "connected";
+      externalAccountId: string;
+      calendarContext: HomeCalendarContext;
+      /** El `CalendarSnapshot` crudo detrás de `calendarContext` -- `app/api/cron/continuity-worker/route.ts` lo necesita para `detectAllContinuityLoops`, que espera el dominio de Reality, no la forma ya traducida para Home. Aditivo: quien solo lea `calendarContext` no nota el cambio. */
+      snapshot: CalendarSnapshot;
+    }
   | { status: "error"; externalAccountId: string; error: unknown };
 
 export async function getLiveCalendarContext(db: Database, lifeGraphId: EntityId): Promise<LiveCalendarOutcome> {
@@ -96,6 +103,7 @@ export async function getLiveCalendarContext(db: Database, lifeGraphId: EntityId
       status: "connected",
       externalAccountId: stored.connection.externalAccountId,
       calendarContext: buildCalendarContext(snapshot)!,
+      snapshot,
     };
   } catch (error) {
     await markCalendarConnectionError(db, stored.connection.id);

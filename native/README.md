@@ -8,7 +8,9 @@ operativo de este directorio.
 
 - Fase 1 (shell + puente de login + push), Fase 2 (offline mínimo) y
   Fase 3 (Sign in with Apple) del plan están completas del lado de
-  código.
+  código. Fase 4 está PARCIAL a propósito -- ver su propia sección
+  abajo: lo que era código puro ya se hizo, el resto son decisiones o
+  acciones que le corresponden al Founder, no a mí.
 - `ios/` ya existe, generado con `npx cap add ios`, y se verificó
   compilando y corriendo de verdad en iOS Simulator (Xcode 26.6, iOS
   26.5) -- el WKWebView carga la landing real de producción. `ios/`
@@ -104,6 +106,47 @@ diferencia de Push Notifications/Associated Domains, esta SÍ se puede
 agregar con una cuenta de Apple gratuita para probar en un dispositivo
 real, pero Apple Developer Program sigue haciendo falta para App Store
 Connect/TestFlight/distribución real.
+
+## Fase 4 -- parcial a propósito
+
+El plan original agrupa varias cosas bajo "Fase 4" que NO son del
+mismo tipo de trabajo -- separadas explícitamente acá:
+
+**Hecho** (código puro, sin depender de ninguna decisión externa):
+disparadores de push restantes que SÍ tienen sentido en frecuencia
+diaria. `app/api/cron/continuity-worker/route.ts` ahora también trae
+`getLiveEmailContext`/`getLiveCalendarContext` por cada persona (mismas
+funciones que ya usan `/dashboard`/`/calendar`/`/gmail`) y se los pasa a
+`detectAllContinuityLoops`. Esas dos reglas de detección
+(`detectFromEmailSnapshot` -> `awaiting_my_reply`,
+`detectFromCalendarSnapshot` -> `important_meeting`/`future_commitment`)
+existían completas y probadas desde antes, pero nada las invocaba en
+producción -- el propio docblock original de esta ruta ya anticipaba
+esta extensión como "aditiva futura, no un rediseño". Cero código
+nuevo de push: el envío ya estaba gateado a "cualquier loop nuevo",
+sin importar el origen. Verificado con fixtures reales de
+`EmailSnapshot`/`CalendarSnapshot` (confirmando que
+`detectAllContinuityLoops` produce los loops esperados) y corriendo el
+handler real del cron contra Postgres local.
+
+**Deliberadamente NO construido, y por qué**:
+- *"Tu reunión empieza en 15 minutos" (calendar `starting_soon`)*:
+  necesita precisión de minutos -- Vercel Hobby limita cron a una
+  corrida al día (confirmado contra la documentación actual de Vercel,
+  no supuesto). Sin upgrade de plan, cualquier versión de esto sería
+  inútil (una alerta de "empieza en 15 min" revisada una vez al día no
+  significa nada).
+- *Notificación de crisis*: el plan original ya la dejó fuera a
+  propósito ("diseño aparte... conversación aparte sobre visibilidad en
+  pantalla de bloqueo y tono del mensaje") -- sigue siendo una decisión
+  de producto/seguridad que le corresponde al Founder, no algo para
+  decidir en código sin esa conversación.
+- *Plan de Vercel (Hobby -> Pro)*: decisión de costo recurrente, no
+  mía.
+- *Dominio propio*: necesita acción del Founder en Porkbun/DNS.
+- *Envío a revisión de Apple Store*: depende de Apple Developer
+  Program, explícitamente diferido esta sesión ("antes de meternos al
+  apple developer program").
 
 ## Código nativo que YA vive en la app web (no en `native/`)
 
