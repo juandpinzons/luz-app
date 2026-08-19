@@ -6,8 +6,9 @@ operativo de este directorio.
 
 ## Estado actual (2026-08-18)
 
-- Fase 1 (shell + puente de login + push) y Fase 2 (offline mínimo) del
-  plan están completas del lado de código.
+- Fase 1 (shell + puente de login + push), Fase 2 (offline mínimo) y
+  Fase 3 (Sign in with Apple) del plan están completas del lado de
+  código.
 - `ios/` ya existe, generado con `npx cap add ios`, y se verificó
   compilando y corriendo de verdad en iOS Simulator (Xcode 26.6, iOS
   26.5) -- el WKWebView carga la landing real de producción. `ios/`
@@ -60,6 +61,49 @@ reales de `online`/`offline`, y ambos fallbacks (`error.tsx` del
 Dashboard, catch de `loadConversation` en `/chat`) se probaron forzando
 un fallo real y confirmando que muestran el contenido cacheado
 correcto.
+
+## Sign in with Apple (Fase 3)
+
+A propósito, construida ANTES de que el Founder complete Apple
+Developer Program: la verificación del `identityToken` no necesita
+NINGUNA credencial de esa inscripción -- son las llaves PÚBLICAS de
+Apple (`https://appleid.apple.com/auth/keys`), y el flujo nativo
+(`ASAuthorizationAppleIDProvider`, no el flujo web con Services ID)
+firma el JWT con el Bundle ID de la app, ya decidido (`com.joinluz.app`).
+Verificado con un JWT real, firmado localmente con un par de llaves
+RSA generado para la prueba (7 casos: firma real, firma corrupta,
+`aud`/`iss` incorrectos, expirado, `kid` desconocido, formato
+inválido) -- ninguno mockeado, la lógica de verificación se ejecutó de
+verdad contra un servidor JWKS local. También se probó la creación/
+reconocimiento de cuenta (`linkNativeAccountAndCreateSession`, ver
+abajo) contra Postgres real.
+
+Sin rama web -- guideline 4.8 de Apple solo aplica al binario que se
+somete a revisión, nunca al sitio (no pasa por App Store Review), así
+que `AppleSignInButton` solo renderiza dentro de la app nativa. Esto
+es una desviación deliberada del texto original del plan (que mencionaba
+agregar un provider en `auth/providers/index.ts`, el mecanismo de Auth.js
+para el flujo WEB) -- se decidió no construirlo: exigiría su propia
+configuración aparte en Apple Developer Portal (una Services ID, distinta
+del Bundle ID) sin que ninguna guideline lo requiera.
+
+Arquitectura MÁS SIMPLE que el puente de Google: sin navegador de
+sistema, sin Universal Link -- `ASAuthorizationAppleIDProvider` autentica
+dentro de la MISMA app (hoja modal nativa) y entrega el resultado
+directo en JS, una sola llamada async. `POST /api/apple-auth/callback`
+verifica el JWT y devuelve un código de intercambio; el paso final
+reutiliza el MISMO `/api/mobile-auth/consume` que ya usaba Google --
+agnóstico de proveedor desde su diseño original. La lógica de crear/
+vincular la cuenta y abrir la sesión (antes duplicada en el callback de
+Google) se extrajo a `auth/link-native-account-and-create-session.ts`,
+compartida por los dos proveedores.
+
+**Pendiente, del lado del Founder**: la capacidad "Sign In with Apple"
+todavía necesita habilitarse en Xcode (Signing & Capabilities) -- a
+diferencia de Push Notifications/Associated Domains, esta SÍ se puede
+agregar con una cuenta de Apple gratuita para probar en un dispositivo
+real, pero Apple Developer Program sigue haciendo falta para App Store
+Connect/TestFlight/distribución real.
 
 ## Código nativo que YA vive en la app web (no en `native/`)
 

@@ -1,5 +1,6 @@
 import { signIn } from "@/auth";
 import { PresenceDot } from "@/components/ui/presence-dot";
+import { AppleSignInButton } from "@/features/native/components/apple-sign-in-button";
 import { GoogleSignInButton } from "@/features/native/components/google-sign-in-button";
 
 /**
@@ -43,13 +44,15 @@ export default async function LoginPage({
           : "Un paso más, y estoy aquí."}
       </p>
 
-      <div className="animate-fade-in mt-10" style={{ animationDelay: "160ms" }}>
+      <div className="animate-fade-in mt-10 flex flex-col items-center gap-3" style={{ animationDelay: "160ms" }}>
         <GoogleSignInButton
           webSignInAction={async () => {
             "use server";
             await signIn("google", { redirectTo });
           }}
         />
+        {/* Sin rama web -- guideline 4.8 de Apple solo aplica al binario que se somete a revisión, ver el docblock del componente. */}
+        <AppleSignInButton />
       </div>
     </main>
   );
