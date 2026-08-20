@@ -9,8 +9,13 @@ import {
   groupByTimeLabel,
   searchMemories,
   type MemoryTimeGroup,
+  type MemoryWithConnections,
 } from "@/features/memories/services/search-memories";
 import { selectMemoryHighlights } from "@/features/memories/services/select-memory-highlights";
+import {
+  getMemoryTimelineIndex,
+  type MemoryMonthBucket,
+} from "@/features/memories/services/get-memory-timeline-index";
 import {
   listValidatedInsights,
   type ValidatedInsights,
@@ -18,7 +23,10 @@ import {
 import { MemoryCard } from "@/features/memories/components/memory-card";
 import { MemorySelectionBar } from "@/features/memories/components/memory-selection-bar";
 import { MemorySelectionProvider } from "@/features/memories/components/memory-selection-context";
+import { MemoryTimelineSidebar } from "@/features/memories/components/memory-timeline-sidebar";
 import { InsightCard } from "@/features/memories/components/insight-card";
+
+const VALID_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /**
  * Memories, solo lectura (Sprint 4, docs/product/
@@ -40,17 +48,22 @@ import { InsightCard } from "@/features/memories/components/insight-card";
 export default async function MemoriesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; view?: string }>;
+  searchParams: Promise<{ q?: string; view?: string; month?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) {
     redirect("/login");
   }
 
-  const { q, view } = await searchParams;
+  const { q, view, month } = await searchParams;
   const searchTerm = q?.trim() || undefined;
   const showHidden = view === "hidden";
-  const showAllChronological = (view === "all" || Boolean(searchTerm)) && !showHidden;
+  // Nunca se confía en un query param crudo (mismo criterio que
+  // `searchTerm` arriba) -- si no matchea "YYYY-MM" se descarta en vez
+  // de pasarlo a la consulta.
+  const validMonth = month && VALID_MONTH_PATTERN.test(month) ? month : undefined;
+  const showMonth = Boolean(validMonth) && !showHidden;
+  const showAllChronological = (view === "all" || Boolean(searchTerm)) && !showHidden && !showMonth;
 
   let lifeGraphContext = null;
   try {
@@ -68,6 +81,10 @@ export default async function MemoriesPage({
   let hiddenGroups: MemoryTimeGroup[] = [];
   let groups: MemoryTimeGroup[] = [];
   let highlights: Awaited<ReturnType<typeof selectMemoryHighlights>> = [];
+  /** Lista plana de un solo mes (`?month=`) -- no pasa por `groupByTimeLabel`: un solo mes agrupado en Hoy/Esta semana/Este mes/Más atrás degenera casi siempre a un único bucket. */
+  let monthMemories: MemoryWithConnections[] = [];
+  /** Índice de meses con recuerdos, para la franja de `MemoryTimelineSidebar` -- vacío mientras `showHidden` (la franja no se muestra ahí). */
+  let months: MemoryMonthBucket[] = [];
   /** Títulos de Goal/Project ya persistidos — misma búsqueda literal de §3.2.1, en la dirección inversa (¿qué Life aparece dentro de esta memoria?). */
   let lifeTitles: string[] = [];
   /**
@@ -88,14 +105,29 @@ export default async function MemoriesPage({
     } catch (error) {
       console.error("[memories] no se pudieron cargar los recuerdos ocultos:", error);
     }
+  } else if (lifeGraphContext && showMonth && validMonth) {
+    try {
+      const [flatMemories, timelineIndex, goals, projects] = await Promise.all([
+        searchMemories(db, lifeGraphContext, { month: validMonth }),
+        getMemoryTimelineIndex(db, lifeGraphContext),
+        listAllGoals(db, lifeGraphContext),
+        listAllProjects(db, lifeGraphContext),
+      ]);
+      monthMemories = flatMemories;
+      months = timelineIndex;
+      lifeTitles = [...goals, ...projects].map((item) => item.title);
+    } catch (error) {
+      console.error("[memories] no se pudieron cargar los recuerdos del mes:", error);
+    }
   } else if (lifeGraphContext) {
     try {
-      const [flatMemories, goals, projects, validatedInsights] = await Promise.all([
+      const [flatMemories, timelineIndex, goals, projects, validatedInsights] = await Promise.all([
         // Sin `groupByTime` -- una sola consulta, reutilizada abajo tanto
         // para "ver todo" (agrupado por tiempo) como para Highlights
         // (filtrado por rank.score), nunca dos consultas por la misma
         // visita.
         searchMemories(db, lifeGraphContext, { text: searchTerm }),
+        getMemoryTimelineIndex(db, lifeGraphContext),
         listAllGoals(db, lifeGraphContext),
         listAllProjects(db, lifeGraphContext),
         searchTerm
@@ -104,6 +136,7 @@ export default async function MemoriesPage({
       ]);
       groups = groupByTimeLabel(flatMemories);
       highlights = selectMemoryHighlights(flatMemories);
+      months = timelineIndex;
       lifeTitles = [...goals, ...projects].map((item) => item.title);
       insights = validatedInsights;
     } catch (error) {
@@ -113,7 +146,9 @@ export default async function MemoriesPage({
 
   const hasResults = showHidden
     ? hiddenGroups.some((group) => group.memories.length > 0)
-    : groups.some((group) => group.memories.length > 0);
+    : showMonth
+      ? monthMemories.length > 0
+      : groups.some((group) => group.memories.length > 0);
 
   /**
    * Posición global de cada memoria (no solo dentro de su grupo de
@@ -161,6 +196,8 @@ export default async function MemoriesPage({
             </button>
           </form>
 
+          {!showHidden && <MemoryTimelineSidebar months={months} activeMonth={validMonth} />}
+
           {insights.items.length > 0 && (
             <section className="animate-fade-in mt-8">
               <h2 className="text-sm font-medium text-zinc-400">
@@ -184,9 +221,11 @@ export default async function MemoriesPage({
             <p className="animate-fade-in mt-10 text-sm text-zinc-500">
               {showHidden
                 ? "Todavía no has ocultado ningún recuerdo."
-                : searchTerm
-                  ? "No encontré recuerdos con eso."
-                  : "Esto se va a ir llenando con lo que me vayas contando."}
+                : showMonth
+                  ? "No tengo recuerdos guardados en ese mes."
+                  : searchTerm
+                    ? "No encontré recuerdos con eso."
+                    : "Esto se va a ir llenando con lo que me vayas contando."}
             </p>
           )}
 
@@ -222,7 +261,7 @@ export default async function MemoriesPage({
             </div>
           )}
 
-          {!showHidden && hasResults && !showAllChronological && (
+          {!showHidden && !showMonth && hasResults && !showAllChronological && (
             <section className="animate-fade-in mt-8">
               <h2 className="text-sm font-medium text-zinc-400">
                 Momentos que más han quedado
@@ -255,6 +294,37 @@ export default async function MemoriesPage({
               >
                 Ver todo, en orden →
               </Link>
+            </section>
+          )}
+
+          {showMonth && (
+            <Link
+              href="/memories"
+              className="animate-fade-in mt-8 inline-block text-xs text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+            >
+              ← Momentos destacados
+            </Link>
+          )}
+
+          {hasResults && showMonth && (
+            <section className="mt-4">
+              <h2 className="text-sm font-medium text-zinc-400">
+                {months.find((bucket) => bucket.month === validMonth)?.label ?? validMonth}
+              </h2>
+              <ul className="mt-3 space-y-2">
+                {monthMemories.map((memory, index) => (
+                  <MemoryCard
+                    key={memory.id}
+                    memory={memory}
+                    index={Math.min(index, 12)}
+                    connectedContents={memory.connectedContents}
+                    mentionedLifeTitles={lifeTitles.filter((title) =>
+                      memory.content.toLowerCase().includes(title.toLowerCase()),
+                    )}
+                    showActions
+                  />
+                ))}
+              </ul>
             </section>
           )}
 

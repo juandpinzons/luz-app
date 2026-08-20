@@ -1,4 +1,5 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { personCalendarStartOfDayUtc } from "../../../core/config/person-time-zone";
 import type { Database } from "../../../core/db/client";
 import { memories, memoryConnections } from "../../../core/db/schema";
 import type { LifeGraphContext } from "../../../core/life";
@@ -139,6 +140,54 @@ async function listRecentActiveMemories(
 }
 
 /**
+ * `?month=` en /memories (franja de meses, `get-memory-timeline-index.ts`)
+ * -- misma forma que `listRecentActiveMemories` de arriba, acotada a
+ * un mes calendario en hora Bogotá en vez de "las más recientes".
+ * Límite superior exclusivo (inicio del mes siguiente) en vez de
+ * "último instante del mes": evita errores de borde por segundos/
+ * milisegundos y funciona igual para meses de 28, 30 o 31 días sin
+ * lógica especial. Consulta directa, no pasa por
+ * `StructuredMemoryRetrievalStrategy` -- mismo motivo que el resto de
+ * este archivo: esta pantalla es cronológica, no de relevancia.
+ */
+async function listMemoriesForMonth(
+  db: Database,
+  context: LifeGraphContext,
+  month: string,
+): Promise<Memory[]> {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const from = personCalendarStartOfDayUtc(year, monthNumber, 1);
+  const to =
+    monthNumber === 12
+      ? personCalendarStartOfDayUtc(year + 1, 1, 1)
+      : personCalendarStartOfDayUtc(year, monthNumber + 1, 1);
+
+  const rows = await db
+    .select()
+    .from(memories)
+    .where(
+      and(
+        eq(memories.lifeGraphId, context.lifeGraphId),
+        eq(memories.status, "active"),
+        eq(memories.suppressed, false),
+        eq(memories.hiddenFromUser, false),
+        // `.toISOString()` -- el driver de `postgres` no serializa un
+        // `Date` crudo interpolado dentro de un fragmento `sql` (a
+        // diferencia de pasarlo por `gte`/`lte` sobre una columna
+        // tipada); confirmado corriendo esto contra Postgres real
+        // (`ERR_INVALID_ARG_TYPE`). Un string ISO sí se parametriza
+        // igual que cualquier otro valor.
+        sql`coalesce(${memories.occurredAt}, ${memories.createdAt}) >= ${from.toISOString()}`,
+        sql`coalesce(${memories.occurredAt}, ${memories.createdAt}) < ${to.toISOString()}`,
+      ),
+    )
+    .orderBy(sql`${memories.occurredAt} DESC NULLS LAST`, sql`${memories.createdAt} DESC`)
+    .limit(RESULT_CAP);
+
+  return rows.map(toActiveMemory);
+}
+
+/**
  * War Room 2026-07-29 (continuación): antes, una consulta
  * `getConnections` por memoria (hasta `RESULT_CAP` = 100, paralelas
  * pero igual 100 round-trips). Una sola consulta agrupada por lote,
@@ -201,30 +250,35 @@ async function loadConnectionsByMemoryId(
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options: { text?: string; groupByTime: true; visibility?: "visible" | "hidden" },
+  options: { text?: string; month?: string; groupByTime: true; visibility?: "visible" | "hidden" },
 ): Promise<MemoryTimeGroup[]>;
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options?: { text?: string; groupByTime?: false; visibility?: "visible" | "hidden" },
+  options?: { text?: string; month?: string; groupByTime?: false; visibility?: "visible" | "hidden" },
 ): Promise<MemoryWithConnections[]>;
 export async function searchMemories(
   db: Database,
   context: LifeGraphContext,
-  options: { text?: string; groupByTime?: boolean; visibility?: "visible" | "hidden" } = {},
+  options: { text?: string; month?: string; groupByTime?: boolean; visibility?: "visible" | "hidden" } = {},
 ): Promise<MemoryWithConnections[] | MemoryTimeGroup[]> {
   const visibility = options.visibility ?? "visible";
-  // `visibility: "hidden"` nunca pasa por la mitad de texto (ver docblock
-  // de `listRecentActiveMemories`) -- `text` se ignora en ese modo en vez
-  // de fallar, así un `?q=` que quede en la URL al cambiar de pestaña no
-  // rompe la vista de ocultos.
+  // `visibility: "hidden"` nunca pasa por `text` ni por `month` (ver
+  // docblock de `listRecentActiveMemories`) -- ambos se ignoran en ese
+  // modo en vez de fallar, así un `?q=`/`?month=` que quede en la URL
+  // al cambiar de pestaña no rompe la vista de ocultos. `month` gana
+  // sobre `text` si ambos llegaran juntos -- no ocurre desde la UI
+  // (son mutuamente excluyentes en `/memories`), pero mantiene la
+  // resolución determinística si algún día pasara.
   const raw =
-    options.text && visibility === "visible"
-      ? await createMemoryEngine(db).retrieve(context, {
-          text: options.text,
-          limit: RESULT_CAP,
-        })
-      : await listRecentActiveMemories(db, context, visibility);
+    options.month && visibility === "visible"
+      ? await listMemoriesForMonth(db, context, options.month)
+      : options.text && visibility === "visible"
+        ? await createMemoryEngine(db).retrieve(context, {
+            text: options.text,
+            limit: RESULT_CAP,
+          })
+        : await listRecentActiveMemories(db, context, visibility);
 
   const sorted = sortByRecency(raw).slice(0, RESULT_CAP);
   const contentById = new Map(sorted.map((memory) => [memory.id, memory.content]));
