@@ -8,7 +8,7 @@ import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
 import type { EntityId } from "../../../core/life/value-objects/entity-id";
 import type { LifeGraphContext } from "../../../core/life/life-graph-context";
-import { createMemoryEngine, type Memory } from "../../../core/memory-engine";
+import { createMemoryEngine, extractOccurredAt, type Memory } from "../../../core/memory-engine";
 import { MIN_SCORE_WITH_UNDERSTANDING_SIGNAL } from "../../../core/memory-engine/ranking/deterministic-memory-ranking-strategy";
 import { enqueueKnowledgeJob } from "../../../core/knowledge/jobs";
 import { describeError } from "../../../core/observability/describe-error";
@@ -413,13 +413,21 @@ async function prepareMessageInner(
   let capturedMemory: Memory | null = null;
   if (lifeGraphContext) {
     try {
+      // Determinístico, no una llamada a IA -- síncrono, sin costo real
+      // de latencia (mismo criterio que `detectCrisisSignal`, un turno
+      // de chat nunca paga el costo de una extracción con IA acá, ver
+      // docblock de `extractOccurredAt`). Si el contenido no menciona
+      // ninguna fecha, cae exactamente al comportamiento de siempre.
+      const occurredAt =
+        extractOccurredAt(input.message, userMessage.createdAt) ?? userMessage.createdAt;
+
       capturedMemory = await span("Memory.capture", "engine", () =>
         createMemoryEngine(db).capture(lifeGraphContext, {
           content: input.message,
           source: "conversation",
           sourceId: userMessage.id,
           personId: lifeGraphContext.personId,
-          occurredAt: userMessage.createdAt,
+          occurredAt,
         }),
       );
     } catch (error) {

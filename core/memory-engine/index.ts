@@ -35,6 +35,9 @@ export * from "./retrieval/ai-semantic-memory-retrieval-strategy";
 // Embedding
 export * from "./embedding/generate-memory-embedding";
 
+// Temporal
+export * from "./temporal/extract-occurred-at";
+
 // Classification
 export * from "./classification/memory-classifier";
 export * from "./classification/deterministic-memory-classifier";
