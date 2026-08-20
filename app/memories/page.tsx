@@ -24,6 +24,7 @@ import { MemoryCard } from "@/features/memories/components/memory-card";
 import { MemorySelectionBar } from "@/features/memories/components/memory-selection-bar";
 import { MemorySelectionProvider } from "@/features/memories/components/memory-selection-context";
 import { MemoryTimelineSidebar } from "@/features/memories/components/memory-timeline-sidebar";
+import { MemoryTimelineStrip } from "@/features/memories/components/memory-timeline-strip";
 import { InsightCard } from "@/features/memories/components/insight-card";
 
 const VALID_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -166,7 +167,8 @@ export default async function MemoriesPage({
   return (
     <MemorySelectionProvider>
       <main className="min-h-full px-6 py-10 text-white">
-        <div className="mx-auto w-full max-w-2xl">
+        <div className="mx-auto flex w-full max-w-2xl gap-10 md:max-w-4xl">
+          <div className="w-full max-w-2xl">
           <div className="flex items-center justify-between gap-4">
             <h1 className="text-xl font-light tracking-[0.25em]">RECUERDOS</h1>
             {!showHidden && (
@@ -196,7 +198,7 @@ export default async function MemoriesPage({
             </button>
           </form>
 
-          {!showHidden && <MemoryTimelineSidebar months={months} activeMonth={validMonth} />}
+          {!showHidden && <MemoryTimelineStrip months={months} activeMonth={validMonth} />}
 
           {insights.items.length > 0 && (
             <section className="animate-fade-in mt-8">
@@ -363,6 +365,9 @@ export default async function MemoriesPage({
               </div>
             </>
           )}
+          </div>
+
+          {!showHidden && <MemoryTimelineSidebar months={months} activeMonth={validMonth} />}
         </div>
       </main>
 

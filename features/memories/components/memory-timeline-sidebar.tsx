@@ -7,15 +7,15 @@ interface MemoryTimelineSidebarProps {
 }
 
 /**
- * Franja horizontal de meses con recuerdos ("desplazarse por fechas",
- * pedido del Founder) -- franja horizontal, no columna lateral fija:
- * esta página no tiene layout de dos columnas en ningún otro lugar, y
- * una columna fija se vería apretada en el shell móvil de iOS
- * (decisión confirmada con el Founder antes de construir esto).
- * Server Component puro, navegación por `<Link>` -- mismo patrón sin
- * JS de cliente que `?view=hidden`/`?view=all`/búsqueda ya usan en
- * esta página. Click sobre el mes ya activo lo deselecciona (vuelve a
- * `/memories`), mismo criterio que un filtro tipo chip.
+ * Columna vertical fija, solo md+ (`hidden md:flex`) -- pedida
+ * explícitamente por el Founder tras ver primero una franja
+ * horizontal ("Yes. actual vertical sidebar."). En pantallas angostas
+ * (shell móvil de iOS) se usa `MemoryTimelineStrip` en su lugar, misma
+ * data -- una columna fija ahí se vería apretada. `sticky` para que
+ * quede visible mientras se hace scroll de una lista larga de
+ * recuerdos; `self-start` para que no se estire a la altura completa
+ * del contenedor flex (sin esto, `sticky` no tiene margen para
+ * moverse). Server Component puro, navegación por `<Link>`.
  */
 export function MemoryTimelineSidebar({ months, activeMonth }: MemoryTimelineSidebarProps) {
   if (months.length === 0) return null;
@@ -23,7 +23,7 @@ export function MemoryTimelineSidebar({ months, activeMonth }: MemoryTimelineSid
   return (
     <nav
       aria-label="Línea de tiempo de recuerdos"
-      className="animate-fade-in mt-4 flex gap-2 overflow-x-auto pb-2"
+      className="sticky top-10 hidden w-44 shrink-0 flex-col gap-2 self-start border-l border-zinc-800 pl-5 md:flex"
     >
       {months.map((bucket) => {
         const isActive = bucket.month === activeMonth;
@@ -33,12 +33,11 @@ export function MemoryTimelineSidebar({ months, activeMonth }: MemoryTimelineSid
             href={isActive ? "/memories" : `/memories?month=${bucket.month}`}
             className={
               isActive
-                ? "whitespace-nowrap rounded-full bg-white px-3 py-1.5 text-xs text-black transition"
-                : "whitespace-nowrap rounded-full bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 ring-1 ring-zinc-800 transition hover:text-zinc-200"
+                ? "text-sm text-white"
+                : "text-sm text-zinc-500 transition hover:text-zinc-300"
             }
           >
-            {bucket.label}{" "}
-            <span className={isActive ? "text-zinc-500" : "text-zinc-600"}>{bucket.count}</span>
+            {bucket.label} <span className="text-xs text-zinc-600">{bucket.count}</span>
           </Link>
         );
       })}
