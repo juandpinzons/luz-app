@@ -33,6 +33,18 @@ export const curiosityQuestions = pgTable(
     rationale: text("rationale").notNull(),
     status: curiosityQuestionStatusEnum("status").notNull().default("pending"),
     coverageScoreAtCreation: integer("coverage_score_at_creation").notNull(),
+    /**
+     * Cuántas veces `CuriosityStrategyRule` de verdad incluyó esta
+     * pregunta como candidata en un turno -- un hecho que el sistema
+     * puede confirmar (su propia acción), a diferencia de "se
+     * verbalizó" (el LLM puede parafrasear o saltarla, ver docblock de
+     * arriba sobre Principio 3). Al llegar a `MAX_CURIOSITY_OFFERS`
+     * (`curiosity-strategy-rule.ts` / `send-message.ts`), la pregunta se
+     * marca `dismissed` -- mismo estado que "superada por una más
+     * reciente", solo que esta vez la supera el propio límite de
+     * ofrecimientos.
+     */
+    timesOffered: integer("times_offered").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),

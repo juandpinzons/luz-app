@@ -81,6 +81,7 @@ async function buildExperimentContext(experiment: Experiment, variant: Experimen
     presence,
     voice,
     conversationRules,
+    fatiguedDomain: null,
     responseIntent: isFirstContact ? "first_contact" : "continue_conversation",
   };
 }

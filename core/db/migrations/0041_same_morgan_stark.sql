@@ -1,0 +1,1 @@
+ALTER TABLE "curiosity_questions" ADD COLUMN "times_offered" integer DEFAULT 0 NOT NULL;

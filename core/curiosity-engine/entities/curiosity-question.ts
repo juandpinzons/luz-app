@@ -35,6 +35,8 @@ export interface CuriosityQuestion {
   rationale: string;
   status: CuriosityQuestionStatus;
   coverageScoreAtCreation: number;
+  /** Cuántas veces `CuriosityStrategyRule` de verdad incluyó esta pregunta como candidata en un turno -- ver `core/db/schema/curiosity-engine.ts` para el porqué (Principio 3, explicabilidad). */
+  timesOffered: number;
   createdAt: Date;
   updatedAt: Date;
   resolvedAt?: Date;

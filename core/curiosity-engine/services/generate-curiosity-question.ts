@@ -9,6 +9,17 @@ import type { CuriosityQuestionRepository } from "../repositories/curiosity-ques
 export const CURIOSITY_GAP_THRESHOLD = 25;
 
 /**
+ * Cuántas veces se ofrece la misma `CuriosityQuestion` pendiente antes de
+ * retirarla (`dismissed`) -- consumido por `send-message.ts` junto con
+ * `CuriosityQuestionRepository.incrementTimesOffered`. Sin este tope, la
+ * misma pregunta puede resurgir indefinidamente entre conversaciones
+ * (`isStrategyOnCooldown` solo limita turnos consecutivos, no el
+ * historial completo de esta pregunta puntual -- ver
+ * `core/conversation-strategy-engine/rules/diversity-cooldown.ts`).
+ */
+export const MAX_CURIOSITY_OFFERS = 2;
+
+/**
  * A lo sumo una `CuriosityQuestion` `pending` por LifeGraph a la vez
  * (Principio: "una experiencia mágica gana a diez mediocres" -- una
  * curiosidad genuina, no un backlog de preguntas acumulándose). Si ya
@@ -53,6 +64,7 @@ export async function generateCuriosityQuestion(
     rationale: proposed.rationale,
     status: "pending",
     coverageScoreAtCreation: input.weakestDomain.coverageScore,
+    timesOffered: 0,
     createdAt: now,
     updatedAt: now,
   });

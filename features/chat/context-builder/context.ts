@@ -1,5 +1,6 @@
 import type { ConversationStrategyDirective } from "../../../core/conversation-strategy-engine";
 import type { ContextItem } from "../../../core/context-engine";
+import type { LifeDomainType } from "../../../core/life/value-objects/life-domain-type";
 import type { PresenceStance } from "../../../core/presence-engine";
 import type { RealityMemoryItem } from "../../../core/reality";
 import type { RealitySnapshot } from "../../../core/reality";
@@ -86,4 +87,6 @@ export interface Context {
   voice: VoiceSignature;
   conversationRules: RuleDirective[];
   responseIntent: ResponseIntent;
+  /** El dominio fatigado que ya alimentó a `conversationStrategy` (Conversational Variety V1) -- expuesto aquí para que `send-message.ts` pueda re-derivar, del mismo snapshot inmutable, si la `CuriosityQuestion` pendiente fue de verdad la que ganó este turno (mismo criterio que ya usa para `reopen`/`acknowledge_closure`, ver ese docblock). */
+  fatiguedDomain: LifeDomainType | null;
 }

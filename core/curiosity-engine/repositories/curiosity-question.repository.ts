@@ -13,4 +13,6 @@ export interface CuriosityQuestionRepository {
     status: "resolved" | "dismissed",
     resolvedAt: Date,
   ): Promise<void>;
+  /** Atómico (`UPDATE ... SET times_offered = times_offered + 1 ... RETURNING`) -- sin lectura previa, nunca una carrera entre dos turnos concurrentes. Devuelve el conteo nuevo. */
+  incrementTimesOffered(context: LifeGraphContext, id: EntityId): Promise<number>;
 }

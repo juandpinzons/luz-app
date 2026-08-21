@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../../db/client";
 import { type CuriosityQuestionRow, curiosityQuestions } from "../../db/schema";
 import type { LifeGraphContext } from "../../life/life-graph-context";
@@ -15,6 +15,7 @@ function toCuriosityQuestion(row: CuriosityQuestionRow): CuriosityQuestion {
     rationale: row.rationale,
     status: row.status,
     coverageScoreAtCreation: row.coverageScoreAtCreation,
+    timesOffered: row.timesOffered,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     resolvedAt: row.resolvedAt ?? undefined,
@@ -69,6 +70,7 @@ export class DrizzleCuriosityQuestionRepository implements CuriosityQuestionRepo
         rationale: question.rationale,
         status: question.status,
         coverageScoreAtCreation: question.coverageScoreAtCreation,
+        timesOffered: question.timesOffered,
         createdAt: question.createdAt,
         updatedAt: question.updatedAt,
         resolvedAt: question.resolvedAt ?? null,
@@ -77,6 +79,7 @@ export class DrizzleCuriosityQuestionRepository implements CuriosityQuestionRepo
         target: curiosityQuestions.id,
         set: {
           status: question.status,
+          timesOffered: question.timesOffered,
           updatedAt: question.updatedAt,
           resolvedAt: question.resolvedAt ?? null,
         },
@@ -105,5 +108,20 @@ export class DrizzleCuriosityQuestionRepository implements CuriosityQuestionRepo
           eq(curiosityQuestions.lifeGraphId, context.lifeGraphId),
         ),
       );
+  }
+
+  async incrementTimesOffered(context: LifeGraphContext, id: EntityId): Promise<number> {
+    const [row] = await this.db
+      .update(curiosityQuestions)
+      .set({ timesOffered: sql`${curiosityQuestions.timesOffered} + 1`, updatedAt: new Date() })
+      .where(
+        and(
+          eq(curiosityQuestions.id, id),
+          eq(curiosityQuestions.lifeGraphId, context.lifeGraphId),
+        ),
+      )
+      .returning({ timesOffered: curiosityQuestions.timesOffered });
+
+    return row?.timesOffered ?? 0;
   }
 }

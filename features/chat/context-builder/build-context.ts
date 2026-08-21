@@ -181,5 +181,6 @@ export async function buildContext(
     voice,
     conversationRules,
     responseIntent,
+    fatiguedDomain: varietyContext.fatiguedDomain,
   };
 }

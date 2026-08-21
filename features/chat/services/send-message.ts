@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { getAIProvider } from "../../../ai";
 import type { AIMessage } from "../../../ai/provider";
 import { contextItemKey } from "../../../core/context-engine";
+import { DrizzleCuriosityQuestionRepository, MAX_CURIOSITY_OFFERS } from "../../../core/curiosity-engine";
 import { db } from "../../../core/db/client";
 import { conversationMessages, conversations } from "../../../core/db/schema";
 import type { UserContext } from "../../../core/identity/user-context";
@@ -167,6 +168,8 @@ interface PreparedMessage {
   conversationSignal: ConversationSignal | null;
   /** Null salvo que la estrategia ganadora sea `reopen`/`acknowledge_closure`. */
   seenPromptToMark: SeenPromptToMark | null;
+  /** Null salvo que la estrategia ganadora sea `curiosity` con una `CuriosityQuestion` pendiente real de por medio (no el genérico de dominio más débil) -- ver docblock junto a donde se deriva. */
+  curiosityQuestionIdOffered: EntityId | null;
   /** Ver `detect-crisis-signal.ts` -- calculado una sola vez aquí, consumido igual por `sendMessage`/`sendMessageStream`. */
   crisisSignalDetected: boolean;
   /** Ver `detect-image-generation-request.ts` -- `null` si este turno no pide generar una imagen. */
@@ -303,6 +306,7 @@ async function prepareMessageInner(
   let aiMessages: AIMessage[] = conversation;
   let conversationSignal: ConversationSignal | null = null;
   let seenPromptToMark: SeenPromptToMark | null = null;
+  let curiosityQuestionIdOffered: EntityId | null = null;
   if (lifeGraphContext) {
     const contextBuilderStart = Date.now();
     try {
@@ -343,6 +347,19 @@ async function prepareMessageInner(
             subjectType: SEEN_PROMPT_SUBJECT_TYPES.goalClosure,
             subjectId: winner.id,
           };
+        }
+      } else if (builtContext.conversationStrategy.strategy === "curiosity") {
+        // Mismo criterio que `reopen`/`acknowledge_closure` arriba:
+        // re-derivar del mismo `realitySnapshot`/`fatiguedDomain` ya
+        // construidos, nunca ensanchar `ConversationStrategyDirective`.
+        // `CuriosityStrategyRule.explain()` solo usa `pending.question`
+        // de verdad cuando existe Y no está fatigado su dominio (ver su
+        // docblock) -- el fallback genérico de dominio-más-débil no
+        // referencia ninguna `CuriosityQuestion` real, así que no hay
+        // nada que contar ahí.
+        const pending = builtContext.realitySnapshot.curiosity.pendingQuestion;
+        if (pending && pending.domain !== builtContext.fatiguedDomain) {
+          curiosityQuestionIdOffered = pending.id;
         }
       }
       logger.log({
@@ -471,6 +488,7 @@ async function prepareMessageInner(
     capturedMemory,
     conversationSignal,
     seenPromptToMark,
+    curiosityQuestionIdOffered,
     crisisSignalDetected,
     imageRequestPrompt,
   };
@@ -548,6 +566,8 @@ interface FinalizeReplyInput {
   conversationSignal: ConversationSignal | null;
   /** Ver docblock de `SeenPromptToMark`. */
   seenPromptToMark: SeenPromptToMark | null;
+  /** Ver docblock de `PreparedMessage.curiosityQuestionIdOffered`. */
+  curiosityQuestionIdOffered: EntityId | null;
   /** `route.ts` usa el mismo valor para taggear `error` en esta ruta -- así ambos son consultables juntos (OBSERVABILITY_PLAN.md). */
   route: string;
   /** Solo en el camino con streaming: ms desde `startedAt` hasta el primer chunk yielded. `undefined` en `sendMessage` -- ahí "primer token" y "duración total" son el mismo número, no hay nada nuevo que medir. */
@@ -590,6 +610,7 @@ async function finalizeReplyInner(
     capturedMemory,
     conversationSignal,
     seenPromptToMark,
+    curiosityQuestionIdOffered,
     route,
     firstTokenMs,
   } = input;
@@ -645,6 +666,36 @@ async function finalizeReplyInner(
     } catch (error) {
       logger.log({
         event: "background.seen_prompt_mark.failed",
+        severity: "error",
+        requestId,
+        conversationId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  // `curiosity` ganó el turno con una `CuriosityQuestion` pendiente real
+  // -- cuenta el ofrecimiento (hecho confirmable: el sistema decidió
+  // incluirla, ver docblock en `core/db/schema/curiosity-engine.ts`) y,
+  // al llegar al tope, la retira (`dismissed`, mismo estado que "superada
+  // por una más reciente") para que `generateCuriosityQuestion` pueda
+  // eventualmente proponer una nueva para ese dominio. Mismo criterio de
+  // tolerancia a fallos que el bloque de `seen_prompts` de arriba.
+  if (curiosityQuestionIdOffered && lifeGraphContext) {
+    try {
+      await span("Curiosity.recordOffer", "repository", async () => {
+        const repository = new DrizzleCuriosityQuestionRepository(db);
+        const timesOffered = await repository.incrementTimesOffered(
+          lifeGraphContext,
+          curiosityQuestionIdOffered,
+        );
+        if (timesOffered >= MAX_CURIOSITY_OFFERS) {
+          await repository.updateStatus(lifeGraphContext, curiosityQuestionIdOffered, "dismissed", new Date());
+        }
+      });
+    } catch (error) {
+      logger.log({
+        event: "background.curiosity_offer_record.failed",
         severity: "error",
         requestId,
         conversationId,
@@ -916,6 +967,7 @@ export async function sendMessage(
     capturedMemory: prepared.capturedMemory,
     conversationSignal: prepared.conversationSignal,
     seenPromptToMark: prepared.seenPromptToMark,
+    curiosityQuestionIdOffered: prepared.curiosityQuestionIdOffered,
     route: input.route,
   });
   after(() => Promise.all(backgroundTasks));
@@ -1051,6 +1103,7 @@ export async function sendMessageStream(
         capturedMemory: prepared.capturedMemory,
         conversationSignal: prepared.conversationSignal,
         seenPromptToMark: prepared.seenPromptToMark,
+        curiosityQuestionIdOffered: prepared.curiosityQuestionIdOffered,
         route: input.route,
         firstTokenMs: firstChunkAt ? firstChunkAt - startedAt : undefined,
       });
