@@ -243,6 +243,20 @@ export default async function AdminUserDetailPage({
             value={messageStats?.last ? fmtDate(messageStats.last) : "—"}
           />
         </div>
+        {conversationRows.length > 0 && (
+          <div className="mt-4">
+            <a
+              href={`/api/admin/users/${userId}/conversations/export?justification=${encodeURIComponent(trimmedJustification)}`}
+              className="inline-block rounded-lg border border-zinc-700 px-4 py-2 text-sm text-white hover:border-zinc-500"
+            >
+              Descargar transcripciones completas (JSON)
+            </a>
+            <p className="mt-1 text-xs text-zinc-600">
+              Descifra el texto de cada mensaje. Queda registrado por separado en
+              admin_access_log (ADR-0024).
+            </p>
+          </div>
+        )}
         <div className="mt-4 space-y-2">
           {conversationRows.map((c) => (
             <div
