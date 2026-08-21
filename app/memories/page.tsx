@@ -16,6 +16,8 @@ import {
   getMemoryTimelineIndex,
   type MemoryMonthBucket,
 } from "@/features/memories/services/get-memory-timeline-index";
+import { resolveConversationIdsForMessages } from "@/features/conversations/services/resolve-conversation-for-message";
+import type { Memory } from "@/core/memory-engine";
 import {
   listValidatedInsights,
   type ValidatedInsights,
@@ -28,6 +30,13 @@ import { MemoryTimelineStrip } from "@/features/memories/components/memory-timel
 import { InsightCard } from "@/features/memories/components/insight-card";
 
 const VALID_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** `sourceId` solo es un `conversation_messages.id` cuando `source === "conversation"` (Memory no interpreta su forma para ningún otro origen) -- ver `resolveConversationIdsForMessages`. */
+function conversationSourceIds(memories: Memory[]): string[] {
+  return memories
+    .filter((memory): memory is Memory & { sourceId: string } => memory.source === "conversation" && Boolean(memory.sourceId))
+    .map((memory) => memory.sourceId);
+}
 
 /**
  * Memories, solo lectura (Sprint 4, docs/product/
@@ -52,9 +61,10 @@ export default async function MemoriesPage({
   searchParams: Promise<{ q?: string; view?: string; month?: string }>;
 }) {
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
     redirect("/login");
   }
+  const userId = session.user.id;
 
   const { q, view, month } = await searchParams;
   const searchTerm = q?.trim() || undefined;
@@ -96,6 +106,8 @@ export default async function MemoriesPage({
    * mostrar algo fuera de lugar que ya usa el resto de la página).
    */
   let insights: ValidatedInsights = { items: [], total: 0, byType: {} };
+  /** "Ver conversación" en cada tarjeta -- resuelto por lote una vez por visita, nunca por tarjeta (ver `resolveConversationIdsForMessages`). */
+  let conversationIdBySourceId = new Map<string, string>();
 
   if (lifeGraphContext && showHidden) {
     try {
@@ -103,6 +115,11 @@ export default async function MemoriesPage({
         groupByTime: true,
         visibility: "hidden",
       });
+      conversationIdBySourceId = await resolveConversationIdsForMessages(
+        db,
+        userId,
+        conversationSourceIds(hiddenGroups.flatMap((group) => group.memories)),
+      );
     } catch (error) {
       console.error("[memories] no se pudieron cargar los recuerdos ocultos:", error);
     }
@@ -117,6 +134,11 @@ export default async function MemoriesPage({
       monthMemories = flatMemories;
       months = timelineIndex;
       lifeTitles = [...goals, ...projects].map((item) => item.title);
+      conversationIdBySourceId = await resolveConversationIdsForMessages(
+        db,
+        userId,
+        conversationSourceIds(monthMemories),
+      );
     } catch (error) {
       console.error("[memories] no se pudieron cargar los recuerdos del mes:", error);
     }
@@ -140,6 +162,11 @@ export default async function MemoriesPage({
       months = timelineIndex;
       lifeTitles = [...goals, ...projects].map((item) => item.title);
       insights = validatedInsights;
+      conversationIdBySourceId = await resolveConversationIdsForMessages(
+        db,
+        userId,
+        conversationSourceIds(flatMemories),
+      );
     } catch (error) {
       console.error("[memories] no se pudieron cargar las memorias:", error);
     }
@@ -253,6 +280,11 @@ export default async function MemoriesPage({
                         index={Math.min(index, 12)}
                         connectedContents={memory.connectedContents}
                         mentionedLifeTitles={[]}
+                        conversationId={
+                          memory.source === "conversation" && memory.sourceId
+                            ? conversationIdBySourceId.get(memory.sourceId)
+                            : undefined
+                        }
                         showActions
                         isHidden
                       />
@@ -279,6 +311,11 @@ export default async function MemoriesPage({
                       mentionedLifeTitles={lifeTitles.filter((title) =>
                         memory.content.toLowerCase().includes(title.toLowerCase()),
                       )}
+                      conversationId={
+                        memory.source === "conversation" && memory.sourceId
+                          ? conversationIdBySourceId.get(memory.sourceId)
+                          : undefined
+                      }
                       showActions
                     />
                   ))}
@@ -323,6 +360,11 @@ export default async function MemoriesPage({
                     mentionedLifeTitles={lifeTitles.filter((title) =>
                       memory.content.toLowerCase().includes(title.toLowerCase()),
                     )}
+                    conversationId={
+                      memory.source === "conversation" && memory.sourceId
+                        ? conversationIdBySourceId.get(memory.sourceId)
+                        : undefined
+                    }
                     showActions
                   />
                 ))}
@@ -356,6 +398,11 @@ export default async function MemoriesPage({
                           mentionedLifeTitles={lifeTitles.filter((title) =>
                             memory.content.toLowerCase().includes(title.toLowerCase()),
                           )}
+                          conversationId={
+                            memory.source === "conversation" && memory.sourceId
+                              ? conversationIdBySourceId.get(memory.sourceId)
+                              : undefined
+                          }
                           showActions
                         />
                       ))}

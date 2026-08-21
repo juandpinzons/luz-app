@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Memory } from "../../../core/memory-engine";
 import { MemoryCardActions } from "./memory-card-actions";
 import { MemorySelectToggle } from "./memory-select-toggle";
@@ -9,6 +10,15 @@ interface MemoryCardProps {
   connectedContents: string[];
   /** Títulos de Goal/Project que aparecen literalmente en `memory.content` (§3.2.1, misma búsqueda de texto, dirección inversa). */
   mentionedLifeTitles: string[];
+  /**
+   * Resuelto por el llamador (`resolveConversationIdsForMessages`,
+   * por lote -- nunca una consulta por tarjeta) solo cuando
+   * `memory.source === "conversation"` y el `sourceId` sí pertenece a
+   * esta persona. `undefined` cuando no aplica (memoria de otro
+   * origen, o la conversación no se pudo resolver) -- en ese caso no
+   * se muestra ningún enlace, nunca uno roto.
+   */
+  conversationId?: string;
   /** Posición dentro de la lista completa (no solo su grupo de tiempo) — solo para escalonar la entrada; recortada por el llamador para que una lista larga no tarde en aparecer. */
   index?: number;
   /**
@@ -40,6 +50,7 @@ export function MemoryCard({
   memory,
   connectedContents,
   mentionedLifeTitles,
+  conversationId,
   index = 0,
   showActions = false,
   isHidden = false,
@@ -68,6 +79,17 @@ export function MemoryCard({
             <p key={`mentions-${title}`}>— tiene que ver con {title}</p>
           ))}
         </div>
+      )}
+
+      {conversationId && (
+        <p className="mt-2 text-xs">
+          <Link
+            href={`/conversations/${conversationId}`}
+            className="text-zinc-500 underline decoration-zinc-700 underline-offset-4 hover:text-zinc-300"
+          >
+            Ver conversación →
+          </Link>
+        </p>
       )}
 
       {showActions && isHidden && <MemoryCardActions memoryId={memory.id} />}
