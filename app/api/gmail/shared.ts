@@ -20,6 +20,17 @@ export const GMAIL_OAUTH_SCOPE = "https://www.googleapis.com/auth/gmail.metadata
 export const GMAIL_STATE_COOKIE = "gmail_oauth_state";
 
 /**
+ * Solo se usa en el camino nativo (shell iOS, `Browser.open()`) --
+ * `connect/route.ts` la planta cuando resuelve un `exchangeCode` (en
+ * vez de `getUserContext()`, que no tiene la cookie de sesión de la
+ * app dentro del navegador de sistema) y `callback/route.ts` la lee de
+ * vuelta para saber a quién guardarle las credenciales, en ese mismo
+ * navegador. Ausente en el camino web -- ese sigue usando
+ * `getUserContext()` sin cambios.
+ */
+export const GMAIL_NATIVE_USER_COOKIE = "gmail_native_user_id";
+
+/**
  * `redirect_uri` debe ser IDÉNTICO byte a byte entre la petición de
  * autorización (`connect/route.ts`) y el intercambio de código
  * (`callback/route.ts`) -- construido desde el origen real de la

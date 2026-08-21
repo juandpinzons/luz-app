@@ -1,6 +1,7 @@
 import { pgTable, text, timestamp, uniqueIndex, uuid, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { EmailConnectionStatus, EmailProviderKind } from "../../email-connections/domain";
 import { lifeGraphs } from "./life-graph";
+import { users } from "./users";
 
 /**
  * Persistencia real de `EmailConnection` (`features/reality/domain/`)
@@ -51,3 +52,31 @@ export const emailConnections = pgTable(
 
 export type EmailConnectionRow = typeof emailConnections.$inferSelect;
 export type NewEmailConnectionRow = typeof emailConnections.$inferInsert;
+
+/**
+ * Puente de identidad para conectar Gmail desde el shell nativo iOS
+ * (misión "shell nativo iOS" -- Gmail se ve bloqueado por la política
+ * "disallowed_useragent" de Google dentro de la WebView propia de la
+ * app, igual que login; ver `google-sign-in-button.tsx`). Mismo criterio
+ * de vida corta y un solo uso que `mobileSessionHandoffs`
+ * (`auth/schema.ts`) -- pero NO es un handoff de sesión: no se crea
+ * ninguna sesión nueva acá, solo se lleva "este intento de conectar
+ * Gmail es de esta persona ya autenticada" a través del navegador de
+ * sistema (que no comparte cookies con la WebView de la app) y de
+ * vuelta. Nada secreto sobrevive al viaje de regreso -- para cuando
+ * `/api/gmail/callback` termina, los tokens ya quedaron guardados en
+ * `email_connections`, así que el regreso a la app es pura navegación,
+ * no un segundo secreto que proteger.
+ */
+export const gmailConnectHandoffs = pgTable("gmail_connect_handoffs", {
+  exchangeCode: text("exchange_code").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type GmailConnectHandoffRow = typeof gmailConnectHandoffs.$inferSelect;
+export type NewGmailConnectHandoffRow = typeof gmailConnectHandoffs.$inferInsert;

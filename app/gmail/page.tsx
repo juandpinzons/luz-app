@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getLifeGraphContext } from "@/auth/user-context";
@@ -7,6 +6,7 @@ import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { EmailRow } from "@/features/home/components/email-row";
+import { ConnectGmailButton } from "@/features/gmail/components/connect-gmail-button";
 import { DisconnectButton } from "./disconnect-button";
 
 const ROUTE = "/gmail";
@@ -73,12 +73,7 @@ export default async function GmailPage({
         {error && (
           <p className="mt-4 text-sm text-red-400">{CONNECT_ERROR_LABEL[error] ?? "No se pudo conectar tu correo."}</p>
         )}
-        <Link
-          href="/api/gmail/connect"
-          className="mt-8 inline-block rounded-full bg-white px-8 py-3 font-medium text-black transition hover:bg-zinc-200"
-        >
-          Conectar Gmail
-        </Link>
+        <ConnectGmailButton />
       </main>
     );
   }
@@ -100,9 +95,7 @@ export default async function GmailPage({
         {needsReauth && (
           <div className="mt-6 rounded-2xl border border-amber-900/50 bg-amber-950/20 px-5 py-4 text-sm text-amber-300">
             Tu acceso a Gmail expiró y necesita reautorizarse.
-            <Link href="/api/gmail/connect" className="mt-2 block underline">
-              Reconectar
-            </Link>
+            <ConnectGmailButton label="Reconectar" className="mt-2 block underline" />
           </div>
         )}
 
