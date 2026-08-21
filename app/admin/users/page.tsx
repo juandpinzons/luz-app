@@ -22,6 +22,16 @@ export default async function AdminUsersPage() {
   }
   await requireAdminMfa(session.user.id);
 
+  // Antes: un solo query con 3 leftJoin uno-a-muchos (memories,
+  // conversations, conversationMessages) sin relación entre sí,
+  // agrupado al final -- Postgres calcula el producto cruzado de los
+  // tres antes del GROUP BY. Con datos sintéticos (pocas filas) no se
+  // notaba; con datos reales (47 usuarios, 210 conversaciones, 1623
+  // mensajes -- y la cuenta del Founder con órdenes de magnitud más
+  // memorias que cualquier otra) el fan-out multiplicaba a cientos de
+  // miles de filas intermedias por usuario, dejando la página sin
+  // cargar en la práctica. Subqueries escalares correlacionadas: cada
+  // conteo se agrega en su propia tabla, sin cruzarse con las otras.
   const rows = await db
     .select({
       id: users.id,
@@ -29,17 +39,25 @@ export default async function AdminUsersPage() {
       name: users.name,
       createdAt: users.createdAt,
       lifeGraphId: accountIdentities.lifeGraphId,
-      memoryCount: sql<number>`count(distinct ${memories.id})`,
-      conversationCount: sql<number>`count(distinct ${conversations.id})`,
-      messageCount: sql<number>`count(distinct ${conversationMessages.id})`,
-      lastMessageAt: sql<string | null>`max(${conversationMessages.createdAt})`,
+      memoryCount: sql<number>`(
+        select count(*)::int from ${memories}
+        where ${memories.lifeGraphId} = ${accountIdentities.lifeGraphId}
+      )`,
+      conversationCount: sql<number>`(
+        select count(*)::int from ${conversations}
+        where ${conversations.userId} = ${users.id}
+      )`,
+      messageCount: sql<number>`(
+        select count(*)::int from ${conversationMessages}
+        where ${conversationMessages.userId} = ${users.id}
+      )`,
+      lastMessageAt: sql<string | null>`(
+        select max(${conversationMessages.createdAt}) from ${conversationMessages}
+        where ${conversationMessages.userId} = ${users.id}
+      )`,
     })
     .from(users)
     .leftJoin(accountIdentities, eq(accountIdentities.accountId, users.id))
-    .leftJoin(memories, eq(memories.lifeGraphId, accountIdentities.lifeGraphId))
-    .leftJoin(conversations, eq(conversations.userId, users.id))
-    .leftJoin(conversationMessages, eq(conversationMessages.userId, users.id))
-    .groupBy(users.id, accountIdentities.lifeGraphId)
     .orderBy(desc(users.createdAt));
 
   return (
