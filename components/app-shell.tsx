@@ -4,24 +4,8 @@ import { PresenceDot } from "@/components/ui/presence-dot";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { OfflineBanner } from "@/features/native/components/offline-banner";
 import { PushRegistration } from "@/features/native/components/push-registration";
-
-type ActiveSection = "dashboard" | "life" | "memories" | "chat";
-
-/**
- * Las cuatro secciones (Alpha Experience V1, docs/product/
- * ALPHA_EXPERIENCE_V1_DESIGN.md §4.1/5.1) — las cuatro con `href` real
- * desde el Sprint 4.
- */
-const SECTIONS: Array<{
-  id: ActiveSection;
-  label: string;
-  href: string;
-}> = [
-  { id: "dashboard", label: "Hoy", href: "/dashboard" },
-  { id: "life", label: "Vida", href: "/life" },
-  { id: "memories", label: "Recuerdos", href: "/memories" },
-  { id: "chat", label: "Conversación", href: "/chat" },
-];
+import { SwipeSectionNavigation } from "@/components/swipe-section-navigation";
+import { SECTIONS, type ActiveSection } from "@/components/sections";
 
 /**
  * Shell persistente compartido por Dashboard, Life, Memories,
@@ -43,6 +27,7 @@ export async function AppShell({
 }) {
   const session = await auth();
   const accountLabel = session?.user?.email ?? session?.user?.name ?? null;
+  const activeHref = SECTIONS.find((section) => section.id === activeSection)?.href ?? SECTIONS[0].href;
 
   return (
     <div className="flex h-dvh flex-col bg-black text-white">
@@ -123,7 +108,7 @@ export async function AppShell({
             : "flex-1 overflow-y-auto focus:outline-none"
         }
       >
-        {children}
+        <SwipeSectionNavigation activeHref={activeHref}>{children}</SwipeSectionNavigation>
       </div>
     </div>
   );
