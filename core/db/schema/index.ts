@@ -12,6 +12,7 @@ export * from "./life-graph";
 export * from "./life-entities";
 export * from "./life-domains";
 export * from "./events";
+export * from "./rate-limit-events";
 export * from "./feedback";
 export * from "./concept-graph";
 export * from "./belief-engine";

@@ -6,6 +6,16 @@ import { AppleIdentityTokenError, verifyAppleIdentityToken } from "@/core/apple-
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
+import { getClientIp, reserveRateLimitAttempt } from "@/core/security/rate-limit";
+
+/**
+ * Auditoría de seguridad, 2026-08-21 -- endpoint de login sin sesión
+ * previa, alcanzable por cualquiera. 20/5min por IP es generoso para un
+ * dispositivo real reintentando un login legítimo, suficiente para
+ * cortar un loop automatizado probando `identityToken`s.
+ */
+const AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX_ATTEMPTS = 20;
 
 const bodySchema = z.object({
   identityToken: z.string().min(1),
@@ -51,6 +61,20 @@ const bodySchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const requestId = createRequestId();
   const route = "POST /api/apple-auth/callback";
+
+  const rateLimit = await reserveRateLimitAttempt(db, {
+    key: getClientIp(request),
+    route,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    maxAttempts: AUTH_RATE_LIMIT_MAX_ATTEMPTS,
+  });
+  if (!rateLimit.allowed) {
+    logger.log({ event: "apple_auth.callback.rate_limited", severity: "warn", requestId, route });
+    return NextResponse.json(
+      { error: "Demasiados intentos. Intenta de nuevo en unos minutos." },
+      { status: 429, headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
+    );
+  }
 
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {

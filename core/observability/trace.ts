@@ -288,11 +288,37 @@ export async function span<T>(name: string, kind: SpanKind, fn: () => Promise<T>
 }
 
 /**
+ * Auditoría de seguridad, 2026-08-21 -- "monitorizar consultas de DB"
+ * sin volver a registrar texto/parámetros de query (ver docblock de
+ * `recordQuery`, decisión de privacidad ya tomada en este archivo).
+ * Este árbol de spans ya sabe cuántas queries dispara cada subsistema y
+ * cuánto tarda -- lo único que faltaba era una señal explícita de
+ * "esto es anormal", no solo el dato crudo en el log estructurado.
+ * 500ms es deliberadamente alto: el propio p95 de la traza raíz suele
+ * rondar unos cientos de ms con IA real de por medio, así que el umbral
+ * busca el caso realmente atípico (N+1 real, deadlock esperando un
+ * advisory lock, Neon cold start), no ruido cotidiano.
+ */
+const SLOW_SPAN_THRESHOLD_MS = 500;
+const HIGH_QUERY_COUNT_THRESHOLD = 20;
+
+function findSlowSpans(rows: readonly SpanSummaryRow[]): SpanSummaryRow[] {
+  return rows.filter(
+    (row) =>
+      row.kind === "repository" &&
+      (row.durationMs >= SLOW_SPAN_THRESHOLD_MS || row.queryCountCumulative >= HIGH_QUERY_COUNT_THRESHOLD),
+  );
+}
+
+/**
  * Imprime la tabla en el formato que pide la misión (consola, para
  * lectura humana en desarrollo) y emite el resumen estructurado
  * completo (`logger.log`, un evento por traza, con el árbol completo de
  * spans) -- la fuente real para el análisis posterior, nunca solo la
- * tabla de texto.
+ * tabla de texto. Además, emite un evento `warn` aparte por cada span
+ * de tipo `repository` lento o con demasiadas queries, para que una
+ * alerta (Sentry/log-based) pueda engancharse ahí sin tener que parsear
+ * el árbol completo de cada traza.
  */
 export function logTraceSummary(summary: TraceSummary, extra: Record<string, unknown> = {}): void {
   console.log(`\n${summary.rootName}\n\n${summary.asciiTable}\n`);
@@ -304,4 +330,16 @@ export function logTraceSummary(summary: TraceSummary, extra: Record<string, unk
     spans: summary.rows,
     ...extra,
   });
+
+  for (const span of findSlowSpans(summary.rows)) {
+    logger.log({
+      event: "db.slow_query_span",
+      severity: "warn",
+      requestId: summary.requestId,
+      rootName: summary.rootName,
+      spanName: span.name,
+      durationMs: span.durationMs,
+      queryCountCumulative: span.queryCountCumulative,
+    });
+  }
 }

@@ -95,6 +95,18 @@ const envSchema = z.object({
   APNS_TEAM_ID: z.string().min(1).optional(),
   APNS_PRIVATE_KEY: z.string().min(1).optional(),
   APNS_BUNDLE_ID: z.string().min(1).optional(),
+
+  /**
+   * Cloudflare Turnstile (Auditoría de seguridad, 2026-08-21) --
+   * `core/security/verify-turnstile-token.ts`. Opcional a propósito,
+   * mismo criterio que `APNS_*`: el site key/secret solo existen una
+   * vez que el Founder cree el widget en
+   * dash.cloudflare.com/turnstile (fuera del alcance de este código).
+   * `verifyTurnstileToken` se degrada a "no verificado" de forma
+   * explícita si falta -- ningún llamador debe tratar la ausencia como
+   * un `true` silencioso.
+   */
+  TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

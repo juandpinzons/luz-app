@@ -24,3 +24,21 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+  secret-scan:
+    # Auditoría de seguridad, 2026-08-21 -- hasta hoy la higiene de
+    # secretos dependía 100% de la disciplina de .gitignore, sin ninguna
+    # herramienta que lo verifique. Gitleaks escanea el diff completo de
+    # cada push/PR contra sus reglas de detección (API keys, tokens,
+    # credenciales de conexión) -- job separado del lint para que un
+    # falso positivo aquí nunca bloquee el feedback de tipos/lint.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -309,6 +309,13 @@
       "when": 1787357446316,
       "tag": "0043_curious_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1787362489651,
+      "tag": "0044_add_rate_limit_events",
+      "breakpoints": true
     }
   ]
 }

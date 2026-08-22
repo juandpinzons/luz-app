@@ -4,7 +4,12 @@ import { db } from "@/core/db/client";
 import { describeError } from "@/core/observability/describe-error";
 import { createRequestId, logger } from "@/core/observability/logger";
 import { recordEvent } from "@/core/observability/record-event";
+import { getClientIp, reserveRateLimitAttempt } from "@/core/security/rate-limit";
 import { buildMobileAuthRedirectUri, getGoogleOAuthCredentials, MOBILE_AUTH_STATE_COOKIE } from "../shared";
+
+/** Auditoría de seguridad, 2026-08-21 -- ver mismo comentario en apple-auth/callback/route.ts. */
+const AUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX_ATTEMPTS = 20;
 
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 /** Perfil verificado por Google mismo -- evita tener que verificar la firma del id_token contra el JWKS rotativo de Google a mano; mismo dato que el proveedor Google de Auth.js termina resolviendo internamente. */
@@ -60,6 +65,17 @@ function redirectWithError(request: Request, reason: string): Response {
 export async function GET(request: Request): Promise<Response> {
   const requestId = createRequestId();
   const route = "GET /api/mobile-auth/callback";
+
+  const rateLimit = await reserveRateLimitAttempt(db, {
+    key: getClientIp(request),
+    route,
+    windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    maxAttempts: AUTH_RATE_LIMIT_MAX_ATTEMPTS,
+  });
+  if (!rateLimit.allowed) {
+    logger.log({ event: "mobile_auth.callback.rate_limited", severity: "warn", requestId, route });
+    return redirectWithError(request, "rate_limited");
+  }
 
   const url = new URL(request.url);
   const code = url.searchParams.get("code");

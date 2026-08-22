@@ -14,6 +14,17 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  /**
+   * Auditoría de seguridad, 2026-08-21 -- Vercel ya fuerza HTTPS en el
+   * edge por defecto, pero eso no le dice al navegador que recuerde
+   * "siempre HTTPS para este dominio" en la PRIMERA visita ni lo
+   * inscribe en la preload list. `includeSubDomains` es seguro (todo
+   * el proyecto sirve por HTTPS); `preload` se deja fuera a propósito
+   * -- inscribirse en la lista de preload de Chromium es efectivamente
+   * irreversible a corto plazo (tarda meses en salir), no algo para
+   * decidir en el mismo cambio que agrega el header.
+   */
+  { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
 ];
 
 const nextConfig: NextConfig = {
