@@ -13,6 +13,8 @@ export interface LatestConversationMessage {
 export interface LatestConversation {
   conversationId: string;
   messages: LatestConversationMessage[];
+  /** Cuándo se envió el último mensaje real -- `null` si por alguna razón la conversación no tiene ninguno. Para que `/chat` pueda decidir "esto sigue siendo la misma sesión" sin una consulta nueva. */
+  lastMessageAt: Date | null;
 }
 
 /**
@@ -50,5 +52,9 @@ export async function getLatestConversation(
     return null;
   }
 
-  return { conversationId: detail.id, messages: detail.messages };
+  return {
+    conversationId: detail.id,
+    messages: detail.messages,
+    lastMessageAt: detail.messages.at(-1)?.createdAt ?? null,
+  };
 }

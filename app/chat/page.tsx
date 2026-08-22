@@ -106,6 +106,24 @@ function parseSSEMessage(raw: string): ParsedSSEEvent | null {
 /** Qué tan cerca del fondo (en px) cuenta como "ya estaba abajo" para el autoscroll inteligente. */
 const NEAR_BOTTOM_THRESHOLD_PX = 120;
 
+/**
+ * "Sigue siendo la misma sesión" -- una conversación con actividad más
+ * reciente que esto se retoma en silencio al volver a `/chat` sin
+ * `conversationId` en la URL (nunca bifurca una nueva vía
+ * `getOrCreateConversation`); más allá de esto, apertura fresca de
+ * siempre (`793a653`). Deliberado y ajustable, no una medición -- el
+ * bug real que esto arregla es "deslizar a otra pestaña y volver"
+ * (segundos a minutos), no una ausencia real de horas.
+ */
+const RESUME_WINDOW_MS = 30 * 60 * 1000;
+
+/** Mismo criterio que `MIN_SWIPE_DISTANCE_PX` (`swipe-section-navigation.tsx`), eje vertical. */
+const MIN_PULL_DISTANCE_PX = 60;
+/** Mismo criterio que `MIN_HORIZONTAL_RATIO`, invertido: el desplazamiento vertical debe dominar sobre el horizontal para contar como "deslizar hacia abajo", nunca un scroll normal. */
+const MIN_VERTICAL_RATIO = 1.5;
+/** Tolerancia de sub-píxel -- momentum scroll puede dejar `scrollTop` en algo como 0.4 incluso "visualmente arriba del todo". */
+const SCROLL_TOP_TOLERANCE_PX = 2;
+
 /** Techo del textarea que crece con el mensaje -- pasado esto, scroll interno en vez de seguir empujando la conversación hacia arriba. ~6 líneas a este tamaño de fuente. */
 const MESSAGE_INPUT_MAX_HEIGHT_PX = 160;
 
@@ -252,6 +270,18 @@ function ChatPageContent() {
    */
   const [isHistoricalConversation, setIsHistoricalConversation] =
     useState(false);
+  /**
+   * `true` cuando una visita SIN `conversationId` en la URL encontró
+   * una conversación con actividad dentro de `RESUME_WINDOW_MS` y la
+   * retomó en silencio (ver el efecto de carga de historial). Nunca
+   * cambia que `messages` arranque vacío (`793a653`) -- solo habilita
+   * el gesto de "deslizar hacia abajo" y su pista visible, para que
+   * traer de vuelta lo reciente sea un gesto real, nunca una promesa
+   * escondida (mismo criterio que el link "Historial" de este archivo).
+   */
+  const [hasResumableHistory, setHasResumableHistory] = useState(false);
+  /** Cubre solo la ventana del gesto de traer de vuelta los últimos mensajes -- distinto de `isLoadingHistory` (carga inicial de la página). */
+  const [isRevealingHistory, setIsRevealingHistory] = useState(false);
   const [historicalLabel, setHistoricalLabel] = useState<string | null>(null);
   const [welcomeCue, setWelcomeCue] = useState<string | undefined>();
   const [welcomeGreeting, setWelcomeGreeting] = useState<string | null>(null);
@@ -306,6 +336,8 @@ function ChatPageContent() {
   const [showOpeningRitual, setShowOpeningRitual] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLElement>(null);
+  /** Posición y `scrollTop` al iniciar un toque -- ver `handlePullTouchStart`/`handlePullTouchEnd`, mismo patrón que `touchStart` en `swipe-section-navigation.tsx`. */
+  const pullTouchStart = useRef<{ x: number; y: number; scrollTop: number } | null>(null);
   /**
    * Arranca en `true`: abrir el chat siempre ancla abajo, igual que
    * antes de este cambio. Un `ref` y no un `state` porque no debe
@@ -363,6 +395,68 @@ function ChatPageContent() {
     isNearBottomRef.current = true;
     setShowScrollToBottom(false);
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  /**
+   * Trae de vuelta los últimos 10 mensajes de la conversación ya
+   * retomada en silencio (`hasResumableHistory`) -- reusa
+   * `GET /api/conversations/[id]`, la misma ruta que ya sirve
+   * "Continuar esta conversación" desde `/conversations/[id]`, nunca
+   * una consulta nueva. Solo tiene sentido cuando hay un
+   * `conversationId` real y la vista está vacía -- si ya hay mensajes
+   * visibles, no hay nada que traer de vuelta.
+   */
+  async function revealRecentHistory() {
+    if (!conversationId || messages.length > 0 || isRevealingHistory) return;
+
+    setIsRevealingHistory(true);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`);
+      if (!response.ok) return;
+      const data: GetLatestConversationResponse = await response.json();
+      setMessages(data.messages.slice(-10));
+    } catch {
+      // Silencioso a propósito -- el gesto simplemente no trajo nada, se puede repetir.
+    } finally {
+      setIsRevealingHistory(false);
+    }
+  }
+
+  /**
+   * Mismo patrón exacto que `handleTouchStart`/`handleTouchEnd` en
+   * `swipe-section-navigation.tsx` (medir el desplazamiento TOTAL recién
+   * al soltar, sin `preventDefault` durante el gesto) -- eje vertical en
+   * vez de horizontal, y solo cuenta si el toque empezó con el
+   * contenedor ya arriba del todo (`scrollTop` ~0), para nunca competir
+   * con un scroll normal dentro de una conversación con contenido real.
+   */
+  function handlePullTouchStart(event: React.TouchEvent<HTMLElement>) {
+    const touch = event.touches[0];
+    const container = scrollContainerRef.current;
+    if (!touch || !container) {
+      pullTouchStart.current = null;
+      return;
+    }
+    pullTouchStart.current = { x: touch.clientX, y: touch.clientY, scrollTop: container.scrollTop };
+  }
+
+  function handlePullTouchEnd(event: React.TouchEvent<HTMLElement>) {
+    const start = pullTouchStart.current;
+    pullTouchStart.current = null;
+    if (!start || start.scrollTop > SCROLL_TOP_TOLERANCE_PX) return;
+
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+
+    // Solo hacia abajo (`dy`, no `Math.abs(dy)`) y suficientemente vertical -- mismo criterio que MIN_HORIZONTAL_RATIO, invertido.
+    if (dy < MIN_PULL_DISTANCE_PX || dy < Math.abs(dx) * MIN_VERTICAL_RATIO) {
+      return;
+    }
+
+    revealRecentHistory();
   }
 
   useEffect(() => {
@@ -487,9 +581,7 @@ function ChatPageContent() {
           // (Priority 3: "no cargar automáticamente todo el
           // historial"). Las conversaciones anteriores siguen enteras
           // en /conversations; esto solo decide qué aparece al entrar.
-          // `conversationId` se queda `undefined` a propósito: el
-          // primer mensaje real crea una conversación nueva
-          // (`getOrCreateConversation`).
+          // `messages` se queda vacío a propósito, sin excepción.
           setIsHistoricalConversation(false);
           setHistoricalLabel(null);
 
@@ -514,6 +606,37 @@ function ChatPageContent() {
             })
             .catch(() => {
               // Silencioso a propósito, mismo criterio que `startNewConversation`.
+            });
+
+          // Fire-and-forget, mismo criterio que el saludo de arriba --
+          // nunca debe agregar latencia a la apertura. Arregla el bug
+          // real de "deslizar a otra pestaña y volver bifurca una
+          // conversación nueva" (swipe-navigation, `router.push` a un
+          // `/chat` sin parámetros): si la conversación más reciente
+          // tuvo actividad hace poco (`RESUME_WINDOW_MS`), se retoma en
+          // silencio -- el próximo mensaje real usa ESE `conversationId`
+          // en vez de que `getOrCreateConversation` cree uno nuevo.
+          // `messages` sigue vacío (el landing liviano no cambia); esto
+          // solo habilita el gesto de traer de vuelta los últimos
+          // mensajes (`revealRecentHistory`). Forma funcional en
+          // `setConversationId`, mismo criterio que la rama de arriba:
+          // si la persona ya escribió y envió más rápido de lo que esto
+          // tarda en resolver, el id real ya en curso gana, nunca se
+          // pisa con este.
+          fetch("/api/chat")
+            .then((response) => (response.ok ? response.json() : null))
+            .then((data: GetLatestConversationResponse | null) => {
+              if (cancelled || !data?.lastMessageAt) return;
+              const lastMessageAt = new Date(data.lastMessageAt);
+              if (Date.now() - lastMessageAt.getTime() <= RESUME_WINDOW_MS) {
+                setConversationId((prev) => prev ?? data.conversationId);
+                setHasResumableHistory(true);
+              }
+            })
+            .catch(() => {
+              // Silencioso a propósito -- sin esto, el próximo mensaje
+              // simplemente crea una conversación nueva: el
+              // comportamiento de siempre, nunca una regresión nueva.
             });
         }
       } catch (error) {
@@ -564,6 +687,7 @@ function ChatPageContent() {
     setConversationId(undefined);
     setIsHistoricalConversation(false);
     setHistoricalLabel(null);
+    setHasResumableHistory(false);
     router.replace("/chat");
     inputRef.current?.focus();
 
@@ -970,6 +1094,8 @@ function ChatPageContent() {
           <section
             ref={scrollContainerRef}
             onScroll={handleScroll}
+            onTouchStart={handlePullTouchStart}
+            onTouchEnd={handlePullTouchEnd}
             role="log"
             aria-live="polite"
             aria-relevant="additions"
@@ -986,6 +1112,12 @@ function ChatPageContent() {
                   <Skeleton className="ml-auto h-11 w-40" />
                   <Skeleton className="mr-auto h-16 w-64" />
                   <Skeleton className="ml-auto h-11 w-52" />
+                </div>
+              ) : messages.length === 0 && hasResumableHistory ? (
+                <div className="animate-fade-in mt-32 text-center">
+                  <p className="text-lg text-zinc-400">
+                    {isRevealingHistory ? "Trayendo tus últimos mensajes…" : "↓ Desliza hacia abajo para ver tus últimos mensajes"}
+                  </p>
                 </div>
               ) : messages.length === 0 ? (
                 <div className="animate-fade-in mt-32 text-center">

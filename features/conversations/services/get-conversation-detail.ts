@@ -9,6 +9,7 @@ export interface ConversationDetailMessage {
   content: string;
   /** Data URI completa de una imagen adjunta a este mensaje -- `null` en casi todos. */
   imageData: string | null;
+  createdAt: Date;
 }
 
 export interface ConversationDetail {
@@ -49,6 +50,7 @@ export async function getConversationDetail(
       role: conversationMessages.role,
       content: conversationMessages.content,
       imageData: conversationMessages.imageData,
+      createdAt: conversationMessages.createdAt,
     })
     .from(conversationMessages)
     .where(eq(conversationMessages.conversationId, conversation.id))

@@ -47,6 +47,8 @@ export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 export interface GetLatestConversationResponse {
   conversationId: string;
   messages: { role: "user" | "assistant"; content: string; imageData: string | null }[];
+  /** ISO string -- `null` si la conversación no tiene ningún mensaje. Ver `LatestConversation.lastMessageAt`. */
+  lastMessageAt: string | null;
 }
 
 /** Forma de todo error que `/api/chat` devuelve (400/401/429/500) — ver app/api/chat/route.ts. */
