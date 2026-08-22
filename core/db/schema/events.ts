@@ -102,6 +102,19 @@ export const eventTypeEnum = pgEnum("event_type", [
    * real de la notificación.
    */
   "push_notification_sent",
+  /**
+   * Encuesta puntual del Founder, 2026-08-22 (sábado, un solo día) --
+   * una fila por respuesta real. `metadata.surveyId` distingue de qué
+   * encuesta se trata (ej. `"founder_2026_08_22"`) para que una
+   * encuesta futura reutilice este mismo tipo en vez de exigir una
+   * migración nueva por cada una -- `metadata.rating`
+   * (1-5)/`metadata.concepts` (arreglo de los conceptos elegidos) son
+   * específicos de ESTA encuesta, no un contrato fijo para todas.
+   * `features/survey/founder-survey-2026-08-22.ts` es quien decide qué
+   * `surveyId` usar y cuándo mostrarla -- este tipo solo es el
+   * contenedor genérico de "alguien respondió una encuesta".
+   */
+  "survey_response",
 ]);
 
 export const events = pgTable(

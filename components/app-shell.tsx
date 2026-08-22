@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
+import { db } from "@/core/db/client";
 import { PresenceDot } from "@/components/ui/presence-dot";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { OfflineBanner } from "@/features/native/components/offline-banner";
 import { PushRegistration } from "@/features/native/components/push-registration";
+import { FounderSurveyModal } from "@/features/survey/components/founder-survey-modal";
+import { hasRespondedToFounderSurvey, isFounderSurveyDay } from "@/features/survey/founder-survey-2026-08-22";
 import { SwipeSectionNavigation } from "@/components/swipe-section-navigation";
 import { SECTIONS, type ActiveSection } from "@/components/sections";
 
@@ -29,8 +32,17 @@ export async function AppShell({
   const accountLabel = session?.user?.email ?? session?.user?.name ?? null;
   const activeHref = SECTIONS.find((section) => section.id === activeSection)?.href ?? SECTIONS[0].href;
 
+  // Encuesta puntual del Founder, un solo día (sábado 2026-08-22) --
+  // chequeo del lado del servidor para que nunca haya un parpadeo de
+  // "aparece y luego se oculta" para quien ya respondió; ver
+  // `features/survey/founder-survey-2026-08-22.ts`.
+  const userId = session?.user?.id;
+  const showFounderSurvey =
+    isFounderSurveyDay(new Date()) && userId ? !(await hasRespondedToFounderSurvey(db, userId)) : false;
+
   return (
     <div className="flex h-dvh flex-col bg-black text-white">
+      {showFounderSurvey && <FounderSurveyModal />}
       {accountLabel && <PushRegistration />}
       <OfflineBanner />
 
